@@ -178,7 +178,7 @@ export function ChatBox() {
             );
           }
 
-          const isMe = msg.senderId === user.id;
+          const isMe = user?.id && msg.senderId === user.id;
 
           return (
             <div

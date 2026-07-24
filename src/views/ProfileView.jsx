@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useAuth, AVATAR_LIST, INTEREST_TAGS } from '../context/AuthContext';
-import { User, Sparkles, Check, Save } from 'lucide-react';
+import { User, Sparkles, Check, Save, Key } from 'lucide-react';
 
 export function ProfileView() {
-  const { user, updateUserProfile } = useAuth();
+  const { user, updateUserProfile, jwtToken, logout, profilePictures } = useAuth();
 
   const [name, setName] = useState(user.name);
   const [avatar, setAvatar] = useState(user.avatar);
@@ -67,42 +67,71 @@ export function ProfileView() {
               fontSize: '3rem',
               boxShadow: 'var(--shadow-glow)',
               marginBottom: '16px',
-              border: '3px solid rgba(255,255,255,0.2)'
+              overflow: 'hidden'
             }}>
-              {avatar}
+              {typeof avatar === 'string' && (avatar.startsWith('http') || avatar.startsWith('/')) ? (
+                <img src={avatar} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                avatar
+              )}
             </div>
             
-            {/* Avatar Selector Grid */}
+            {/* Avatar Selector Grid (From API Endpoint) */}
             <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
-              Choose your Cyber Avatar:
+              Choose your Profile Picture (API):
             </label>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-              {AVATAR_LIST.map(item => (
-                <button
-                  key={item.label}
-                  type="button"
-                  onClick={() => {
-                    setAvatar(item.icon);
-                    setAvatarBg(item.bg);
-                  }}
-                  style={{
-                    width: '46px',
-                    height: '46px',
-                    borderRadius: '50%',
-                    backgroundColor: item.bg,
-                    border: avatar === item.icon ? '3px solid #ffffff' : '1px solid transparent',
-                    cursor: 'pointer',
-                    fontSize: '1.4rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.2s ease',
-                    boxShadow: avatar === item.icon ? '0 0 15px ' + item.bg : 'none'
-                  }}
-                >
-                  {item.icon}
-                </button>
-              ))}
+              {Array.isArray(profilePictures) && profilePictures.length > 0 ? (
+                profilePictures.map((picUrl, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setAvatar(picUrl);
+                    }}
+                    style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '50%',
+                      overflow: 'hidden',
+                      border: avatar === picUrl ? '3px solid #ffffff' : '1px solid transparent',
+                      cursor: 'pointer',
+                      padding: 0,
+                      transition: 'all 0.2s ease',
+                      boxShadow: avatar === picUrl ? '0 0 15px var(--cyan-accent)' : 'none'
+                    }}
+                  >
+                    <img src={picUrl} alt={`Profile ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </button>
+                ))
+              ) : (
+                AVATAR_LIST.map(item => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => {
+                      setAvatar(item.icon);
+                      setAvatarBg(item.bg);
+                    }}
+                    style={{
+                      width: '46px',
+                      height: '46px',
+                      borderRadius: '50%',
+                      backgroundColor: item.bg,
+                      border: avatar === item.icon ? '3px solid #ffffff' : '1px solid transparent',
+                      cursor: 'pointer',
+                      fontSize: '1.4rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                      boxShadow: avatar === item.icon ? '0 0 15px ' + item.bg : 'none'
+                    }}
+                  >
+                    {item.icon}
+                  </button>
+                ))
+              )}
             </div>
           </div>
 
@@ -209,22 +238,60 @@ export function ProfileView() {
             </div>
           </div>
 
-          {/* Submit Button */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            {savedSuccess ? (
-              <span style={{ color: 'var(--green-accent)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Check size={18} /> Profile Saved Successfully!
-              </span>
-            ) : <span />}
+          {/* JWT Authentication Status Badge */}
+          <div style={{
+            background: 'rgba(139, 92, 246, 0.08)',
+            border: '1px solid rgba(139, 92, 246, 0.25)',
+            borderRadius: 'var(--radius-md)',
+            padding: '14px 18px',
+            marginBottom: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Key size={20} color="var(--primary-purple)" />
+              <div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  JWT Authenticated Session Active
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '2px' }}>
+                  {jwtToken ? `${jwtToken.substring(0, 35)}...` : 'Valid local session token'}
+                </div>
+              </div>
+            </div>
+            <span className="glass-pill" style={{ padding: '4px 10px', fontSize: '0.75rem', color: 'var(--green-accent)', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
+              ● Verified
+            </span>
+          </div>
 
+          {/* Submit & Logout Buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--border-color)' }}>
             <button
-              type="submit"
-              className="btn-primary"
-              style={{ padding: '12px 32px' }}
+              type="button"
+              className="btn-danger"
+              onClick={logout}
             >
-              <Save size={18} />
-              <span>Save Profile</span>
+              Sign Out / Logout
             </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {savedSuccess && (
+                <span style={{ color: 'var(--green-accent)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Check size={18} /> Profile Saved!
+                </span>
+              )}
+
+              <button
+                type="submit"
+                className="btn-primary"
+                style={{ padding: '12px 32px' }}
+              >
+                <Save size={18} />
+                <span>Save Profile</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>

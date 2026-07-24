@@ -4,7 +4,7 @@ import { useSocket } from '../context/SocketContext';
 import { Sparkles, Users, MessageSquare, User, Volume2, VolumeX, Server } from 'lucide-react';
 
 export function Header({ activeTab, setActiveTab }) {
-  const { user, soundEnabled, setSoundEnabled } = useAuth();
+  const { user, soundEnabled, setSoundEnabled, logout } = useAuth();
   const { useLiveSocket, setUseLiveSocket, serverUrl, setServerUrl, authToken, setAuthToken } = useSocket();
   const [showServerModal, setShowServerModal] = useState(false);
   const [inputUrl, setInputUrl] = useState(serverUrl);
@@ -106,15 +106,30 @@ export function Header({ activeTab, setActiveTab }) {
             width: '32px',
             height: '32px',
             borderRadius: '50%',
-            backgroundColor: user.avatarBg,
+            backgroundColor: '#8b5cf6',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '1.1rem'
+            fontSize: '1.1rem',
+            overflow: 'hidden'
           }}>
-            {user.avatar}
+            {user?.photoUrl ? (
+              <img src={user.photoUrl} alt="User Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display='none'; }} />
+            ) : (
+              '⚡'
+            )}
           </div>
-          <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>{user.name}</span>
+          <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>{user?.name || user?.username}</span>
+        </button>
+
+        {/* Logout Action */}
+        <button
+          onClick={logout}
+          className="btn-secondary"
+          title="Sign Out / Logout"
+          style={{ padding: '8px 14px', borderRadius: 'var(--radius-full)', fontSize: '0.85rem' }}
+        >
+          Sign Out
         </button>
       </div>
 

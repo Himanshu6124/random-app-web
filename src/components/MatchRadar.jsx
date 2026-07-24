@@ -66,15 +66,20 @@ export function MatchRadar() {
           width: '110px',
           height: '110px',
           borderRadius: '50%',
-          backgroundColor: user.avatarBg,
+          backgroundColor: '#8b5cf6',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           fontSize: '3.5rem',
           boxShadow: 'var(--shadow-glow)',
-          border: '4px solid rgba(255, 255, 255, 0.2)'
+          border: '4px solid rgba(255, 255, 255, 0.2)',
+          overflow: 'hidden'
         }}>
-          {user.avatar}
+          {user?.photoUrl ? (
+            <img src={user.photoUrl} alt="Your Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display='none'; }} />
+          ) : (
+            '⚡'
+          )}
         </div>
       </div>
 

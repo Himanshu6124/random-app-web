@@ -117,7 +117,7 @@ export function SocketProvider({ children }) {
 
   const handleMessageReceived = (msg) => {
     setMessages(prev => [...prev, msg]);
-    if (soundEnabled && msg.senderId !== user.id) playChime('message');
+    if (soundEnabled && msg.senderId !== user?.id) playChime('message');
   };
 
   const startSearching = () => {
@@ -128,7 +128,7 @@ export function SocketProvider({ children }) {
     if (useLiveSocket && socketService.isConnected) {
       socketService.findMatch(user, filters);
     } else {
-      mockEngineRef.current.startSearching(filters);
+      mockEngineRef.current?.startSearching(filters);
     }
   };
 
@@ -159,8 +159,8 @@ export function SocketProvider({ children }) {
 
     const newMsg = {
       id: 'msg_' + Date.now(),
-      senderId: user.id,
-      senderName: user.name,
+      senderId: user?.id || 'me',
+      senderName: user?.name || 'Me',
       text: text.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
