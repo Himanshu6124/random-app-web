@@ -28,7 +28,7 @@ export function AuthProvider({ children }) {
   const [profilePictures, setProfilePictures] = useState([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // Persisted friends list — starts empty, filled via addFriend
+  // Friends list — starts from localStorage, synced from API when authenticated
   const [friends, setFriends] = useState(() => {
     const saved = localStorage.getItem('randomeet_friends');
     if (saved) {
@@ -50,10 +50,14 @@ export function AuthProvider({ children }) {
         if (isMounted) {
           setIsAuthenticated(res.isAuthenticated);
           setUser(res.user);
-          // checkLandingAuth returns { jwt } now
           setJwtToken(res.jwt || null);
           if (Array.isArray(pics) && pics.length > 0) {
             setProfilePictures(pics);
+          }
+
+          // Load real friends from API if authenticated
+          if (res.isAuthenticated && res.user?.id && res.jwt) {
+            loadFriendsFromApi(res.user.id, res.jwt);
           }
         }
       } catch (err) {
@@ -73,14 +77,24 @@ export function AuthProvider({ children }) {
     return () => { isMounted = false; };
   }, []);
 
-  // Persist friends to localStorage
+  // Persist friends to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem('randomeet_friends', JSON.stringify(friends));
   }, [friends]);
 
   /**
+   * Load friends from backend API. Falls back to localStorage if API fails.
+   */
+  const loadFriendsFromApi = async (userId, token) => {
+    const apiFriends = await authService.getFriends(userId, token);
+    if (apiFriends !== null) {
+      setFriends(apiFriends);
+    }
+    // else: keep localStorage friends as-is
+  };
+
+  /**
    * Login with username + password
-   * authService.login returns { authResponse: { userId, jwt }, user }
    */
   const login = async (username, password) => {
     setAuthError('');
@@ -89,6 +103,12 @@ export function AuthProvider({ children }) {
       setIsAuthenticated(true);
       setUser(res.user);
       setJwtToken(res.authResponse.jwt);
+
+      // Load real friends from API after login
+      if (res.user?.id && res.authResponse?.jwt) {
+        loadFriendsFromApi(res.user.id, res.authResponse.jwt);
+      }
+
       return res;
     } catch (err) {
       setAuthError(err.message || 'Login failed.');
@@ -98,7 +118,6 @@ export function AuthProvider({ children }) {
 
   /**
    * Register a new account
-   * authService.signUp returns { authResponse: { userId, jwt }, user }
    */
   const signUp = async (userData) => {
     setAuthError('');
@@ -120,6 +139,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     setJwtToken(null);
     setAuthError('');
+    setFriends([]);
   };
 
   const updateUserProfile = (updated) => {
@@ -130,15 +150,39 @@ export function AuthProvider({ children }) {
     });
   };
 
-  const addFriend = (newFriend) => {
+  /**
+   * Add friend — syncs with API and local state.
+   * Peer object: { id, name, photoUrl, bio, gender, interests, ... }
+   */
+  const addFriend = async (newFriend) => {
     setFriends(prev => {
       if (prev.some(f => f.id === newFriend.id)) return prev;
-      return [...prev, { ...newFriend, status: 'Online', lastMessage: 'Added as friend!', unread: 0 }];
+      return [...prev, {
+        id: newFriend.id,
+        name: newFriend.name || newFriend.username || 'Friend',
+        username: newFriend.username || newFriend.name,
+        photoUrl: newFriend.photoUrl || newFriend.avatar || '',
+        bio: newFriend.bio || '',
+        gender: newFriend.gender || '',
+        status: 'Online',
+        lastMessage: 'Added as friend!',
+        unread: 0
+      }];
     });
+
+    // Also persist to API (best-effort)
+    if (user?.id && jwtToken && newFriend.id) {
+      authService.addFriendApi(user.id, jwtToken, newFriend.id);
+    }
   };
 
-  const removeFriend = (friendId) => {
+  const removeFriend = async (friendId) => {
     setFriends(prev => prev.filter(f => f.id !== friendId));
+
+    // Also remove from API (best-effort)
+    if (user?.id && jwtToken && friendId) {
+      authService.removeFriendApi(user.id, jwtToken, friendId);
+    }
   };
 
   const clearAuthError = () => setAuthError('');
@@ -160,7 +204,8 @@ export function AuthProvider({ children }) {
       setSoundEnabled,
       friends,
       addFriend,
-      removeFriend
+      removeFriend,
+      loadFriendsFromApi
     }}>
       {children}
     </AuthContext.Provider>

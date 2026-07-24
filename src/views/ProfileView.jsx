@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useAuth, AVATAR_LIST, INTEREST_TAGS } from '../context/AuthContext';
-import { User, Sparkles, Check, Save, Key } from 'lucide-react';
+import { authService } from '../services/authService';
+import { User, Sparkles, Check, Save, Key, AlertCircle } from 'lucide-react';
 
 export function ProfileView() {
   const { user, updateUserProfile, jwtToken, logout, profilePictures } = useAuth();
+  if (!user) return null;
 
   const [name, setName] = useState(user.name);
   const [avatar, setAvatar] = useState(user.avatar);
@@ -12,19 +14,37 @@ export function ProfileView() {
   const [bio, setBio] = useState(user.bio || '');
   const [userInterests, setUserInterests] = useState(user.interests || []);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    updateUserProfile({
+    setSaveLoading(true);
+    setSaveError('');
+
+    const profileData = {
       name,
-      avatar,
-      avatarBg,
       gender,
       bio,
+      photoUrl: typeof avatar === 'string' && (avatar.startsWith('http') || avatar.startsWith('/')) ? avatar : user.photoUrl,
       interests: userInterests
-    });
+    };
+
+    try {
+      // Try real API update first
+      if (user?.id && jwtToken) {
+        await authService.updateProfile(user.id, jwtToken, profileData);
+      }
+    } catch (err) {
+      console.warn('[ProfileView] API save failed, updating locally:', err);
+      setSaveError('Could not sync to server — saved locally.');
+    }
+
+    // Always update local state regardless of API result
+    updateUserProfile({ ...profileData, avatar, avatarBg });
     setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 2500);
+    setSaveLoading(false);
+    setTimeout(() => { setSavedSuccess(false); setSaveError(''); }, 3000);
   };
 
   const toggleInterest = (tag) => {
@@ -282,14 +302,20 @@ export function ProfileView() {
                   <Check size={18} /> Profile Saved!
                 </span>
               )}
+              {saveError && (
+                <span style={{ color: '#f87171', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <AlertCircle size={16} /> {saveError}
+                </span>
+              )}
 
               <button
                 type="submit"
                 className="btn-primary"
-                style={{ padding: '12px 32px' }}
+                style={{ padding: '12px 32px', opacity: saveLoading ? 0.7 : 1 }}
+                disabled={saveLoading}
               >
-                <Save size={18} />
-                <span>Save Profile</span>
+                {saveLoading ? <span className="btn-spinner" /> : <Save size={18} />}
+                <span>{saveLoading ? 'Saving...' : 'Save Profile'}</span>
               </button>
             </div>
           </div>

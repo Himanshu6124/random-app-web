@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import { socketService } from '../services/socketService';
 import { MockMatchEngine, ICEBREAKER_QUESTIONS } from '../services/mockMatchEngine';
@@ -35,16 +35,16 @@ const playChime = (type = 'match') => {
 };
 
 export function SocketProvider({ children }) {
-  const { user, soundEnabled } = useAuth();
-  
+  const { user, jwtToken, soundEnabled } = useAuth();
+
   const [matchState, setMatchState] = useState('idle');
   const [currentPeer, setCurrentPeer] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isPeerTyping, setIsPeerTyping] = useState(false);
-  const [useLiveSocket, setUseLiveSocket] = useState(false);
-  const [serverUrl, setServerUrl] = useState('wss://randomchat.qz.io/ws-chat');
-  const [authToken, setAuthToken] = useState('');
   const [floatingReactions, setFloatingReactions] = useState([]);
+
+  // Connection mode: 'connecting' | 'connected' | 'mock' | 'disconnected'
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
 
   const [filters, setFilters] = useState({
     gender: 'All',
@@ -52,7 +52,9 @@ export function SocketProvider({ children }) {
   });
 
   const mockEngineRef = useRef(null);
+  const typingTimerRef = useRef(null);
 
+  // Initialize mock engine as fallback
   useEffect(() => {
     mockEngineRef.current = new MockMatchEngine(
       (peer) => handleMatchFound(peer),
@@ -61,15 +63,28 @@ export function SocketProvider({ children }) {
     );
   }, []);
 
-  // Socket Connection Handler matching SocketRepository.android.kt
+  // Auto-connect real STOMP socket when JWT is available
   useEffect(() => {
-    if (useLiveSocket) {
-      socketService.connect(serverUrl, authToken, {
+    if (!jwtToken || !user?.id) {
+      setConnectionStatus('disconnected');
+      socketService.disconnect();
+      return;
+    }
+
+    setConnectionStatus('connecting');
+
+    socketService.connect(
+      '/ws-chat', // routed through Vite proxy to 192.168.1.7:8080/ws-chat
+      jwtToken,
+      user.id,
+      {
         onConnect: (sessionId) => {
-          console.log('[SocketContext] STOMP Socket connected with session:', sessionId);
+          console.log('[SocketContext] STOMP connected, session:', sessionId);
+          setConnectionStatus('connected');
         },
         onDisconnect: () => {
-          console.log('[SocketContext] STOMP Socket disconnected');
+          console.log('[SocketContext] STOMP disconnected — falling back to mock');
+          setConnectionStatus('mock');
         },
         onMatchFound: (conversation) => {
           handleMatchFound(conversation);
@@ -90,17 +105,40 @@ export function SocketProvider({ children }) {
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             }
           ]);
+          // Auto-return to idle after peer disconnects
+          setTimeout(() => {
+            setMatchState('idle');
+            setCurrentPeer(null);
+          }, 3000);
         },
         onError: (err) => {
           console.warn('[SocketContext] STOMP error:', err);
+          setConnectionStatus('mock');
         }
-      });
-    } else {
-      socketService.disconnect();
-    }
-  }, [useLiveSocket, serverUrl, authToken]);
+      }
+    );
 
-  const handleMatchFound = (peer) => {
+    // Detect if STOMP connected within 4s, otherwise assume mock mode
+    const connectionTimeout = setTimeout(() => {
+      if (!socketService.isConnected) {
+        console.log('[SocketContext] STOMP connection timed out — using mock mode');
+        setConnectionStatus('mock');
+      }
+    }, 4000);
+
+    return () => {
+      clearTimeout(connectionTimeout);
+    };
+  }, [jwtToken, user?.id]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      socketService.disconnect();
+    };
+  }, []);
+
+  const handleMatchFound = useCallback((peer) => {
     setCurrentPeer(peer);
     setMatchState('matched');
     setMessages([
@@ -111,23 +149,26 @@ export function SocketProvider({ children }) {
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }
     ]);
-
     if (soundEnabled) playChime('match');
-  };
+  }, [soundEnabled]);
 
-  const handleMessageReceived = (msg) => {
+  const handleMessageReceived = useCallback((msg) => {
     setMessages(prev => [...prev, msg]);
     if (soundEnabled && msg.senderId !== user?.id) playChime('message');
-  };
+  }, [soundEnabled, user?.id]);
+
+  const isLiveConnected = connectionStatus === 'connected' && socketService.isConnected;
 
   const startSearching = () => {
     setMatchState('searching');
     setCurrentPeer(null);
     setMessages([]);
 
-    if (useLiveSocket && socketService.isConnected) {
+    if (isLiveConnected) {
       socketService.findMatch(user, filters);
     } else {
+      // Mock fallback
+      setConnectionStatus(prev => prev === 'connected' ? prev : 'mock');
       mockEngineRef.current?.startSearching(filters);
     }
   };
@@ -138,20 +179,23 @@ export function SocketProvider({ children }) {
   };
 
   const skipStranger = () => {
-    if (useLiveSocket && socketService.isConnected && currentPeer) {
+    if (isLiveConnected && currentPeer) {
       socketService.skipPeer(currentPeer.id);
     }
-    cancelSearch();
+    if (mockEngineRef.current) mockEngineRef.current.cancelSearch();
+    setCurrentPeer(null);
+    setMessages([]);
     startSearching();
   };
 
   const disconnectChat = () => {
-    if (useLiveSocket && socketService.isConnected && currentPeer) {
+    if (isLiveConnected && currentPeer) {
       socketService.skipPeer(currentPeer.id);
     }
-    cancelSearch();
+    if (mockEngineRef.current) mockEngineRef.current.cancelSearch();
     setCurrentPeer(null);
     setMatchState('idle');
+    setMessages([]);
   };
 
   const sendMessage = (text) => {
@@ -160,19 +204,45 @@ export function SocketProvider({ children }) {
     const newMsg = {
       id: 'msg_' + Date.now(),
       senderId: user?.id || 'me',
-      senderName: user?.name || 'Me',
+      senderName: user?.name || user?.username || 'Me',
       text: text.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
     setMessages(prev => [...prev, newMsg]);
 
-    if (useLiveSocket && socketService.isConnected) {
-      socketService.sendMessage(text, currentPeer.id);
+    if (isLiveConnected) {
+      socketService.sendMessage(text, currentPeer.id, user?.id);
     } else {
-      mockEngineRef.current.sendMessage(text);
+      mockEngineRef.current?.sendMessage(text);
+    }
+
+    // Clear typing after send
+    if (isLiveConnected && currentPeer) {
+      socketService.sendTyping(false, currentPeer.id, user?.id);
     }
   };
+
+  /**
+   * Called on every input keypress — sends typing=true to server with debounce.
+   * Typing=false sent after 1.5s of inactivity or when message sent.
+   */
+  const notifyTyping = useCallback((isCurrentlyTyping) => {
+    if (!isLiveConnected || !currentPeer) return;
+
+    if (isCurrentlyTyping) {
+      socketService.sendTyping(true, currentPeer.id, user?.id);
+
+      // Reset the idle timer
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        socketService.sendTyping(false, currentPeer.id, user?.id);
+      }, 1500);
+    } else {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      socketService.sendTyping(false, currentPeer.id, user?.id);
+    }
+  }, [isLiveConnected, currentPeer, user?.id]);
 
   const sendReaction = (emoji) => {
     const reactionObj = {
@@ -196,7 +266,7 @@ export function SocketProvider({ children }) {
   const toggleInterestFilter = (tag) => {
     setFilters(prev => {
       const exists = prev.interests.includes(tag);
-      const updated = exists 
+      const updated = exists
         ? prev.interests.filter(t => t !== tag)
         : [...prev.interests, tag];
       return { ...prev, interests: updated };
@@ -219,13 +289,10 @@ export function SocketProvider({ children }) {
       sendMessage,
       sendReaction,
       sendIcebreaker,
+      notifyTyping,
       floatingReactions,
-      useLiveSocket,
-      setUseLiveSocket,
-      serverUrl,
-      setServerUrl,
-      authToken,
-      setAuthToken
+      connectionStatus,
+      isLiveConnected
     }}>
       {children}
     </SocketContext.Provider>

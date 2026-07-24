@@ -14,7 +14,8 @@ export function ChatBox() {
     sendIcebreaker,
     skipStranger,
     disconnectChat,
-    floatingReactions
+    floatingReactions,
+    notifyTyping
   } = useSocket();
 
   const [inputMsg, setInputMsg] = useState('');
@@ -31,6 +32,18 @@ export function ChatBox() {
     if (!inputMsg.trim()) return;
     sendMessage(inputMsg);
     setInputMsg('');
+    // Stop typing indicator on send
+    notifyTyping(false);
+  };
+
+  const handleInputChange = (e) => {
+    setInputMsg(e.target.value);
+    // Notify server that we're typing (debounced inside notifyTyping)
+    if (e.target.value.trim().length > 0) {
+      notifyTyping(true);
+    } else {
+      notifyTyping(false);
+    }
   };
 
   if (!currentPeer) return null;
@@ -75,9 +88,19 @@ export function ChatBox() {
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: '1.6rem',
-            boxShadow: 'var(--shadow-glow)'
+            boxShadow: 'var(--shadow-glow)',
+            overflow: 'hidden'
           }}>
-            {currentPeer.avatar}
+            {currentPeer.photoUrl ? (
+              <img
+                src={currentPeer.photoUrl}
+                alt={currentPeer.name}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+            ) : (
+              currentPeer.avatar || '⚡'
+            )}
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -287,7 +310,8 @@ export function ChatBox() {
         <input
           type="text"
           value={inputMsg}
-          onChange={(e) => setInputMsg(e.target.value)}
+          onChange={handleInputChange}
+          onBlur={() => notifyTyping(false)}
           placeholder={`Type a message to ${currentPeer.name}...`}
           style={{
             flex: 1,

@@ -1,12 +1,63 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Users, UserMinus, Send, MessageCircle } from 'lucide-react';
+import { useSocket } from '../context/SocketContext';
+import { socketService } from '../services/socketService';
+import { Users, UserMinus, Send, MessageCircle, Wifi, WifiOff } from 'lucide-react';
 
 export function FriendsView({ onStartMatch }) {
-  const { friends, removeFriend } = useAuth();
+  const { user, friends, removeFriend } = useAuth();
+  const { isLiveConnected, connectionStatus } = useSocket();
   const [selectedFriend, setSelectedFriend] = useState(friends[0] || null);
-  const [dmMessages, setDmMessages] = useState({});
+  const messagesEndRef = useRef(null);
   const [dmInput, setDmInput] = useState('');
+
+  // Load DM history from localStorage (keyed by friendId)
+  const [dmMessages, setDmMessages] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('randomeet_dms') || '{}');
+    } catch { return {}; }
+  });
+
+  // Persist DMs to localStorage on change
+  useEffect(() => {
+    localStorage.setItem('randomeet_dms', JSON.stringify(dmMessages));
+  }, [dmMessages]);
+
+  // Auto-scroll on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [dmMessages, selectedFriend]);
+
+  // Listen for incoming socket messages that match a friend's id (DM)
+  // SocketContext MESSAGE events with senderId === friend.id are captured here.
+  // We do this by subscribing to socket events outside the match context.
+  useEffect(() => {
+    const originalCallback = socketService.callbacks.onMessageReceived;
+    socketService.callbacks.onMessageReceived = (msg) => {
+      // If a friend is sending us a message while we're not in a match, capture it
+      const isFriendMsg = friends.some(f => f.id === msg.senderId);
+      if (isFriendMsg) {
+        const friendId = msg.senderId;
+        setDmMessages(prev => ({
+          ...prev,
+          [friendId]: [
+            ...(prev[friendId] || []),
+            {
+              id: msg.id,
+              sender: friendId,
+              text: msg.text,
+              time: msg.timestamp
+            }
+          ]
+        }));
+      }
+      // Still call original (match context) callback
+      if (originalCallback) originalCallback(msg);
+    };
+    return () => {
+      socketService.callbacks.onMessageReceived = originalCallback;
+    };
+  }, [friends]);
 
   const handleSendDm = (e) => {
     e.preventDefault();
@@ -26,21 +77,11 @@ export function FriendsView({ onStartMatch }) {
     }));
     setDmInput('');
 
-    // Simulate friend auto reply
-    setTimeout(() => {
-      setDmMessages(prev => ({
-        ...prev,
-        [friendId]: [
-          ...(prev[friendId] || []),
-          {
-            id: 'dm_reply_' + Date.now(),
-            sender: selectedFriend.name,
-            text: `Hey! Thanks for messaging! Let's match up again soon! 😊`,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }
-        ]
-      }));
-    }, 1500);
+    // Send via real socket if connected
+    if (isLiveConnected) {
+      socketService.sendMessage(dmInput.trim(), friendId, user?.id);
+    }
+    // If offline, message is saved locally only
   };
 
   return (
@@ -104,9 +145,14 @@ export function FriendsView({ onStartMatch }) {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: '1.3rem'
+                      fontSize: '1.3rem',
+                      overflow: 'hidden'
                     }}>
-                      {friend.avatar || '👤'}
+                      {friend.photoUrl ? (
+                        <img src={friend.photoUrl} alt={friend.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display='none'; }} />
+                      ) : (
+                        friend.avatar || '👤'
+                      )}
                     </div>
                     <div>
                       <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>{friend.name}</div>
@@ -166,13 +212,20 @@ export function FriendsView({ onStartMatch }) {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '1.4rem'
+                fontSize: '1.4rem',
+                overflow: 'hidden'
               }}>
-                {selectedFriend.avatar}
+                {selectedFriend.photoUrl ? (
+                  <img src={selectedFriend.photoUrl} alt={selectedFriend.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display='none'; }} />
+                ) : (
+                  selectedFriend.avatar || '👤'
+                )}
               </div>
               <div>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{selectedFriend.name}</h3>
-                <span style={{ fontSize: '0.8rem', color: 'var(--green-accent)' }}>● Active Now</span>
+                <span style={{ fontSize: '0.8rem', color: isLiveConnected ? 'var(--green-accent)' : 'var(--text-muted)' }}>
+                  {isLiveConnected ? '● Live Chat' : '● Local Only'}
+                </span>
               </div>
             </div>
 
@@ -218,6 +271,7 @@ export function FriendsView({ onStartMatch }) {
                   </div>
                 );
               })}
+              <div ref={messagesEndRef} />
             </div>
 
             {/* DM Input Form */}

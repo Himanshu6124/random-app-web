@@ -1,14 +1,19 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import { Sparkles, Users, MessageSquare, User, Volume2, VolumeX, Server } from 'lucide-react';
+import { Sparkles, Users, MessageSquare, Volume2, VolumeX } from 'lucide-react';
 
 export function Header({ activeTab, setActiveTab }) {
   const { user, soundEnabled, setSoundEnabled, logout } = useAuth();
-  const { useLiveSocket, setUseLiveSocket, serverUrl, setServerUrl, authToken, setAuthToken } = useSocket();
-  const [showServerModal, setShowServerModal] = useState(false);
-  const [inputUrl, setInputUrl] = useState(serverUrl);
-  const [inputToken, setInputToken] = useState(authToken);
+  const { connectionStatus } = useSocket();
+
+  const statusConfig = {
+    connected: { color: 'var(--green-accent)', label: '● Live', dot: '#10b981' },
+    connecting: { color: '#eab308', label: '● Connecting...', dot: '#eab308' },
+    mock: { color: 'var(--cyan-accent)', label: '● Demo Mode', dot: '#06b6d4' },
+    disconnected: { color: 'var(--text-muted)', label: '● Offline', dot: '#6b7280' }
+  };
+  const status = statusConfig[connectionStatus] || statusConfig.disconnected;
 
   return (
     <header className="glass-panel" style={{
@@ -37,9 +42,16 @@ export function Header({ activeTab, setActiveTab }) {
           <h1 style={{ fontSize: '1.4rem', fontWeight: '800', background: 'linear-gradient(90deg, #ffffff, #a78bfa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             RandoMeet
           </h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-            <span className="badge-online"></span>
-            <span>1,420 Online</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem' }}>
+            <span style={{
+              display: 'inline-block',
+              width: '7px',
+              height: '7px',
+              borderRadius: '50%',
+              background: status.dot,
+              boxShadow: `0 0 6px ${status.dot}`
+            }} />
+            <span style={{ color: status.color, fontWeight: 500 }}>{status.label}</span>
           </div>
         </div>
       </div>
@@ -75,16 +87,6 @@ export function Header({ activeTab, setActiveTab }) {
           style={{ width: '40px', height: '40px', padding: 0, borderRadius: '50%' }}
         >
           {soundEnabled ? <Volume2 size={18} color="var(--cyan-accent)" /> : <VolumeX size={18} color="var(--text-muted)" />}
-        </button>
-
-        {/* Server Config Modal Trigger */}
-        <button
-          onClick={() => setShowServerModal(true)}
-          className="btn-secondary"
-          title="App Socket Settings"
-          style={{ width: '40px', height: '40px', padding: 0, borderRadius: '50%' }}
-        >
-          <Server size={18} color={useLiveSocket ? "var(--green-accent)" : "var(--text-secondary)"} />
         </button>
 
         {/* Profile Avatar Button */}
@@ -132,107 +134,6 @@ export function Header({ activeTab, setActiveTab }) {
           Sign Out
         </button>
       </div>
-
-      {/* Server Settings Modal */}
-      {showServerModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div className="glass-panel" style={{ width: '440px', padding: '24px' }}>
-            <h3 style={{ marginBottom: '16px', fontSize: '1.2rem' }}>📱 RandoMeet App STOMP Protocol</h3>
-            
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={useLiveSocket}
-                  onChange={(e) => setUseLiveSocket(e.target.checked)}
-                  style={{ width: '18px', height: '18px' }}
-                />
-                <span style={{ fontWeight: 600 }}>Connect to App STOMP Server</span>
-              </label>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                {useLiveSocket ? 'Connecting to mobile app STOMP endpoint' : 'Using instant interactive stranger simulator'}
-              </p>
-            </div>
-
-            {useLiveSocket && (
-              <>
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>STOMP WebSocket Base URL:</label>
-                  <input
-                    type="text"
-                    value={inputUrl}
-                    onChange={(e) => setInputUrl(e.target.value)}
-                    placeholder="wss://randomchat.qz.io/ws-chat"
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      marginTop: '6px',
-                      borderRadius: 'var(--radius-md)',
-                      background: 'var(--bg-input)',
-                      border: '1px solid var(--border-color)',
-                      color: 'white',
-                      fontSize: '0.9rem',
-                      outline: 'none'
-                    }}
-                  />
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    App default: <code>wss://randomchat.qz.io/ws-chat</code>
-                  </span>
-                </div>
-
-                <div style={{ marginBottom: '20px' }}>
-                  <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Auth JWT Token:</label>
-                  <input
-                    type="text"
-                    value={inputToken}
-                    onChange={(e) => setInputToken(e.target.value)}
-                    placeholder="Bearer JWT Token..."
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      marginTop: '6px',
-                      borderRadius: 'var(--radius-md)',
-                      background: 'var(--bg-input)',
-                      border: '1px solid var(--border-color)',
-                      color: 'white',
-                      fontSize: '0.85rem',
-                      outline: 'none'
-                    }}
-                  />
-                </div>
-              </>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button
-                className="btn-secondary"
-                onClick={() => setShowServerModal(false)}
-              >
-                Close
-              </button>
-              <button
-                className="btn-primary"
-                onClick={() => {
-                  setServerUrl(inputUrl);
-                  setAuthToken(inputToken);
-                  setShowServerModal(false);
-                }}
-              >
-                Save & Connect
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </header>
   );
 }

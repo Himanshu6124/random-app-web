@@ -1,17 +1,21 @@
 /**
- * Authentication Service connecting to the real RandoMeet KMP backend.
+ * Authentication & User Service connecting to the real RandoMeet backend.
  *
- * Endpoints (from UserRepositoryImpl.kt):
- *   POST /auth/login   -> LoginRequest { username, password } -> AuthResponse { userId, jwt }
- *   POST /auth/signup  -> User model payload                  -> AuthResponse { userId, jwt }
- *   GET  /api/user/getuser/{id}   -> User profile (Bearer JWT header)
+ * Endpoints:
+ *   POST /auth/login              -> LoginRequest { username, password } -> AuthResponse { userId, jwt }
+ *   POST /auth/signup             -> User model payload -> AuthResponse { userId, jwt }
+ *   GET  /api/user/getuser/{id}   -> User profile (Bearer JWT)
+ *   PUT  /api/user/update/{id}    -> Update user profile (Bearer JWT)
  *   GET  /users/profile-pictures  -> String[] of avatar URLs
+ *   GET  /api/friends/{userId}    -> List<FriendDto> (Bearer JWT)
+ *   POST /api/friends/add         -> Add friend { userId, friendId } (Bearer JWT)
+ *   DELETE /api/friends/remove/{friendId} -> Remove friend (Bearer JWT)
  *
  * AuthResponse fields: { userId: String, jwt: String }
  *
  * NOTE: BASE_URL is intentionally empty — all requests are routed through
  * the Vite dev server proxy (vite.config.js) to avoid CORS issues.
- * The proxy forwards /auth/*, /api/*, /users/* → http://192.168.1.7:8080
+ * The proxy forwards /auth/*, /api/*, /users/*, /friends/* -> http://192.168.1.7:8080
  */
 
 const BASE_URL = '';  // Proxied via Vite — see vite.config.js
@@ -212,6 +216,130 @@ export const authService = {
     }
 
     return await res.json();
+  },
+
+  /**
+   * PUT /api/user/update/{userId}
+   * Headers: Authorization: Bearer <jwt>
+   * Body: partial/full user fields
+   * Returns: updated User or 200 OK
+   */
+  async updateProfile(userId, token, profileData) {
+    const res = await fetch(`${BASE_URL}/api/user/update/${userId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(profileData)
+    });
+
+    if (!res.ok) {
+      let errMsg = `Profile update failed (${res.status})`;
+      try {
+        const err = await res.json();
+        errMsg = err.message || err.error || errMsg;
+      } catch {
+        const text = await res.text().catch(() => '');
+        if (text) errMsg = text;
+      }
+      throw new Error(errMsg);
+    }
+
+    try {
+      return await res.json();
+    } catch {
+      return profileData; // server returned no body (204 No Content)
+    }
+  },
+
+  /**
+   * GET /api/friends/{userId}
+   * Returns: List<FriendDto> — all accepted friendships
+   * FriendDto fields (from getAllFriends service): { id, name, username, photoUrl, bio, gender, status }
+   */
+  async getFriends(userId, token) {
+    try {
+      const res = await fetch(`${BASE_URL}/api/friends/${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to fetch friends (${res.status})`);
+      }
+
+      const friends = await res.json();
+      // Normalize FriendDto to match our local shape
+      return Array.isArray(friends) ? friends.map(f => ({
+        id: f.id || f.userId || f.friendId,
+        name: f.name || f.username || 'Friend',
+        username: f.username || f.name,
+        photoUrl: f.photoUrl || f.avatar || '',
+        bio: f.bio || '',
+        gender: f.gender || '',
+        status: f.status || 'Online',
+        lastMessage: f.lastMessage || 'Say hi!',
+        unread: f.unread || 0
+      })) : [];
+    } catch (e) {
+      console.warn('[authService] getFriends failed, using local cache:', e);
+      return null; // null = caller should use localStorage friends
+    }
+  },
+
+  /**
+   * POST /api/friends/add
+   * Body: { userId, friendId }
+   * Headers: Authorization: Bearer <jwt>
+   */
+  async addFriendApi(myUserId, token, friendId) {
+    try {
+      const res = await fetch(`${BASE_URL}/api/friends/add`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ userId: myUserId, friendId })
+      });
+
+      if (!res.ok) {
+        throw new Error(`Add friend failed (${res.status})`);
+      }
+      return true;
+    } catch (e) {
+      console.warn('[authService] addFriendApi failed (graceful):', e);
+      return false; // gracefully fall back to localStorage-only
+    }
+  },
+
+  /**
+   * DELETE /api/friends/remove/{friendId}
+   * Headers: Authorization: Bearer <jwt>
+   */
+  async removeFriendApi(myUserId, token, friendId) {
+    try {
+      const res = await fetch(`${BASE_URL}/api/friends/remove/${friendId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!res.ok) {
+        throw new Error(`Remove friend failed (${res.status})`);
+      }
+      return true;
+    } catch (e) {
+      console.warn('[authService] removeFriendApi failed (graceful):', e);
+      return false;
+    }
   },
 
   /**
