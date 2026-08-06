@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { Send, SkipForward, UserPlus, LogOut, HelpCircle, Heart, Flame, Smile, Sparkles, Hand } from 'lucide-react';
+import { extractPeerName } from '../services/socketService';
 
 export function ChatBox() {
   const { user, addFriend, friends } = useAuth();
@@ -21,7 +22,8 @@ export function ChatBox() {
   const [inputMsg, setInputMsg] = useState('');
   const messagesEndRef = useRef(null);
 
-  const isAlreadyFriend = friends.some(f => f.id === (currentPeer ? currentPeer.id : ''));
+  const peerName = extractPeerName(currentPeer);
+  const isAlreadyFriend = friends.some(f => f.id === (currentPeer ? (currentPeer.peerId || currentPeer.id) : ''));
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -32,13 +34,11 @@ export function ChatBox() {
     if (!inputMsg.trim()) return;
     sendMessage(inputMsg);
     setInputMsg('');
-    // Stop typing indicator on send
     notifyTyping(false);
   };
 
   const handleInputChange = (e) => {
     setInputMsg(e.target.value);
-    // Notify server that we're typing (debounced inside notifyTyping)
     if (e.target.value.trim().length > 0) {
       notifyTyping(true);
     } else {
@@ -94,7 +94,7 @@ export function ChatBox() {
             {currentPeer.photoUrl ? (
               <img
                 src={currentPeer.photoUrl}
-                alt={currentPeer.name}
+                alt={peerName}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 onError={(e) => { e.target.style.display = 'none'; }}
               />
@@ -104,7 +104,7 @@ export function ChatBox() {
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{currentPeer.name}</h3>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{peerName}</h3>
               {currentPeer.country && (
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '10px' }}>
                   {currentPeer.country}
@@ -121,7 +121,7 @@ export function ChatBox() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {!isAlreadyFriend && (
             <button
-              onClick={() => addFriend(currentPeer)}
+              onClick={() => addFriend({ ...currentPeer, name: peerName })}
               className="btn-cyan"
               style={{ padding: '8px 14px', fontSize: '0.85rem' }}
               title="Add to Friends"
@@ -243,7 +243,7 @@ export function ChatBox() {
         {/* Typing Indicator */}
         {isPeerTyping && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-            <span>{currentPeer.name} is typing...</span>
+            <span>{peerName} is typing...</span>
           </div>
         )}
 
@@ -312,7 +312,7 @@ export function ChatBox() {
           value={inputMsg}
           onChange={handleInputChange}
           onBlur={() => notifyTyping(false)}
-          placeholder={`Type a message to ${currentPeer.name}...`}
+          placeholder={`Type a message to ${peerName}...`}
           style={{
             flex: 1,
             padding: '14px 20px',

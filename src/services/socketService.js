@@ -1,22 +1,64 @@
 import { io } from 'socket.io-client';
 
 /**
- * SocketService - Matches RandoMeet Android app STOMP spec.
- * Reference: SocketRepository.android.kt (package com.example.vibechat)
+ * Helper to extract peer name from any possible backend payload shape.
+ */
+export function extractPeerName(payload) {
+  if (!payload) return 'Random Stranger';
+  if (typeof payload === 'string' && payload.trim()) return payload.trim();
+
+  const candidates = [
+    payload.friendUserName,
+    payload.friendName,
+    payload.userName,
+    payload.name,
+    payload.nickname,
+    payload.partnerName,
+    payload.strangerName,
+    payload.peerName,
+    payload.username,
+    payload.user?.name,
+    payload.user?.username,
+    payload.user?.userName,
+    payload.friend?.name,
+    payload.friend?.username,
+    payload.friend?.userName,
+    payload.matchedUser?.name,
+    payload.matchedUser?.username,
+    payload.matchedUser?.userName
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+
+  return 'Random Stranger';
+}
+
+/**
+ * SocketService - RandoMeet Android app STOMP spec (kmp-migration branch).
  *
- * Connection: ws://<host>/ws-chat?token={jwt}   (proxied via Vite to 192.168.1.7:8080)
- *
- * Event Envelope (incoming & outgoing):
- * { "type": "...", "payload": { ... } }
- *
- * Incoming types: CONVERSATION_DTO | MESSAGE | TYPING | ONLINE_STATUS | DISCONNECTED_DTO | SEEN
- * Outgoing destinations: /app/match.find | /app/chat.sendMessage | /app/chat.typing | /app/match.skip
+ * Connection: ws://<host>/ws-chat?token={jwt}
  *
  * STOMP Subscriptions:
- *   /user/queue/messages  — personal queue for match events, messages, typing
- *   /topic/chat/{conversationId} — conversation topic (if used by server)
+ *   Matching phase: /topic/room/random/{userId}
+ *   Chat phase:     /topic/room/{peerId}/{conversationId}
+ *
+ * Outgoing STOMP Destinations:
+ *   /app/chat.random       — initiate random match request
+ *   /app/chat.random.send  — send random match chat message
+ *   /app/chat.send         — send standard friend chat message
+ *   /app/chat.online       — broadcast online status
+ *   /app/chat.typing       — broadcast typing status
+ *   /app/chat.random.seen  — send seen receipt for random match message
+ *   /app/chat.disconnect   — send disconnect status on skip / leave chat
+ *
+ * Incoming Event Envelope:
+ *   { "type": "...", "payload": { ... } }
+ *   Types: CONVERSATION_DTO | MESSAGE | TYPING | ONLINE_STATUS | DISCONNECTED_DTO | SEEN
  */
-
 export class SocketService {
   constructor() {
     this.ws = null;
@@ -27,9 +69,9 @@ export class SocketService {
     this.activeConversationId = null;
     this.activePeerId = null;
     this.activeUserId = null;
-    // STOMP session state
     this._stompConnected = false;
     this._pendingActions = [];
+    this._subscribedTopics = new Set();
   }
 
   connect(url = '/ws-chat', token = '', userId = '', callbacks = {}) {
@@ -39,7 +81,6 @@ export class SocketService {
 
     this.disconnect();
 
-    // Prefer proxied local WebSocket path; fall back to explicit URLs
     const wsPath = url.startsWith('ws://') || url.startsWith('wss://')
       ? url
       : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws-chat`;
@@ -65,7 +106,6 @@ export class SocketService {
         this.isConnected = true;
         console.log('[SocketService] WebSocket opened, sending STOMP CONNECT');
 
-        // Send STOMP CONNECT frame with auth header
         const headers = this.authToken
           ? `Authorization:Bearer ${this.authToken}\n`
           : '';
@@ -90,7 +130,6 @@ export class SocketService {
         console.log('[SocketService] WebSocket closed');
         if (this.callbacks.onDisconnect) this.callbacks.onDisconnect();
       };
-
     } catch (e) {
       console.warn('[SocketService] WebSocket init exception:', e);
       this.isConnected = false;
@@ -124,36 +163,23 @@ export class SocketService {
   }
 
   /**
-   * Handle STOMP frames and JSON event envelopes.
-   * Strictly follows SocketRepository.android.kt parseEvent() logic.
-   *
-   * Types:
-   *   CONVERSATION_DTO -> onMatchFound(conversation)
-   *   MESSAGE          -> onMessageReceived(message)
-   *   TYPING           -> onTypingStatus(bool)
-   *   ONLINE_STATUS    -> onOnlineStatus(bool)
-   *   DISCONNECTED_DTO -> onPeerDisconnected(senderId)
-   *   SEEN             -> onMessageSeen(payload)
+   * Handle STOMP frames and JSON event envelopes matching Android SocketRepository.kt logic.
    */
   _handleRawFrame(rawText) {
     if (typeof rawText !== 'string' && typeof rawText !== 'object') return;
 
     try {
-      // STOMP CONNECTED frame — subscribe after connection ack
       if (typeof rawText === 'string') {
         if (rawText.startsWith('CONNECTED')) {
           this._stompConnected = true;
-          console.log('[SocketService] STOMP CONNECTED — subscribing to queues');
-          this._subscribeToQueues();
+          console.log('[SocketService] STOMP CONNECTED frame received');
           if (this.callbacks.onConnect) this.callbacks.onConnect('stomp_session');
-          // Flush any pending actions queued before CONNECTED
           this._pendingActions.forEach(fn => fn());
           this._pendingActions = [];
           return;
         }
 
         if (rawText.startsWith('MESSAGE')) {
-          // Extract JSON body from STOMP MESSAGE frame
           const bodyStart = rawText.indexOf('\n\n');
           if (bodyStart === -1) return;
           let body = rawText.substring(bodyStart + 2).replace(/\0$/, '');
@@ -168,7 +194,6 @@ export class SocketService {
         }
       }
 
-      // Direct JSON object or JSON string
       const jsonString = typeof rawText === 'string' ? rawText : JSON.stringify(rawText);
       if (jsonString.includes('{')) {
         const start = jsonString.indexOf('{');
@@ -190,20 +215,23 @@ export class SocketService {
 
       if (!type) return;
 
-      console.log(`[SocketService] Event: ${type}`, payload);
+      console.log(`[SocketService] Event received: ${type}`, payload);
 
       switch (type) {
         case 'CONVERSATION_DTO': {
+          const peerName = extractPeerName(payload);
           const conversation = {
             id: payload.conversationId || payload.id || 'matched_' + Date.now(),
-            peerId: payload.peerId || payload.userId || payload.id || 'peer',
-            name: payload.userName || payload.name || payload.nickname || 'Random Stranger',
-            photoUrl: payload.photoUrl || payload.userAvatar || payload.avatar || '',
+            peerId: payload.peerId || payload.friendUserId || payload.userId || payload.id || 'peer',
+            name: peerName,
+            friendUserName: peerName,
+            userName: peerName,
+            photoUrl: payload.friendPhotoUrl || payload.photoUrl || payload.userAvatar || payload.avatar || payload.user?.photoUrl || '',
             avatar: payload.userAvatar || payload.avatar || '⚡',
             avatarBg: payload.avatarBg || '#8b5cf6',
-            gender: payload.gender || '',
-            interests: payload.interests || [],
-            bio: payload.bio || ''
+            gender: payload.gender || payload.friendGender || '',
+            interests: payload.interests || payload.friendInterests || [],
+            bio: payload.bio || payload.friendBio || ''
           };
           this.activeConversationId = conversation.id;
           this.activePeerId = conversation.peerId;
@@ -216,9 +244,10 @@ export class SocketService {
             id: payload.id || 'msg_' + Date.now(),
             senderId: payload.senderId || 'stranger',
             receiverId: payload.receiverId || '',
+            conversationId: payload.conversationId || this.activeConversationId || '',
             text: payload.message || payload.text || payload.content || '',
-            timestamp: payload.timestamp
-              ? new Date(payload.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            timestamp: payload.timeStamp || payload.timestamp
+              ? new Date(payload.timeStamp || payload.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
           if (this.callbacks.onMessageReceived) this.callbacks.onMessageReceived(message);
@@ -237,7 +266,9 @@ export class SocketService {
         }
 
         case 'DISCONNECTED_DTO': {
-          const disconnectedUser = payload.senderId || 'Stranger';
+          const disconnectedUser = extractPeerName(payload) !== 'Random Stranger'
+            ? extractPeerName(payload)
+            : (payload.senderId || payload.disconnectedUser || 'Stranger');
           if (this.callbacks.onPeerDisconnected) this.callbacks.onPeerDisconnected(disconnectedUser);
           break;
         }
@@ -248,7 +279,7 @@ export class SocketService {
         }
 
         default:
-          console.log('[SocketService] Unknown event type:', type, payload);
+          console.log('[SocketService] Unhandled event type:', type, payload);
           break;
       }
     } catch (e) {
@@ -256,80 +287,128 @@ export class SocketService {
     }
   }
 
-  // ─── STOMP Subscription ─────────────────────────────────────────────────────
+  // ─── STOMP SUBSCRIPTIONS (Matching & Chat Topics) ──────────────────────────
 
-  _subscribeToQueues() {
-    // Subscribe to personal user queue (match events, messages, typing)
+  subscribeTopic(topic, subId) {
+    if (this._subscribedTopics.has(subId)) return;
+    this._subscribedTopics.add(subId);
     this._sendRawStompFrame(
-      `SUBSCRIBE\nid:sub-personal\ndestination:/user/queue/messages\n\n\0`
+      `SUBSCRIBE\nid:${subId}\ndestination:${topic}\n\n\0`
     );
-    // Also subscribe to user-specific topic
-    if (this.activeUserId) {
-      this._sendRawStompFrame(
-        `SUBSCRIBE\nid:sub-user\ndestination:/topic/user/${this.activeUserId}\n\n\0`
-      );
-    }
+    console.log(`[SocketService] Subscribed STOMP topic: ${topic} (id: ${subId})`);
   }
 
-  // ─── CLIENT ACTIONS ─────────────────────────────────────────────────────────
+  unsubscribeTopic(subId) {
+    if (!this._subscribedTopics.has(subId)) return;
+    this._subscribedTopics.delete(subId);
+    this._sendRawStompFrame(
+      `UNSUBSCRIBE\nid:${subId}\n\n\0`
+    );
+    console.log(`[SocketService] Unsubscribed STOMP topic (id: ${subId})`);
+  }
+
+  subscribeMatchingTopic(userId) {
+    const topic = `/topic/room/random/${userId || this.activeUserId}`;
+    this.subscribeTopic(topic, 'sub-matching');
+  }
+
+  subscribeChatTopic(peerId, conversationId) {
+    this.activePeerId = peerId;
+    this.activeConversationId = conversationId;
+    const topic = `/topic/room/${peerId}/${conversationId}`;
+    this.subscribeTopic(topic, `sub-chat-${conversationId}`);
+  }
+
+  unsubscribeChatTopic() {
+    if (this.activeConversationId) {
+      this.unsubscribeTopic(`sub-chat-${this.activeConversationId}`);
+    }
+    this.unsubscribeTopic('sub-matching');
+  }
+
+  // ─── CLIENT ACTION EMITS (STOMP DESTINATIONS) ───────────────────────────────
 
   findMatch(userProfile, filters) {
+    const userId = userProfile.id || this.activeUserId;
+    this.subscribeMatchingTopic(userId);
+
     const payload = {
       type: 'MATCH_REQUEST',
       payload: {
-        userId: userProfile.id,
+        userId: userId,
         name: userProfile.name || userProfile.username,
         photoUrl: userProfile.photoUrl || '',
         gender: filters.gender !== 'All' ? filters.gender : (userProfile.gender || ''),
         interests: filters.interests?.length > 0 ? filters.interests : (userProfile.interests || [])
       }
     };
-    this._sendToDestination('/app/match.find', payload);
+    this._sendToDestination('/app/chat.random', payload);
+  }
+
+  sendOnlineStatus(conversationId, isOnline = true) {
+    const payload = {
+      senderId: this.activeUserId || 'user_me',
+      conversationId: conversationId || this.activeConversationId,
+      online: isOnline
+    };
+    this._sendToDestination('/app/chat.online', payload);
+  }
+
+  sendRandomChatMessage(text, peerId, conversationId, senderId) {
+    const payload = {
+      id: 'msg_' + Date.now(),
+      message: text,
+      senderId: senderId || this.activeUserId || 'user_me',
+      conversationId: conversationId || this.activeConversationId,
+      timeStamp: new Date().toISOString(),
+      status: 'SENT'
+    };
+    this._sendToDestination('/app/chat.random.send', payload);
   }
 
   sendMessage(text, peerId, senderId) {
     const payload = {
-      type: 'MESSAGE',
-      payload: {
-        id: 'msg_' + Date.now(),
-        senderId: senderId || this.activeUserId || 'user_me',
-        receiverId: peerId || this.activePeerId,
-        message: text,
-        timestamp: new Date().toISOString()
-      }
+      id: 'msg_' + Date.now(),
+      message: text,
+      senderId: senderId || this.activeUserId || 'user_me',
+      conversationId: this.activeConversationId,
+      timeStamp: new Date().toISOString(),
+      status: 'SENT'
     };
-    this._sendToDestination('/app/chat.sendMessage', payload);
+    this._sendToDestination('/app/chat.send', payload);
   }
 
-  sendTyping(isTyping, peerId, senderId) {
+  sendTyping(isTyping, peerId, conversationId, senderId) {
     const payload = {
-      type: 'TYPING',
-      payload: {
-        typing: isTyping,
-        senderId: senderId || this.activeUserId || 'user_me',
-        receiverId: peerId || this.activePeerId
-      }
+      senderId: senderId || this.activeUserId || 'user_me',
+      conversationId: conversationId || this.activeConversationId,
+      typing: Boolean(isTyping)
     };
     this._sendToDestination('/app/chat.typing', payload);
   }
 
-  skipPeer(peerId) {
+  sendSeen(messageId, conversationId) {
     const payload = {
-      type: 'DISCONNECTED_DTO',
-      payload: {
-        senderId: this.activeUserId || 'user_me',
-        receiverId: peerId || this.activePeerId
-      }
+      seenAt: new Date().toISOString(),
+      conversationId: conversationId || this.activeConversationId,
+      messageId: messageId
     };
-    this._sendToDestination('/app/match.skip', payload);
+    this._sendToDestination('/app/chat.random.seen', payload);
+  }
+
+  skipPeer(peerId, conversationId) {
+    const payload = {
+      senderId: this.activeUserId || 'user_me',
+      conversationId: conversationId || this.activeConversationId
+    };
+    this._sendToDestination('/app/chat.disconnect', payload);
+    this.unsubscribeChatTopic();
     this.activeConversationId = null;
     this.activePeerId = null;
   }
 
-  // ─── Internal Send Helpers ───────────────────────────────────────────────────
-
   _sendToDestination(destination, bodyObj) {
-    const jsonBody = JSON.stringify(bodyObj);
+    const jsonBody = typeof bodyObj === 'string' ? bodyObj : JSON.stringify(bodyObj);
 
     const action = () => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -340,7 +419,6 @@ export class SocketService {
       }
     };
 
-    // Queue if STOMP not yet confirmed, execute immediately otherwise
     if (this.ws && !this._stompConnected) {
       this._pendingActions.push(action);
     } else {
@@ -354,11 +432,10 @@ export class SocketService {
     }
   }
 
-  // ─── Disconnect ──────────────────────────────────────────────────────────────
-
   disconnect() {
     this._stompConnected = false;
     this._pendingActions = [];
+    this._subscribedTopics.clear();
     if (this.ws) {
       try {
         if (this.ws.readyState === WebSocket.OPEN) {
