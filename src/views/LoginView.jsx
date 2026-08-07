@@ -22,7 +22,7 @@ export function LoginView() {
   const [signUpGender, setSignUpGender] = useState('Non-binary');
   const [signUpBio, setSignUpBio] = useState('');
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState('');
-  const [signUpAvatar, setSignUpAvatar] = useState(AVATAR_LIST[0]);
+  const [signUpAvatar, setSignUpAvatar] = useState(null);
   const [selectedInterests, setSelectedInterests] = useState(['Tech', 'Gaming']);
 
   const handleTabChange = (newMode) => {
@@ -57,12 +57,18 @@ export function LoginView() {
   const handleSignUpSubmit = async (e) => {
     e.preventDefault();
     setLocalError('');
+    const photoUrl = selectedPhotoUrl || signUpAvatar?.icon || '';
+
     if (!signUpUsername.trim() || !signUpPassword.trim()) {
       setLocalError('Username and password are required.');
       return;
     }
     if (signUpPassword.length < 6) {
       setLocalError('Password must be at least 6 characters long.');
+      return;
+    }
+    if (!photoUrl) {
+      setLocalError('Profile picture is required. Please select a profile picture.');
       return;
     }
 
@@ -76,7 +82,7 @@ export function LoginView() {
         gender: signUpGender,
         bio: signUpBio.trim(),
         // photoUrl is the API field (matches KMP User.photoUrl)
-        photoUrl: selectedPhotoUrl || signUpAvatar.icon,
+        photoUrl,
         interests: selectedInterests
       });
     } catch (err) {
@@ -181,7 +187,18 @@ export function LoginView() {
           <form className="auth-form" onSubmit={handleSignUpSubmit}>
             {/* Avatar / Profile Picture Selector (From API Endpoint) */}
             <div className="form-group">
-              <label>Choose Profile Picture (API)</label>
+              <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Profile Picture *</span>
+                {!(selectedPhotoUrl || signUpAvatar) ? (
+                  <span style={{ fontSize: '0.75rem', color: '#f87171', textTransform: 'none', fontWeight: '500' }}>
+                    Required
+                  </span>
+                ) : (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--cyan-accent)', textTransform: 'none', fontWeight: '500' }}>
+                    ✓ Selected
+                  </span>
+                )}
+              </label>
               <div className="avatar-picker-grid">
                 {Array.isArray(profilePictures) && profilePictures.length > 0 ? (
                   profilePictures.map((picUrl, idx) => (
@@ -189,7 +206,7 @@ export function LoginView() {
                       key={idx}
                       type="button"
                       className={`avatar-pick-item api-pic ${selectedPhotoUrl === picUrl ? 'selected' : ''}`}
-                      onClick={() => setSelectedPhotoUrl(picUrl)}
+                      onClick={() => { setSelectedPhotoUrl(picUrl); setSignUpAvatar(null); }}
                       title={`Profile Picture ${idx + 1}`}
                       style={{ padding: 0, overflow: 'hidden' }}
                     >
@@ -206,7 +223,7 @@ export function LoginView() {
                     <button
                       key={idx}
                       type="button"
-                      className={`avatar-pick-item ${signUpAvatar.icon === item.icon ? 'selected' : ''}`}
+                      className={`avatar-pick-item ${signUpAvatar?.icon === item.icon ? 'selected' : ''}`}
                       style={{ backgroundColor: item.bg }}
                       onClick={() => { setSignUpAvatar(item); setSelectedPhotoUrl(''); }}
                       title={item.label}

@@ -140,6 +140,9 @@ export const authService = {
     if (!username || !password) {
       throw new Error('Username and password are required.');
     }
+    if (!photoUrl || !photoUrl.trim()) {
+      throw new Error('Profile picture is required.');
+    }
 
     // Matches KMP User data class fields
     const userPayload = {
@@ -154,7 +157,8 @@ export const authService = {
       status: 'Online',
       suspectLevel: 0,
       lastOnline: new Date().toISOString(),
-      fcmToken: ''
+      fcmToken: '',
+      interests: interests || []
     };
 
     const response = await fetch(`${BASE_URL}/auth/signup`, {
@@ -215,18 +219,30 @@ export const authService = {
       throw new Error(`Failed to fetch user profile (${res.status})`);
     }
 
-    return await res.json();
+    const data = await res.json();
+    return {
+      id: data.username || data.id || userId,
+      name: data.name || data.username || userId,
+      username: data.username || userId,
+      email: data.email || '',
+      gender: data.gender || '',
+      bio: data.bio || '',
+      photoUrl: data.photoUrl || '',
+      location: data.location || '',
+      interests: data.interests || [],
+      ...data
+    };
   },
 
   /**
-   * PUT /api/user/update/{userId}
+   * PATCH /api/user/update/{userId}
    * Headers: Authorization: Bearer <jwt>
    * Body: partial/full user fields
    * Returns: updated User or 200 OK
    */
   async updateProfile(userId, token, profileData) {
     const res = await fetch(`${BASE_URL}/api/user/update/${userId}`, {
-      method: 'PUT',
+      method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -248,11 +264,13 @@ export const authService = {
     }
 
     try {
-      return await res.json();
+      const data = await res.json();
+      return { id: data.username || data.id || userId, ...data };
     } catch {
       return profileData; // server returned no body (204 No Content)
     }
   },
+
 
   /**
    * GET /conversations/my-conversations

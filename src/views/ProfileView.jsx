@@ -8,7 +8,7 @@ export function ProfileView() {
   if (!user) return null;
 
   const [name, setName] = useState(user.name);
-  const [avatar, setAvatar] = useState(user.avatar);
+  const [avatar, setAvatar] = useState(user.photoUrl);
   const [avatarBg, setAvatarBg] = useState(user.avatarBg);
   const [gender, setGender] = useState(user.gender);
   const [bio, setBio] = useState(user.bio || '');
@@ -98,7 +98,7 @@ export function ProfileView() {
             
             {/* Avatar Selector Grid (From API Endpoint) */}
             <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
-              Choose your Profile Picture (API):
+              Choose your Profile Picture:
             </label>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
               {Array.isArray(profilePictures) && profilePictures.length > 0 ? (
