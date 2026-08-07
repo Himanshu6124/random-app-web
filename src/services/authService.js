@@ -318,8 +318,11 @@ export const authService = {
       const data = await res.json();
       const list = Array.isArray(data) ? data : (Array.isArray(data.content) ? data.content : []);
       
-      return list.map(m => {
-        const isMe = (m.senderId && m.senderId === myId) || m.sender === 'me';
+      // Reversing list so messages display chronologically from oldest at top to newest at bottom
+      const chronologicalList = list.slice().reverse();
+
+      return chronologicalList.map(m => {
+        const isMe = (m.senderId && String(m.senderId) === String(myId)) || m.sender === 'me';
         return {
           id: m.id || 'msg_' + Math.random(),
           sender: isMe ? 'me' : (m.senderId || 'peer'),
@@ -335,6 +338,7 @@ export const authService = {
       return [];
     }
   },
+
 
 
   /**
