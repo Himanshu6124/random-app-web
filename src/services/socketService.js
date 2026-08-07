@@ -159,9 +159,14 @@ export class SocketService {
         }
 
         if (rawText.startsWith('MESSAGE')) {
-          const bodyStart = rawText.indexOf('\n\n');
+          let bodyStart = rawText.indexOf('\r\n\r\n');
+          let offset = 4;
+          if (bodyStart === -1) {
+            bodyStart = rawText.indexOf('\n\n');
+            offset = 2;
+          }
           if (bodyStart === -1) return;
-          let body = rawText.substring(bodyStart + 2).replace(/\0$/, '');
+          let body = rawText.substring(bodyStart + offset).replace(/\0$/, '').trim();
           this._parseEventJson(body);
           return;
         }
@@ -188,13 +193,34 @@ export class SocketService {
 
   _parseEventJson(jsonStr) {
     try {
-      const json = typeof jsonStr === 'object' ? jsonStr : JSON.parse(jsonStr);
-      const type = json.type;
-      const payload = json.payload || json;
+      if (!jsonStr) return;
+      let json = typeof jsonStr === 'object' ? jsonStr : JSON.parse(jsonStr.trim());
+      if (typeof json === 'string') {
+        try { json = JSON.parse(json); } catch (e) {}
+      }
 
-      if (!type) return;
+      let type = json.type;
+      let payload = json.payload || json.body || json.data || json;
 
-      console.log(`[SocketService] Event received: ${type}`, payload);
+      // Inferred type detection if backend sends raw STOMP payload without 'type' wrapper
+      if (!type) {
+        if (payload.typing !== undefined || payload.isTyping !== undefined) {
+          type = 'TYPING';
+        } else if (payload.online !== undefined || payload.isOnline !== undefined) {
+          type = 'ONLINE_STATUS';
+        } else if (payload.seenAt !== undefined || payload.messageId !== undefined) {
+          type = 'SEEN';
+        } else if (payload.message !== undefined || payload.text !== undefined || payload.content !== undefined) {
+          type = 'MESSAGE';
+        } else if (payload.conversationId && (payload.peerId || payload.friendUserId)) {
+          type = 'CONVERSATION_DTO';
+        } else {
+          console.log('[SocketService] Received unknown frame without type:', json);
+          return;
+        }
+      }
+
+      console.log(`[SocketService] Event received [${type}]:`, payload);
 
       switch (type) {
         case 'CONVERSATION_DTO': {
@@ -223,8 +249,8 @@ export class SocketService {
         case 'MESSAGE': {
           const message = {
             id: payload.id || 'msg_' + Date.now(),
-            senderId: payload.senderId || 'stranger',
-            receiverId: payload.receiverId || '',
+            senderId: payload.senderId || payload.sender || 'stranger',
+            receiverId: payload.receiverId || payload.receiver || '',
             conversationId: payload.conversationId || this.activeConversationId || '',
             text: payload.message || payload.text || payload.content || '',
             message: payload.message || payload.text || payload.content || '',
@@ -232,18 +258,20 @@ export class SocketService {
               ? new Date(payload.timeStamp || payload.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
+          console.log('[SocketService] Parsing MESSAGE event:', message);
           if (this.callbacks.onMessageReceived) this.callbacks.onMessageReceived(message);
           break;
         }
 
         case 'TYPING': {
-          const isTyping = Boolean(payload.typing || payload.isTyping);
-          if (this.callbacks.onTypingStatus) this.callbacks.onTypingStatus(isTyping);
+          const isTyping = Boolean(payload.typing !== undefined ? payload.typing : payload.isTyping);
+          if (this.callbacks.onTypingStatus) this.callbacks.onTypingStatus(isTyping, payload);
           break;
         }
 
         case 'ONLINE_STATUS': {
-          if (this.callbacks.onOnlineStatus) this.callbacks.onOnlineStatus(Boolean(payload.online));
+          const isOnline = Boolean(payload.online !== undefined ? payload.online : payload.isOnline);
+          if (this.callbacks.onOnlineStatus) this.callbacks.onOnlineStatus(isOnline, payload);
           break;
         }
 
@@ -294,19 +322,44 @@ export class SocketService {
     this.subscribeTopic(topic, 'sub-matching');
   }
 
-  subscribeChatTopic(peerId, conversationId) {
+  subscribeChatTopic(peerId, conversationId, myUserId) {
+    const sId = myUserId || this.activeUserId || localStorage.getItem('randomeet_user_id') || '';
     this.activePeerId = peerId;
     this.activeConversationId = conversationId;
-    const topic = `/topic/room/${peerId}/${conversationId}`;
-    this.subscribeTopic(topic, `sub-chat-${conversationId}`);
+
+    this.unsubscribeChatTopic();
+
+    console.log(`[SocketService] Subscribing chat topics for me=${sId}, friend=${peerId}, conv=${conversationId}`);
+
+    if (sId && conversationId) {
+      this.subscribeTopic(`/topic/room/${sId}/${conversationId}`, `sub-chat-me-${conversationId}`);
+    }
+    if (peerId && conversationId) {
+      this.subscribeTopic(`/topic/room/${peerId}/${conversationId}`, `sub-chat-peer-${conversationId}`);
+    }
+    if (conversationId) {
+      this.subscribeTopic(`/topic/room/${conversationId}`, `sub-chat-conv-${conversationId}`);
+    }
+    if (sId) {
+      this.subscribeTopic(`/topic/user/${sId}`, `sub-user-${sId}`);
+    }
   }
 
   unsubscribeChatTopic() {
     if (this.activeConversationId) {
-      this.unsubscribeTopic(`sub-chat-${this.activeConversationId}`);
+      const convId = this.activeConversationId;
+      this.unsubscribeTopic(`sub-chat-${convId}`);
+      this.unsubscribeTopic(`sub-chat-peer-${convId}`);
+      this.unsubscribeTopic(`sub-chat-me-${convId}`);
+      this.unsubscribeTopic(`sub-chat-conv-${convId}`);
+    }
+    if (this.activeUserId) {
+      this.unsubscribeTopic(`sub-user-${this.activeUserId}`);
     }
     this.unsubscribeTopic('sub-matching');
   }
+
+
 
   // ─── CLIENT ACTION EMITS ────────────────────────────────────────────────────
 

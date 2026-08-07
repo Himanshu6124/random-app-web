@@ -273,7 +273,7 @@ export const authService = {
 
       const conversations = await res.json();
       return Array.isArray(conversations) ? conversations.map(c => ({
-        id: c.conversationId || c.id || c.peerId || c.friendUserId,
+        id: c.friendUserId || c.peerId || c.id || c.conversationId,
         conversationId: c.conversationId || c.id,
         peerId: c.peerId || c.friendUserId || c.id,
         friendUserId: c.friendUserId || c.peerId || c.id,
@@ -292,6 +292,50 @@ export const authService = {
       return null;
     }
   },
+
+
+  /**
+   * GET /messages/conversation/{conversationId}?page={page}&size={size}
+   * Headers: Authorization: Bearer <jwt>
+   * Returns: List<Message> from backend matching RandoMeet ChatRepo
+   */
+  async fetchConversationMessages(conversationId, token, page = 0, size = 20) {
+    if (!conversationId || !token) return [];
+
+    try {
+      const myId = this.getUserId();
+      const res = await fetch(`${BASE_URL}/messages/conversation/${conversationId}?page=${page}&size=${size}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to fetch conversation messages (${res.status})`);
+      }
+
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (Array.isArray(data.content) ? data.content : []);
+      
+      return list.map(m => {
+        const isMe = (m.senderId && m.senderId === myId) || m.sender === 'me';
+        return {
+          id: m.id || 'msg_' + Math.random(),
+          sender: isMe ? 'me' : (m.senderId || 'peer'),
+          senderId: m.senderId || '',
+          text: m.message || m.text || m.content || '',
+          time: m.timeStamp || m.timestamp 
+            ? new Date(m.timeStamp || m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+      });
+    } catch (e) {
+      console.warn('[authService] fetchConversationMessages failed:', e);
+      return [];
+    }
+  },
+
 
   /**
    * GET /friendships/list
