@@ -32,6 +32,16 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
+        '/friendships': {
+          target: BACKEND,
+          changeOrigin: true,
+          secure: false,
+        },
+        '/conversations': {
+          target: BACKEND,
+          changeOrigin: true,
+          secure: false,
+        },
         // WebSocket proxy for STOMP chat connections
         '/ws-chat': {
           target: WS_BACKEND,

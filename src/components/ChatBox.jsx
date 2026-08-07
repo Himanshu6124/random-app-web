@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
-import { Send, SkipForward, UserPlus, LogOut, HelpCircle, Heart, Flame, Smile, Sparkles, Hand } from 'lucide-react';
+import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Sparkles, Hand } from 'lucide-react';
 import { extractPeerName } from '../services/socketService';
 
 export function ChatBox() {
-  const { user, addFriend, friends } = useAuth();
+  const { user, addFriend, sendFriendRequest, friends } = useAuth();
   const {
     currentPeer,
     messages,
@@ -20,10 +20,35 @@ export function ChatBox() {
   } = useSocket();
 
   const [inputMsg, setInputMsg] = useState('');
+  const [requestSent, setRequestSent] = useState(false);
+  const [sendingRequest, setSendingRequest] = useState(false);
   const messagesEndRef = useRef(null);
 
   const peerName = extractPeerName(currentPeer);
-  const isAlreadyFriend = friends.some(f => f.id === (currentPeer ? (currentPeer.peerId || currentPeer.id) : ''));
+  const peerId = currentPeer ? (currentPeer.peerId || currentPeer.friendUserId || currentPeer.id || currentPeer.username) : '';
+  const isAlreadyFriend = friends.some(f => (f.id === peerId || f.friendUserId === peerId || f.username === peerId));
+
+  // Reset requestSent state whenever peer changes
+  useEffect(() => {
+    setRequestSent(false);
+  }, [peerId]);
+
+  const handleAddFriendClick = async () => {
+    if (!peerId || sendingRequest || requestSent) return;
+    setSendingRequest(true);
+    try {
+      await sendFriendRequest(peerId);
+      setRequestSent(true);
+    } catch (err) {
+      console.warn("Failed to send friend request via API, fallback to addFriend:", err);
+      try {
+        await addFriend({ ...currentPeer, name: peerName });
+        setRequestSent(true);
+      } catch (e) {}
+    } finally {
+      setSendingRequest(false);
+    }
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -139,13 +164,30 @@ export function ChatBox() {
           {!isAlreadyFriend && (
             <button
               type="button"
-              onClick={() => addFriend({ ...currentPeer, name: peerName })}
+              onClick={handleAddFriendClick}
+              disabled={requestSent || sendingRequest}
               className="btn-cyan"
-              style={{ padding: '8px 14px', fontSize: '0.85rem', cursor: 'pointer' }}
-              title="Add to Friends"
+              style={{
+                padding: '8px 14px',
+                fontSize: '0.85rem',
+                cursor: (requestSent || sendingRequest) ? 'default' : 'pointer',
+                opacity: requestSent ? 0.85 : 1,
+                background: requestSent ? 'rgba(52, 199, 89, 0.2)' : undefined,
+                borderColor: requestSent ? '#34C759' : undefined
+              }}
+              title={requestSent ? "Friend Request Sent" : "Add to Friends"}
             >
-              <UserPlus size={16} />
-              <span>Add Friend</span>
+              {requestSent ? (
+                <>
+                  <UserCheck size={16} color="#34C759" />
+                  <span style={{ color: '#34C759', fontWeight: 600 }}>Request Sent</span>
+                </>
+              ) : (
+                <>
+                  <UserPlus size={16} />
+                  <span>{sendingRequest ? 'Sending...' : 'Add Friend'}</span>
+                </>
+              )}
             </button>
           )}
 

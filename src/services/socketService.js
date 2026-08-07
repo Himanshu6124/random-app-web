@@ -361,8 +361,8 @@ export class SocketService {
     this._sendToDestination('/app/chat.random.send', payload);
   }
 
-  sendMessage(text, peerId, senderId) {
-    const convId = this.activeConversationId || '';
+  sendMessage(text, peerId, senderId, conversationId) {
+    const convId = conversationId || this.activeConversationId || '';
     const pId = peerId || this.activePeerId || '';
     const sId = senderId || this.activeUserId || 'user_me';
 
@@ -375,10 +375,12 @@ export class SocketService {
       receiverId: pId,
       conversationId: convId,
       timeStamp: new Date().toISOString(),
+      timestamp: new Date().toISOString(),
       status: 'SENT'
     };
     this._sendToDestination('/app/chat.send', payload);
   }
+
 
   sendTyping(isTyping, peerId, conversationId, senderId) {
     const payload = {

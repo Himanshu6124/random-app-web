@@ -255,6 +255,184 @@ export const authService = {
   },
 
   /**
+   * GET /conversations/my-conversations
+   * Returns: List<Conversation> — friend conversations from backend
+   */
+  async getFriendConversations(token) {
+    try {
+      const res = await fetch(`${BASE_URL}/conversations/my-conversations`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to fetch friend conversations (${res.status})`);
+      }
+
+      const conversations = await res.json();
+      return Array.isArray(conversations) ? conversations.map(c => ({
+        id: c.conversationId || c.id || c.peerId || c.friendUserId,
+        conversationId: c.conversationId || c.id,
+        peerId: c.peerId || c.friendUserId || c.id,
+        friendUserId: c.friendUserId || c.peerId || c.id,
+        friendUserName: c.friendUserName || c.name || c.username || 'Friend',
+        name: c.friendUserName || c.name || c.username || 'Friend',
+        username: c.username || c.friendUserName,
+        photoUrl: c.friendPhotoUrl || c.photoUrl || c.avatar || '',
+        avatar: c.avatar || '👤',
+        status: c.status || 'Online',
+        lastMessage: c.lastMessage || 'Say hi!',
+        lastMessageTime: c.lastMessageTime || c.timestamp || '',
+        unread: c.unread || 0
+      })) : [];
+    } catch (e) {
+      console.warn('[authService] getFriendConversations failed:', e);
+      return null;
+    }
+  },
+
+  /**
+   * GET /friendships/list
+   * Returns: List<User> — accepted friends
+   */
+  async getFriendsList(token) {
+    try {
+      const res = await fetch(`${BASE_URL}/friendships/list`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to fetch friendships list (${res.status})`);
+      }
+
+      return await res.json();
+    } catch (e) {
+      console.warn('[authService] getFriendsList failed:', e);
+      return [];
+    }
+  },
+
+  /**
+   * GET /friendships/to-be-accepted
+   * Returns: List<User> — pending friend requests to be accepted
+   */
+  async getPendingFriendRequests(token) {
+    try {
+      const res = await fetch(`${BASE_URL}/friendships/to-be-accepted`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to fetch pending friend requests (${res.status})`);
+      }
+
+      const requests = await res.json();
+      return Array.isArray(requests) ? requests.map(r => ({
+        id: r.id || r.userId || r.username,
+        username: r.username || r.name,
+        name: r.name || r.username || 'Unknown',
+        photoUrl: r.photoUrl || r.avatar || '',
+        bio: r.bio || ''
+      })) : [];
+    } catch (e) {
+      console.warn('[authService] getPendingFriendRequests failed:', e);
+      return [];
+    }
+  },
+
+  /**
+   * POST /friendships/request/{friendId}/send
+   * Send a friend request to friendId (userId or username)
+   */
+  async sendFriendRequest(friendId, token) {
+    const res = await fetch(`${BASE_URL}/friendships/request/${friendId}/send`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!res.ok) {
+      let errMsg = `Send friend request failed (${res.status})`;
+      try {
+        const err = await res.json();
+        errMsg = err.message || err.error || errMsg;
+      } catch {
+        const text = await res.text().catch(() => '');
+        if (text) errMsg = text;
+      }
+      throw new Error(errMsg);
+    }
+    return true;
+  },
+
+  /**
+   * POST /friendships/request/{friendId}/accept
+   * Accept a pending friend request
+   */
+  async acceptFriendRequest(friendId, token) {
+    const res = await fetch(`${BASE_URL}/friendships/request/${friendId}/accept`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!res.ok) {
+      let errMsg = `Accept friend request failed (${res.status})`;
+      try {
+        const err = await res.json();
+        errMsg = err.message || err.error || errMsg;
+      } catch {
+        const text = await res.text().catch(() => '');
+        if (text) errMsg = text;
+      }
+      throw new Error(errMsg);
+    }
+    return true;
+  },
+
+  /**
+   * POST /friendships/request/{friendId}/reject
+   * Reject a pending friend request
+   */
+  async rejectFriendRequest(friendId, token) {
+    const res = await fetch(`${BASE_URL}/friendships/request/${friendId}/reject`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!res.ok) {
+      let errMsg = `Reject friend request failed (${res.status})`;
+      try {
+        const err = await res.json();
+        errMsg = err.message || err.error || errMsg;
+      } catch {
+        const text = await res.text().catch(() => '');
+        if (text) errMsg = text;
+      }
+      throw new Error(errMsg);
+    }
+    return true;
+  },
+
+  /**
    * GET /api/friends/{userId}
    * Returns: List<FriendDto> — all accepted friendships
    * FriendDto fields (from getAllFriends service): { id, name, username, photoUrl, bio, gender, status }
