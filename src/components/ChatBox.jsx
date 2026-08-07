@@ -153,14 +153,14 @@ export function ChatBox() {
                 </span>
               )}
             </div>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            <p className="chat-peer-bio" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
               {currentPeer.bio || 'Random Chat Partner'}
             </p>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="chat-header-actions">
           {!isAlreadyFriend && (
             <button
               type="button"
@@ -350,7 +350,7 @@ export function ChatBox() {
         </button>
 
         {/* Quick Emojis */}
-        <div style={{ display: 'flex', gap: '6px', position: 'relative', zIndex: 30 }}>
+        <div className="chat-subbar-reactions" style={{ display: 'flex', gap: '6px', position: 'relative', zIndex: 30 }}>
           {[
             { icon: <Heart size={16} color="#ec4899" />, emoji: '❤️' },
             { icon: <Flame size={16} color="#f97316" />, emoji: '🔥' },

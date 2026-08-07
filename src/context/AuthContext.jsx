@@ -203,7 +203,18 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = () => {
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  const requestLogout = () => {
+    setShowLogoutModal(true);
+  };
+
+  const cancelLogout = () => {
+    setShowLogoutModal(false);
+  };
+
+  const performLogout = () => {
+    setShowLogoutModal(false);
     authService.clearSession();
     setIsAuthenticated(false);
     setUser(null);
@@ -211,6 +222,10 @@ export function AuthProvider({ children }) {
     setAuthError('');
     setFriends([]);
     setFriendRequests([]);
+  };
+
+  const logout = () => {
+    requestLogout();
   };
 
   const updateUserProfile = (updated) => {
@@ -250,6 +265,10 @@ export function AuthProvider({ children }) {
       profilePictures,
       authLoading,
       authError,
+      showLogoutModal,
+      requestLogout,
+      cancelLogout,
+      performLogout,
       clearAuthError,
       login,
       signUp,

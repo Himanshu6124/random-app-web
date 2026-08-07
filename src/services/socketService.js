@@ -63,9 +63,15 @@ export class SocketService {
 
     this.disconnect();
 
+    const envBackend = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '');
+    let wsBase = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`;
+    if (envBackend) {
+      wsBase = envBackend.replace(/^http/, 'ws');
+    }
+
     const wsPath = url.startsWith('ws://') || url.startsWith('wss://')
       ? url
-      : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws-chat`;
+      : `${wsBase}${url.startsWith('/') ? '' : '/'}${url}`;
 
     const fullUrl = this.authToken
       ? (wsPath.includes('?') ? `${wsPath}&token=${this.authToken}` : `${wsPath}?token=${this.authToken}`)

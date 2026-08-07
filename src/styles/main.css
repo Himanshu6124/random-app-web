@@ -169,6 +169,21 @@
   }
 }
 
+@keyframes scaleUp {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-scale-up {
+  animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 .animate-fade-in {
   animation: slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -195,3 +210,189 @@
   animation: floatUp 1.8s ease-out forwards;
   z-index: 100;
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Responsive Web & Mobile Layout Enhancements
+   ───────────────────────────────────────────────────────────── */
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 100vh;
+  width: 100vw;
+  max-width: 1400px;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+/* Header Responsiveness */
+.header-wrapper {
+  margin: 16px 16px 0 16px;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 50;
+  gap: 12px;
+  transition: all 0.3s ease;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 768px) {
+  .header-wrapper {
+    margin: 8px 8px 0 8px;
+    padding: 10px 14px;
+  }
+
+  .header-brand h1 {
+    font-size: 1.2rem !important;
+  }
+
+  .header-nav {
+    gap: 6px;
+  }
+
+  .header-nav button {
+    padding: 8px 12px !important;
+    font-size: 0.82rem !important;
+  }
+
+  .header-user-name {
+    display: none;
+  }
+
+  .header-user-btn {
+    padding: 4px !important;
+  }
+
+  .header-signout-btn {
+    padding: 8px 10px !important;
+    font-size: 0.8rem !important;
+  }
+}
+
+@media (max-width: 540px) {
+  .header-wrapper {
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .header-nav {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .header-nav button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .header-signout-text {
+    display: none;
+  }
+}
+
+/* ChatBox Responsiveness */
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .chat-header-actions button span {
+    display: none;
+  }
+  .chat-header-actions button {
+    padding: 8px 10px !important;
+  }
+  .chat-peer-bio {
+    display: none !important;
+  }
+  .chat-subbar-reactions {
+    gap: 4px !important;
+  }
+  .chat-subbar-reactions button {
+    padding: 4px 6px !important;
+  }
+}
+
+/* MatchRadar Responsiveness */
+.radar-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  width: 100%;
+  max-width: 720px;
+  margin: auto;
+  min-height: 100%;
+}
+
+@media (max-width: 480px) {
+  .radar-animation-box {
+    width: 240px !important;
+    height: 240px !important;
+  }
+  .radar-card-container {
+    padding: 20px 16px !important;
+  }
+  .radar-title {
+    font-size: 1.5rem !important;
+  }
+}
+
+/* ProfileView Responsiveness */
+.profile-card {
+  width: 100%;
+  max-width: 680px;
+  padding: 32px;
+}
+
+@media (max-width: 640px) {
+  .profile-card {
+    padding: 20px 16px !important;
+  }
+  .profile-action-buttons {
+    flex-direction: column-reverse;
+    gap: 12px !important;
+    align-items: stretch !important;
+  }
+  .profile-action-buttons button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+

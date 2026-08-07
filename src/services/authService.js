@@ -12,13 +12,10 @@
  *   DELETE /api/friends/remove/{friendId} -> Remove friend (Bearer JWT)
  *
  * AuthResponse fields: { userId: String, jwt: String }
- *
- * NOTE: BASE_URL is intentionally empty — all requests are routed through
- * the Vite dev server proxy (vite.config.js) to avoid CORS issues.
- * The proxy forwards /auth/*, /api/*, /users/*, /friends/* -> http://192.168.1.7:8080
  */
 
-const BASE_URL = '';  // Proxied via Vite — see vite.config.js
+const rawBackendUrl = import.meta.env.VITE_BACKEND_URL || '';
+const BASE_URL = rawBackendUrl.replace(/\/+$/, '');
 const TOKEN_KEY = 'randomeet_jwt_token';
 const USER_ID_KEY = 'randomeet_user_id';
 const USER_KEY = 'randomeet_user';

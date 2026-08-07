@@ -6,9 +6,10 @@ import { MatchView } from './views/MatchView';
 import { FriendsView } from './views/FriendsView';
 import { ProfileView } from './views/ProfileView';
 import { LoginView } from './views/LoginView';
+import { LogoutConfirmationDialog } from './components/LogoutConfirmationDialog';
 
 function AppContent() {
-  const { isAuthenticated, authLoading } = useAuth();
+  const { isAuthenticated, authLoading, showLogoutModal, cancelLogout, performLogout } = useAuth();
   const [activeTab, setActiveTab] = useState('match');
 
   // 1. Initial Auth check loading state on landing
@@ -39,6 +40,12 @@ function AppContent() {
         {activeTab === 'friends' && <FriendsView onStartMatch={() => setActiveTab('match')} />}
         {activeTab === 'profile' && <ProfileView />}
       </main>
+
+      <LogoutConfirmationDialog
+        isOpen={showLogoutModal}
+        onClose={cancelLogout}
+        onConfirm={performLogout}
+      />
     </div>
   );
 }

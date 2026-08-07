@@ -40,24 +40,14 @@ export function MatchRadar() {
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: isSearching ? '40px 20px' : '32px 20px',
-      width: '100%',
-      maxWidth: '720px',
-      margin: 'auto',
-      minHeight: '100%'
-    }}>
+    <div className="radar-container">
 
       {isSearching ? (
         /* ── SEARCHING STATE ─ Full animated radar like Android HomeScreenV2 ── */
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '32px', width: '100%' }}>
 
           {/* Radar Animation */}
-          <div style={{ position: 'relative', width: '300px', height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="radar-animation-box" style={{ position: 'relative', width: '300px', height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
 
             {/* Pulsing rings */}
             {[1, 2, 3].map(i => (

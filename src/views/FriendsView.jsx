@@ -38,6 +38,7 @@ export function FriendsView({ onStartMatch }) {
   const { isLiveConnected } = useSocket();
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [mobileShowChat, setMobileShowChat] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
   const [showRequestDialog, setShowRequestDialog] = useState(false);
   const [isFriendTyping, setIsFriendTyping] = useState(false);
   const [floatingReactions, setFloatingReactions] = useState([]);
@@ -47,12 +48,19 @@ export function FriendsView({ onStartMatch }) {
   const messagesEndRef = useRef(null);
   const typingTimerRef = useRef(null);
 
+  // Dynamic window resize listener for instant mobile/desktop adaptation
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Auto-select first friend on desktop if none selected
   useEffect(() => {
-    if (!selectedFriend && friends.length > 0 && window.innerWidth > 768) {
+    if (!selectedFriend && friends.length > 0 && !isMobile) {
       setSelectedFriend(friends[0]);
     }
-  }, [friends]);
+  }, [friends, isMobile]);
 
   // Load latest friends and pending requests from API on view mount
   useEffect(() => {
@@ -317,6 +325,7 @@ export function FriendsView({ onStartMatch }) {
   const handleIcebreakerClick = (e) => {
     e.preventDefault();
     if (!selectedFriend) return;
+    console.log('[FriendsView] Icebreaker button clicked for friend:', selectedFriend);
     const randomQ = ICEBREAKER_QUESTIONS[Math.floor(Math.random() * ICEBREAKER_QUESTIONS.length)];
     setDmInput(`🧊 Icebreaker: ${randomQ}`);
   };
@@ -373,10 +382,10 @@ export function FriendsView({ onStartMatch }) {
     }}>
       {/* Sidebar: Friends List */}
       <div
-        className="glass-panel"
+        className="glass-panel friends-sidebar"
         style={{
-          width: '320px',
-          display: mobileShowChat ? 'none' : 'flex',
+          width: isMobile ? '100%' : '320px',
+          display: (isMobile && mobileShowChat) ? 'none' : 'flex',
           flexDirection: 'column',
           padding: '20px',
           flexShrink: 0
@@ -510,9 +519,9 @@ export function FriendsView({ onStartMatch }) {
       </div>
 
       {/* Main Area: Direct Chat Screen */}
-      <div className="glass-panel" style={{
+      <div className="glass-panel friends-chat-area" style={{
         flex: 1,
-        display: (!mobileShowChat && window.innerWidth <= 768) ? 'none' : 'flex',
+        display: (isMobile && !mobileShowChat) ? 'none' : 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
         position: 'relative'

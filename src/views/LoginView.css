@@ -294,7 +294,20 @@
 }
 
 @media (max-width: 520px) {
+  .login-page-container {
+    padding: 12px;
+  }
+  .login-card {
+    padding: 24px 16px;
+  }
+  .login-title {
+    font-size: 1.6rem;
+  }
   .form-row {
     grid-template-columns: 1fr;
+  }
+  .avatar-picker-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
   }
 }

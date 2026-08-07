@@ -62,7 +62,7 @@ export function ProfileView() {
       flex: 1,
       overflowY: 'auto'
     }}>
-      <div className="glass-panel" style={{ width: '100%', maxWidth: '680px', padding: '32px' }}>
+      <div className="glass-panel profile-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '28px' }}>
           <User size={26} color="var(--primary-purple)" />
           <h2 style={{ fontSize: '1.4rem', fontWeight: 700 }}>Edit My Profile</h2>
@@ -287,7 +287,7 @@ export function ProfileView() {
           </div>
 
           {/* Submit & Logout Buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--border-color)' }}>
+          <div className="profile-action-buttons" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--border-color)' }}>
             <button
               type="button"
               className="btn-danger"
