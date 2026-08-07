@@ -10,7 +10,6 @@ export function Header({ activeTab, setActiveTab }) {
   const statusConfig = {
     connected: { color: 'var(--green-accent)', label: '● Live', dot: '#10b981' },
     connecting: { color: '#eab308', label: '● Connecting...', dot: '#eab308' },
-    mock: { color: 'var(--cyan-accent)', label: '● Demo Mode', dot: '#06b6d4' },
     disconnected: { color: 'var(--text-muted)', label: '● Offline', dot: '#6b7280' }
   };
   const status = statusConfig[connectionStatus] || statusConfig.disconnected;

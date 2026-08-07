@@ -347,6 +347,7 @@ export const authService = {
    * Returns: String[] of avatar image URLs
    */
   async getProfilePictures() {
+    console.log("Fetching profile pictures from backend...", BASE_URL);
     try {
       const res = await fetch(`${BASE_URL}/users/profile-pictures`, {
         headers: { 'Accept': 'application/json' }

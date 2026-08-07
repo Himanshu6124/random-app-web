@@ -46,6 +46,20 @@ export function ChatBox() {
     }
   };
 
+  const handleIcebreakerClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[ChatBox] Icebreaker button clicked');
+    sendIcebreaker();
+  };
+
+  const handleReactionClick = (e, emoji) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[ChatBox] Reaction clicked:', emoji);
+    sendReaction(emoji);
+  };
+
   if (!currentPeer) return null;
 
   return (
@@ -55,7 +69,8 @@ export function ChatBox() {
       height: '100%',
       width: '100%',
       position: 'relative',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      zIndex: 5
     }}>
       {/* Floating Animated Reactions */}
       {floatingReactions.map(r => (
@@ -75,7 +90,9 @@ export function ChatBox() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        background: 'rgba(15, 17, 35, 0.4)'
+        background: 'rgba(15, 17, 35, 0.4)',
+        position: 'relative',
+        zIndex: 10
       }}>
         {/* Peer Profile Info */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -121,9 +138,10 @@ export function ChatBox() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {!isAlreadyFriend && (
             <button
+              type="button"
               onClick={() => addFriend({ ...currentPeer, name: peerName })}
               className="btn-cyan"
-              style={{ padding: '8px 14px', fontSize: '0.85rem' }}
+              style={{ padding: '8px 14px', fontSize: '0.85rem', cursor: 'pointer' }}
               title="Add to Friends"
             >
               <UserPlus size={16} />
@@ -132,18 +150,20 @@ export function ChatBox() {
           )}
 
           <button
+            type="button"
             onClick={skipStranger}
             className="btn-primary"
-            style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+            style={{ padding: '8px 16px', fontSize: '0.85rem', cursor: 'pointer' }}
           >
             <SkipForward size={16} />
             <span>Next Stranger</span>
           </button>
 
           <button
+            type="button"
             onClick={disconnectChat}
             className="btn-danger"
-            style={{ padding: '8px 12px' }}
+            style={{ padding: '8px 12px', cursor: 'pointer' }}
             title="Leave Chat"
           >
             <LogOut size={16} />
@@ -160,7 +180,9 @@ export function ChatBox() {
           alignItems: 'center',
           gap: '8px',
           fontSize: '0.8rem',
-          color: 'var(--text-muted)'
+          color: 'var(--text-muted)',
+          position: 'relative',
+          zIndex: 10
         }}>
           <span>Common Interests:</span>
           {currentPeer.interests.map(t => (
@@ -184,7 +206,9 @@ export function ChatBox() {
         overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',
-        gap: '12px'
+        gap: '12px',
+        position: 'relative',
+        zIndex: 10
       }}>
         {messages.map(msg => {
           if (msg.senderId === 'system') {
@@ -252,25 +276,39 @@ export function ChatBox() {
 
       {/* Bottom Bar: Icebreaker & Quick Reactions */}
       <div style={{
-        padding: '8px 20px',
+        padding: '10px 20px',
         borderTop: '1px solid var(--border-color)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        background: 'rgba(15, 17, 35, 0.3)'
+        background: 'rgba(15, 17, 35, 0.5)',
+        position: 'relative',
+        zIndex: 20
       }}>
         {/* Icebreaker button */}
         <button
-          onClick={sendIcebreaker}
+          type="button"
+          onClick={handleIcebreakerClick}
           className="btn-secondary"
-          style={{ padding: '6px 14px', fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
+          style={{
+            padding: '8px 16px',
+            fontSize: '0.82rem',
+            borderRadius: 'var(--radius-full)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            position: 'relative',
+            zIndex: 30,
+            pointerEvents: 'auto'
+          }}
         >
-          <HelpCircle size={14} color="var(--cyan-accent)" />
-          <span>Ask Icebreaker</span>
+          <HelpCircle size={15} color="var(--cyan-accent)" />
+          <span style={{ fontWeight: 600 }}>Ask Icebreaker</span>
         </button>
 
         {/* Quick Emojis */}
-        <div style={{ display: 'flex', gap: '6px' }}>
+        <div style={{ display: 'flex', gap: '6px', position: 'relative', zIndex: 30 }}>
           {[
             { icon: <Heart size={16} color="#ec4899" />, emoji: '❤️' },
             { icon: <Flame size={16} color="#f97316" />, emoji: '🔥' },
@@ -280,17 +318,19 @@ export function ChatBox() {
           ].map(item => (
             <button
               key={item.emoji}
-              onClick={() => sendReaction(item.emoji)}
+              type="button"
+              onClick={(e) => handleReactionClick(e, item.emoji)}
               style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: 'none',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
                 padding: '6px 10px',
                 borderRadius: 'var(--radius-full)',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                pointerEvents: 'auto'
               }}
             >
               {item.icon}
@@ -305,7 +345,9 @@ export function ChatBox() {
         display: 'flex',
         alignItems: 'center',
         gap: '12px',
-        background: 'rgba(9, 10, 21, 0.7)'
+        background: 'rgba(9, 10, 21, 0.8)',
+        position: 'relative',
+        zIndex: 20
       }}>
         <input
           type="text"
@@ -334,7 +376,8 @@ export function ChatBox() {
             padding: 0,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
+            cursor: 'pointer'
           }}
         >
           <Send size={20} />

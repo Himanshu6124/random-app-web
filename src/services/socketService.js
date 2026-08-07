@@ -39,25 +39,6 @@ export function extractPeerName(payload) {
 
 /**
  * SocketService - RandoMeet Android app STOMP spec (kmp-migration branch).
- *
- * Connection: ws://<host>/ws-chat?token={jwt}
- *
- * STOMP Subscriptions:
- *   Matching phase: /topic/room/random/{userId}
- *   Chat phase:     /topic/room/{peerId}/{conversationId}
- *
- * Outgoing STOMP Destinations:
- *   /app/chat.random       — initiate random match request
- *   /app/chat.random.send  — send random match chat message
- *   /app/chat.send         — send standard friend chat message
- *   /app/chat.online       — broadcast online status
- *   /app/chat.typing       — broadcast typing status
- *   /app/chat.random.seen  — send seen receipt for random match message
- *   /app/chat.disconnect   — send disconnect status on skip / leave chat
- *
- * Incoming Event Envelope:
- *   { "type": "...", "payload": { ... } }
- *   Types: CONVERSATION_DTO | MESSAGE | TYPING | ONLINE_STATUS | DISCONNECTED_DTO | SEEN
  */
 export class SocketService {
   constructor() {
@@ -72,6 +53,7 @@ export class SocketService {
     this._stompConnected = false;
     this._pendingActions = [];
     this._subscribedTopics = new Set();
+    this._encoder = new TextEncoder();
   }
 
   connect(url = '/ws-chat', token = '', userId = '', callbacks = {}) {
@@ -162,9 +144,6 @@ export class SocketService {
     }
   }
 
-  /**
-   * Handle STOMP frames and JSON event envelopes matching Android SocketRepository.kt logic.
-   */
   _handleRawFrame(rawText) {
     if (typeof rawText !== 'string' && typeof rawText !== 'object') return;
 
@@ -223,6 +202,8 @@ export class SocketService {
           const conversation = {
             id: payload.conversationId || payload.id || 'matched_' + Date.now(),
             peerId: payload.peerId || payload.friendUserId || payload.userId || payload.id || 'peer',
+            conversationId: payload.conversationId || payload.id || 'matched_' + Date.now(),
+            friendUserId: payload.friendUserId || payload.peerId || payload.userId || 'peer',
             name: peerName,
             friendUserName: peerName,
             userName: peerName,
@@ -246,6 +227,7 @@ export class SocketService {
             receiverId: payload.receiverId || '',
             conversationId: payload.conversationId || this.activeConversationId || '',
             text: payload.message || payload.text || payload.content || '',
+            message: payload.message || payload.text || payload.content || '',
             timestamp: payload.timeStamp || payload.timestamp
               ? new Date(payload.timeStamp || payload.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -287,7 +269,7 @@ export class SocketService {
     }
   }
 
-  // ─── STOMP SUBSCRIPTIONS (Matching & Chat Topics) ──────────────────────────
+  // ─── STOMP SUBSCRIPTIONS ────────────────────────────────────────────────────
 
   subscribeTopic(topic, subId) {
     if (this._subscribedTopics.has(subId)) return;
@@ -326,7 +308,7 @@ export class SocketService {
     this.unsubscribeTopic('sub-matching');
   }
 
-  // ─── CLIENT ACTION EMITS (STOMP DESTINATIONS) ───────────────────────────────
+  // ─── CLIENT ACTION EMITS ────────────────────────────────────────────────────
 
   findMatch(userProfile, filters) {
     const userId = userProfile.id || this.activeUserId;
@@ -354,24 +336,44 @@ export class SocketService {
     this._sendToDestination('/app/chat.online', payload);
   }
 
+  /**
+   * Send random chat message to STOMP destination /app/chat.random.send.
+   * Calculates exact UTF-8 byte length so emojis do not break STOMP frame boundaries.
+   */
   sendRandomChatMessage(text, peerId, conversationId, senderId) {
+    const convId = conversationId || this.activeConversationId || '';
+    const pId = peerId || this.activePeerId || '';
+    const sId = senderId || this.activeUserId || 'user_me';
+
     const payload = {
       id: 'msg_' + Date.now(),
       message: text,
-      senderId: senderId || this.activeUserId || 'user_me',
-      conversationId: conversationId || this.activeConversationId,
+      text: text,
+      content: text,
+      senderId: sId,
+      receiverId: pId,
+      conversationId: convId,
       timeStamp: new Date().toISOString(),
+      timestamp: new Date().toISOString(),
       status: 'SENT'
     };
+    console.log('[SocketService] Sending chat message:', payload);
     this._sendToDestination('/app/chat.random.send', payload);
   }
 
   sendMessage(text, peerId, senderId) {
+    const convId = this.activeConversationId || '';
+    const pId = peerId || this.activePeerId || '';
+    const sId = senderId || this.activeUserId || 'user_me';
+
     const payload = {
       id: 'msg_' + Date.now(),
       message: text,
-      senderId: senderId || this.activeUserId || 'user_me',
-      conversationId: this.activeConversationId,
+      text: text,
+      content: text,
+      senderId: sId,
+      receiverId: pId,
+      conversationId: convId,
       timeStamp: new Date().toISOString(),
       status: 'SENT'
     };
@@ -407,12 +409,17 @@ export class SocketService {
     this.activePeerId = null;
   }
 
+  /**
+   * Constructs STOMP SEND frame with correct UTF-8 byte length header.
+   */
   _sendToDestination(destination, bodyObj) {
     const jsonBody = typeof bodyObj === 'string' ? bodyObj : JSON.stringify(bodyObj);
+    // Use TextEncoder to get exact UTF-8 byte length (vital for emojis like 🧊)
+    const byteLength = this._encoder.encode(jsonBody).length;
 
     const action = () => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        const frame = `SEND\ndestination:${destination}\ncontent-type:application/json\ncontent-length:${jsonBody.length}\n\n${jsonBody}\0`;
+        const frame = `SEND\ndestination:${destination}\ncontent-type:application/json;charset=utf-8\ncontent-length:${byteLength}\n\n${jsonBody}\0`;
         this.ws.send(frame);
       } else if (this.socketIo && this.socketIo.connected) {
         this.socketIo.emit('send', { destination, body: jsonBody });
@@ -428,7 +435,8 @@ export class SocketService {
 
   _sendRawStompFrame(frame) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(frame);
+      const formattedFrame = frame.endsWith('\0') ? frame : (frame + '\0');
+      this.ws.send(formattedFrame);
     }
   }
 

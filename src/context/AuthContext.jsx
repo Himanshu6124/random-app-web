@@ -46,7 +46,7 @@ export function AuthProvider({ children }) {
           authService.checkLandingAuth(),
           authService.getProfilePictures().catch(() => [])
         ]);
-
+        console.log('Landing auth check result:', res, 'Profile pictures:', pics);
         if (isMounted) {
           setIsAuthenticated(res.isAuthenticated);
           setUser(res.user);
