@@ -253,6 +253,7 @@ export class SocketService {
         }
 
         case 'MESSAGE': {
+          const rawTime = payload.timeStamp || payload.timestamp || new Date().toISOString();
           const message = {
             id: payload.id || 'msg_' + Date.now(),
             senderId: payload.senderId || payload.sender || 'stranger',
@@ -260,9 +261,8 @@ export class SocketService {
             conversationId: payload.conversationId || this.activeConversationId || '',
             text: payload.message || payload.text || payload.content || '',
             message: payload.message || payload.text || payload.content || '',
-            timestamp: payload.timeStamp || payload.timestamp
-              ? new Date(payload.timeStamp || payload.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            timestamp: rawTime,
+            time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
           console.log('[SocketService] Parsing MESSAGE event:', message);
           if (this.callbacks.onMessageReceived) this.callbacks.onMessageReceived(message);

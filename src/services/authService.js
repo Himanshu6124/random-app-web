@@ -338,14 +338,14 @@ export const authService = {
 
       return chronologicalList.map(m => {
         const isMe = (m.senderId && String(m.senderId) === String(myId)) || m.sender === 'me';
+        const rawTime = m.timeStamp || m.timestamp || new Date().toISOString();
         return {
           id: m.id || 'msg_' + Math.random(),
           sender: isMe ? 'me' : (m.senderId || 'peer'),
           senderId: m.senderId || '',
           text: m.message || m.text || m.content || '',
-          time: m.timeStamp || m.timestamp 
-            ? new Date(m.timeStamp || m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timestamp: rawTime
         };
       });
     } catch (e) {

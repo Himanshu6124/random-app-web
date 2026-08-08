@@ -109,10 +109,17 @@ export function FriendsView({ onStartMatch }) {
             existingLocal.forEach(m => {
               if (!mergedMap.has(m.id)) mergedMap.set(m.id, m);
             });
+            const mergedList = Array.from(mergedMap.values());
+            // Sort chronologically by timestamp
+            mergedList.sort((a, b) => {
+              const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+              const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+              return tA - tB;
+            });
             return {
               ...prev,
-              [friendUserId]: Array.from(mergedMap.values()),
-              [selectedFriend.id]: Array.from(mergedMap.values())
+              [friendUserId]: mergedList,
+              [selectedFriend.id]: mergedList
             };
           });
         }
@@ -199,15 +206,24 @@ export function FriendsView({ onStartMatch }) {
           const currentList = prev[friendKey] || [];
           if (msg.id && currentList.some(m => m.id === msg.id)) return prev;
 
+          const rawTime = msg.timestamp || new Date().toISOString();
           const updatedList = [
             ...currentList,
             {
               id: msg.id || 'dm_' + Date.now(),
               sender: friendKey,
               text: msg.text || msg.message || msg.content || '',
-              time: msg.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              timestamp: rawTime
             }
           ];
+
+          // Sort chronologically by timestamp
+          updatedList.sort((a, b) => {
+            const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return tA - tB;
+          });
 
           return {
             ...prev,
@@ -282,18 +298,36 @@ export function FriendsView({ onStartMatch }) {
     const conversationId = selectedFriend.conversationId || selectedFriend.id;
     const myId = user?.id || authService.getUserId();
 
+    const rawTime = new Date().toISOString();
     const newMsg = {
       id: 'dm_' + Date.now(),
       sender: 'me',
       text: messageText,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: rawTime
     };
 
-    setDmMessages(prev => ({
-      ...prev,
-      [friendUserId]: [...(prev[friendUserId] || []), newMsg],
-      [selectedFriend.id]: [...(prev[selectedFriend.id] || []), newMsg]
-    }));
+    setDmMessages(prev => {
+      const friendList = [...(prev[friendUserId] || []), newMsg];
+      friendList.sort((a, b) => {
+        const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return tA - tB;
+      });
+
+      const selectedFriendList = [...(prev[selectedFriend.id] || []), newMsg];
+      selectedFriendList.sort((a, b) => {
+        const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return tA - tB;
+      });
+
+      return {
+        ...prev,
+        [friendUserId]: friendList,
+        [selectedFriend.id]: selectedFriendList
+      };
+    });
     setDmInput('');
 
     // Send via socket & clear typing status
