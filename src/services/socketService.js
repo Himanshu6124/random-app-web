@@ -330,39 +330,34 @@ export class SocketService {
 
   subscribeChatTopic(peerId, conversationId, myUserId) {
     const sId = myUserId || this.activeUserId || localStorage.getItem('randomeet_user_id') || '';
+
+    // Skip if already subscribed to the exact same conversation + peer
+    if (
+      this.activeConversationId === conversationId &&
+      this.activePeerId === peerId
+    ) {
+      return;
+    }
+
+    // Unsubscribe OLD topics before overwriting active IDs
+    this.unsubscribeChatTopic();
+
     this.activePeerId = peerId;
     this.activeConversationId = conversationId;
 
-    this.unsubscribeChatTopic();
-
     console.log(`[SocketService] Subscribing chat topics for me=${sId}, friend=${peerId}, conv=${conversationId}`);
 
-    if (sId && conversationId) {
-      this.subscribeTopic(`/topic/room/${sId}/${conversationId}`, `sub-chat-me-${conversationId}`);
-    }
+    // Reverse Topic Subscription Rule: Subscribe only to the peer's topic to hear their messages/events
     if (peerId && conversationId) {
       this.subscribeTopic(`/topic/room/${peerId}/${conversationId}`, `sub-chat-peer-${conversationId}`);
-    }
-    if (conversationId) {
-      this.subscribeTopic(`/topic/room/${conversationId}`, `sub-chat-conv-${conversationId}`);
-    }
-    if (sId) {
-      this.subscribeTopic(`/topic/user/${sId}`, `sub-user-${sId}`);
     }
   }
 
   unsubscribeChatTopic() {
     if (this.activeConversationId) {
       const convId = this.activeConversationId;
-      this.unsubscribeTopic(`sub-chat-${convId}`);
       this.unsubscribeTopic(`sub-chat-peer-${convId}`);
-      this.unsubscribeTopic(`sub-chat-me-${convId}`);
-      this.unsubscribeTopic(`sub-chat-conv-${convId}`);
     }
-    if (this.activeUserId) {
-      this.unsubscribeTopic(`sub-user-${this.activeUserId}`);
-    }
-    this.unsubscribeTopic('sub-matching');
   }
 
 

@@ -134,26 +134,28 @@ export function FriendsView({ onStartMatch }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [dmMessages, selectedFriend, isFriendTyping]);
 
+  // Derive stable primitive IDs to prevent effect from re-firing on object reference changes
+  const selectedConversationId = selectedFriend?.conversationId || selectedFriend?.id || null;
+  const selectedFriendUserId = selectedFriend?.friendUserId || selectedFriend?.peerId || selectedFriend?.id || null;
+
   // Subscribe to STOMP friend chat topics & online status when selectedFriend changes
   useEffect(() => {
-    if (!selectedFriend) return;
+    if (!selectedConversationId || !selectedFriendUserId) return;
 
-    const conversationId = selectedFriend.conversationId || selectedFriend.id;
-    const friendUserId = selectedFriend.friendUserId || selectedFriend.peerId || selectedFriend.id;
     const myId = user?.id || authService.getUserId();
 
     if (isLiveConnected) {
-      console.log(`[FriendsView] Subscribing to chat topics: friendUserId=${friendUserId}, convId=${conversationId}, myUserId=${myId}`);
-      socketService.subscribeChatTopic(friendUserId, conversationId, myId);
-      socketService.sendOnlineStatus(conversationId, true);
+      console.log(`[FriendsView] Subscribing to chat topics: friendUserId=${selectedFriendUserId}, convId=${selectedConversationId}, myUserId=${myId}`);
+      socketService.subscribeChatTopic(selectedFriendUserId, selectedConversationId, myId);
+      socketService.sendOnlineStatus(selectedConversationId, true);
     }
 
     return () => {
-      if (isLiveConnected && conversationId) {
-        socketService.sendOnlineStatus(conversationId, false);
+      if (isLiveConnected && selectedConversationId) {
+        socketService.sendOnlineStatus(selectedConversationId, false);
       }
     };
-  }, [selectedFriend, isLiveConnected, user?.id]);
+  }, [selectedConversationId, selectedFriendUserId, isLiveConnected, user?.id]);
 
   // Listen for incoming socket events (messages, typing, online status)
   useEffect(() => {
