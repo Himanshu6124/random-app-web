@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth, INTEREST_TAGS } from '../context/AuthContext';
-import { User, Sparkles, Check, Save, Key } from 'lucide-react';
+import { User, Sparkles, Check, Save, Key, Lock, AlertCircle } from 'lucide-react';
 
 export function ProfileView() {
   const { user, isGuest, updateUserProfile, jwtToken, logout, profilePictures, openUpgradeModal } = useAuth();
@@ -12,40 +12,69 @@ export function ProfileView() {
   const [userInterests, setUserInterests] = useState(user?.interests || []);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   if (!user) return null;
 
-  const defaultAvatars = [
+  const boyAvatars = [
     '/userImages/boy1.png',
     '/userImages/boy2.png',
     '/userImages/boy3.png',
     '/userImages/boy4.png',
+    '/userImages/boy5.png',
+    '/userImages/boy6.png',
+    '/userImages/boy7.png',
+    '/userImages/boy8.png'
+  ];
+
+  const girlAvatars = [
     '/userImages/girl1.png',
     '/userImages/girl2.png',
     '/userImages/girl3.png',
-    '/userImages/girl4.png'
+    '/userImages/girl4.png',
+    '/userImages/girl5.png',
+    '/userImages/girl6.png',
+    '/userImages/girl7.png',
+    '/userImages/girl8.png'
   ];
 
-  const availablePictures = Array.isArray(profilePictures) && profilePictures.length > 0
-    ? profilePictures
-    : defaultAvatars;
+  const currentGender = (gender || 'boy').toLowerCase();
+  const genderPictures = currentGender === 'girl' ? girlAvatars : boyAvatars;
 
-  const handleSave = (e) => {
+  const handleGenderChange = (newGender) => {
+    setGender(newGender);
+    if (newGender === 'girl' && !avatar.includes('/girl')) {
+      setAvatar('/userImages/girl1.png');
+    } else if (newGender === 'boy' && !avatar.includes('/boy')) {
+      setAvatar('/userImages/boy1.png');
+    }
+  };
+
+  const handleSave = async (e) => {
     e.preventDefault();
     setSaveLoading(true);
+    setSaveError('');
 
-    const profileData = {
-      name,
-      gender,
-      bio,
-      photoUrl: avatar,
-      interests: userInterests
-    };
+    try {
+      const profileData = isGuest ? {
+        name: name.trim(),
+        gender: gender.toLowerCase()
+      } : {
+        name: name.trim(),
+        gender: gender.toLowerCase(),
+        bio: bio.trim(),
+        photoUrl: avatar,
+        interests: userInterests
+      };
 
-    updateUserProfile(profileData);
-    setSavedSuccess(true);
-    setSaveLoading(false);
-    setTimeout(() => { setSavedSuccess(false); }, 3000);
+      await updateUserProfile(profileData);
+      setSavedSuccess(true);
+      setTimeout(() => { setSavedSuccess(false); }, 3000);
+    } catch (err) {
+      setSaveError(err.message || 'Failed to save profile.');
+    } finally {
+      setSaveLoading(false);
+    }
   };
 
   const toggleInterest = (tag) => {
@@ -154,38 +183,85 @@ export function ProfileView() {
             </div>
             
             {/* Avatar Selector Grid */}
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
-              Choose your Avatar:
-            </label>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-              {availablePictures.map((picUrl, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setAvatar(picUrl)}
-                  style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: '50%',
-                    overflow: 'hidden',
-                    border: avatar === picUrl ? '3px solid #ffffff' : '1px solid transparent',
-                    cursor: 'pointer',
-                    padding: 0,
-                    transition: 'all 0.2s ease',
-                    boxShadow: avatar === picUrl ? '0 0 15px var(--cyan-accent)' : 'none'
-                  }}
-                >
-                  <img src={picUrl} alt={`Avatar ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
-                </button>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: '10px' }}>
+              <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                {isGuest ? 'Guest Avatar:' : `Choose ${currentGender === 'girl' ? 'Female' : 'Male'} Avatar:`}
+              </label>
+              {isGuest && (
+                <span style={{ fontSize: '0.75rem', color: '#a5b4fc', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Lock size={12} /> Auto-assigned by gender
+                </span>
+              )}
             </div>
+
+            {isGuest ? (
+              <div
+                id="guest-avatar-locked-card"
+                onClick={() => openUpgradeModal('choose a custom avatar')}
+                style={{
+                  width: '100%',
+                  padding: '14px 18px',
+                  borderRadius: '12px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px dashed rgba(255, 255, 255, 0.2)',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'background 0.2s ease'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#a5b4fc', fontSize: '0.88rem', fontWeight: 600 }}>
+                  <Lock size={16} />
+                  <span>Avatar Selection Locked</span>
+                </div>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Upgrade to a full account to choose from 8 exclusive {currentGender === 'girl' ? 'female' : 'male'} avatars.
+                </span>
+              </div>
+            ) : (
+              <div id="profile-avatar-grid" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                {genderPictures.map((picUrl, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setAvatar(picUrl)}
+                    style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '50%',
+                      overflow: 'hidden',
+                      border: avatar === picUrl ? '3px solid #10b981' : '1px solid transparent',
+                      cursor: 'pointer',
+                      padding: 0,
+                      transition: 'all 0.2s ease',
+                      boxShadow: avatar === picUrl ? '0 0 15px rgba(16, 185, 129, 0.6)' : 'none'
+                    }}
+                  >
+                    <img src={picUrl} alt={`Avatar ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Username (Read Only) */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', display: 'block' }}>
-              Username (@):
-            </label>
+          {/* Username (Read Only / Locked for Guests) */}
+          <div
+            style={{ marginBottom: '20px' }}
+            onClick={() => { if (isGuest) openUpgradeModal('customize your username'); }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Username (@):
+              </label>
+              {isGuest && (
+                <span style={{ fontSize: '0.75rem', color: '#a5b4fc', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                  <Lock size={12} /> Upgrade to customize
+                </span>
+              )}
+            </div>
             <input
               type="text"
               value={user.username || user.id || ''}
@@ -199,7 +275,7 @@ export function ProfileView() {
                 color: 'var(--text-muted)',
                 fontSize: '0.95rem',
                 outline: 'none',
-                cursor: 'not-allowed'
+                cursor: isGuest ? 'pointer' : 'not-allowed'
               }}
             />
           </div>
@@ -210,6 +286,7 @@ export function ProfileView() {
               Display Name:
             </label>
             <input
+              id="profile-name-input"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -237,55 +314,80 @@ export function ProfileView() {
               {['boy', 'girl'].map(g => (
                 <button
                   key={g}
+                  id={`gender-select-${g}`}
                   type="button"
-                  onClick={() => setGender(g)}
-                  className={gender === g ? 'btn-primary' : 'btn-secondary'}
+                  onClick={() => handleGenderChange(g)}
+                  className={currentGender === g ? 'btn-primary' : 'btn-secondary'}
                   style={{ flex: 1, padding: '10px', fontSize: '0.85rem', textTransform: 'capitalize' }}
                 >
-                  {g}
+                  {g === 'boy' ? '👦 Male (Boy)' : '👧 Female (Girl)'}
                 </button>
               ))}
             </div>
           </div>
 
           {/* Bio Input */}
-          <div style={{ marginBottom: '24px' }}>
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', display: 'block' }}>
-              Bio:
-            </label>
+          <div
+            style={{ marginBottom: '24px' }}
+            onClick={() => { if (isGuest) openUpgradeModal('add a custom bio'); }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Bio:
+              </label>
+              {isGuest && (
+                <span style={{ fontSize: '0.75rem', color: '#a5b4fc', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                  <Lock size={12} /> Upgrade to customize
+                </span>
+              )}
+            </div>
             <textarea
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
+              id="profile-bio-input"
+              value={isGuest ? 'Custom bio is locked for guest accounts.' : bio}
+              onChange={(e) => !isGuest && setBio(e.target.value)}
+              disabled={isGuest}
               placeholder="Tell strangers a bit about yourself..."
               rows={3}
               style={{
                 width: '100%',
                 padding: '12px 18px',
                 borderRadius: 'var(--radius-md)',
-                background: 'var(--bg-input)',
+                background: isGuest ? 'rgba(255, 255, 255, 0.03)' : 'var(--bg-input)',
                 border: '1px solid var(--border-color)',
-                color: 'white',
+                color: isGuest ? 'var(--text-muted)' : 'white',
                 fontSize: '0.95rem',
                 outline: 'none',
                 resize: 'none',
-                fontFamily: 'var(--font-main)'
+                fontFamily: 'var(--font-main)',
+                cursor: isGuest ? 'pointer' : 'text'
               }}
             />
           </div>
 
           {/* Personal Interests Selector */}
-          <div style={{ marginBottom: '32px' }}>
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '10px', display: 'block' }}>
-              Favorite Topics:
-            </label>
+          <div
+            style={{ marginBottom: '32px' }}
+            onClick={() => { if (isGuest) openUpgradeModal('select personal interests'); }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Favorite Topics:
+              </label>
+              {isGuest && (
+                <span style={{ fontSize: '0.75rem', color: '#a5b4fc', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                  <Lock size={12} /> Upgrade to choose
+                </span>
+              )}
+            </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {INTEREST_TAGS.map(tag => {
-                const isSelected = userInterests.includes(tag);
+                const isSelected = !isGuest && userInterests.includes(tag);
                 return (
                   <button
                     key={tag}
                     type="button"
-                    onClick={() => toggleInterest(tag)}
+                    disabled={isGuest}
+                    onClick={() => !isGuest && toggleInterest(tag)}
                     style={{
                       padding: '6px 14px',
                       borderRadius: 'var(--radius-full)',
@@ -293,7 +395,7 @@ export function ProfileView() {
                       background: isSelected ? 'rgba(6, 182, 212, 0.2)' : 'rgba(255,255,255,0.04)',
                       color: isSelected ? '#ffffff' : 'var(--text-secondary)',
                       fontSize: '0.85rem',
-                      cursor: 'pointer',
+                      cursor: isGuest ? 'pointer' : 'pointer',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '4px'
@@ -306,6 +408,24 @@ export function ProfileView() {
               })}
             </div>
           </div>
+
+          {saveError && (
+            <div style={{
+              padding: '12px 16px',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: '#f87171',
+              fontSize: '0.88rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '20px'
+            }}>
+              <AlertCircle size={16} />
+              <span>{saveError}</span>
+            </div>
+          )}
 
           {/* JWT Authentication Status Badge */}
           <div style={{

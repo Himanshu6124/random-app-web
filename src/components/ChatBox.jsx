@@ -1,17 +1,30 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
-import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Sparkles, Hand, Lock } from 'lucide-react';
+import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Sparkles, Hand, Lock, RefreshCw, X } from 'lucide-react';
 import { extractPeerName } from '../services/socketService';
+import { authService } from '../services/authService';
 
 export function ChatBox() {
-  const { user, isGuest, sendFriendRequest, friends, openUpgradeModal } = useAuth();
+  const {
+    user,
+    jwtToken,
+    isGuest,
+    sendFriendRequest,
+    acceptFriendRequest,
+    cancelFriendRequest,
+    friends,
+    friendRequests,
+    liveFriendRequest,
+    openUpgradeModal
+  } = useAuth();
   const {
     currentPeer,
     messages,
     isPeerTyping,
     isPeerOnline,
     sendMessage,
+    retryMessage,
     sendReaction,
     sendIcebreaker,
     skipStranger,
@@ -21,38 +34,115 @@ export function ChatBox() {
   } = useSocket();
 
   const [inputMsg, setInputMsg] = useState('');
-  const [requestSent, setRequestSent] = useState(false);
-  const [sendingRequest, setSendingRequest] = useState(false);
+  const [friendStatus, setFriendStatus] = useState('NONE'); // 'NONE' | 'PENDING_SENT' | 'PENDING_RECEIVED' | 'ACCEPTED'
+  const [actionLoading, setActionLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const typingTimerRef = useRef(null);
 
   const peerName = extractPeerName(currentPeer);
   const peerUsername = currentPeer ? (currentPeer.friendUserId || currentPeer.username || currentPeer.peerId || currentPeer.id) : '';
-  const isAlreadyFriend = friends.some(f => (f.username === peerUsername || f.friendUserId === peerUsername || f.id === peerUsername));
 
-  // Reset requestSent state whenever peer changes
+  // Synchronize status with friends list, incoming friendRequests, and backend status API
   useEffect(() => {
-    setRequestSent(false);
-  }, [peerUsername]);
-
-  const handleAddFriendClick = async () => {
-    if (isGuest) {
-      openUpgradeModal(`add ${peerName || 'this user'} to your friends`);
+    if (!peerUsername) {
+      setFriendStatus('NONE');
       return;
     }
-    if (!peerUsername || sendingRequest || requestSent) return;
-    setSendingRequest(true);
+
+    // 1. If in accepted friends list
+    const isFriend = friends.some(f => (f.username === peerUsername || f.friendUserId === peerUsername || f.id === peerUsername));
+    if (isFriend) {
+      setFriendStatus('ACCEPTED');
+      return;
+    }
+
+    // 2. If in incoming pending requests or liveFriendRequest
+    const isIncoming = (liveFriendRequest && (liveFriendRequest.username === peerUsername || liveFriendRequest.senderUsername === peerUsername || liveFriendRequest.friendUserId === peerUsername)) ||
+      friendRequests.some(r => (r.username === peerUsername || r.id === peerUsername || r.friendUserId === peerUsername));
+    if (isIncoming) {
+      setFriendStatus('PENDING_RECEIVED');
+      return;
+    }
+
+    // 3. Query backend friendship status if token available
+    let isCancelled = false;
+    const token = jwtToken || authService.getToken();
+    if (token) {
+      authService.getFriendshipStatus(peerUsername, token)
+        .then(res => {
+          if (!isCancelled && res?.status) {
+            setFriendStatus(res.status);
+          }
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [peerUsername, friends, friendRequests, liveFriendRequest, jwtToken]);
+
+  const handleFriendActionClick = async () => {
+    if (actionLoading || !peerUsername) return;
+
+    if (friendStatus === 'ACCEPTED') {
+      return;
+    }
+
+    if (friendStatus === 'PENDING_SENT') {
+      setActionLoading(true);
+      try {
+        await cancelFriendRequest(peerUsername);
+        setFriendStatus('NONE');
+      } catch (err) {
+        console.warn('Failed to cancel friend request:', err);
+      } finally {
+        setActionLoading(false);
+      }
+      return;
+    }
+
+    if (friendStatus === 'PENDING_RECEIVED') {
+      if (isGuest) {
+        openUpgradeModal(`create an account to accept friend request from ${peerName}`, {
+          action: 'ACCEPT_FRIEND',
+          targetUsername: peerUsername
+        });
+        return;
+      }
+      setActionLoading(true);
+      try {
+        await acceptFriendRequest(peerUsername);
+        setFriendStatus('ACCEPTED');
+      } catch (err) {
+        console.warn('Failed to accept friend request:', err);
+      } finally {
+        setActionLoading(false);
+      }
+      return;
+    }
+
+    // Case: 'NONE' -> Send friend request
+    if (isGuest) {
+      openUpgradeModal(`create an account to add ${peerName} as a friend`, {
+        action: 'SEND_FRIEND',
+        targetUsername: peerUsername
+      });
+      return;
+    }
+
+    setActionLoading(true);
     try {
       await sendFriendRequest(peerUsername);
-      setRequestSent(true);
+      setFriendStatus('PENDING_SENT');
     } catch (err) {
       if (err?.status === 409 || (err?.message && err.message.toLowerCase().includes('already exists'))) {
-        setRequestSent(true);
+        setFriendStatus('PENDING_SENT');
       } else {
-        console.warn("Failed to send friend request via API:", err);
+        console.warn('Failed to send friend request:', err);
       }
     } finally {
-      setSendingRequest(false);
+      setActionLoading(false);
     }
   };
 
@@ -177,37 +267,104 @@ export function ChatBox() {
 
         {/* Action Controls */}
         <div className="chat-header-actions">
-          {!isAlreadyFriend && (
+          {friendStatus === 'ACCEPTED' ? (
+            <button
+              id="friend-status-btn"
+              type="button"
+              disabled
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                borderRadius: '12px',
+                border: '1px solid rgba(16, 185, 129, 0.4)',
+                background: 'rgba(16, 185, 129, 0.15)',
+                color: '#10b981',
+                cursor: 'default'
+              }}
+              title="You are friends!"
+            >
+              <UserCheck size={16} />
+              <span>Friends</span>
+            </button>
+          ) : friendStatus === 'PENDING_SENT' ? (
+            <button
+              id="cancel-friend-request-btn"
+              type="button"
+              onClick={handleFriendActionClick}
+              disabled={actionLoading}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                borderRadius: '12px',
+                border: '1px solid #f59e0b',
+                background: 'rgba(245, 158, 11, 0.15)',
+                color: '#f59e0b',
+                cursor: 'pointer'
+              }}
+              title="Click to cancel friend request"
+            >
+              <X size={15} />
+              <span>{actionLoading ? 'Cancelling...' : 'Pending (Cancel)'}</span>
+            </button>
+          ) : friendStatus === 'PENDING_RECEIVED' ? (
+            <button
+              id="accept-friend-request-btn"
+              type="button"
+              onClick={handleFriendActionClick}
+              disabled={actionLoading}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                borderRadius: '12px',
+                border: 'none',
+                background: '#10b981',
+                color: '#ffffff',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+              }}
+              title="Click to accept friend request"
+            >
+              <UserCheck size={16} />
+              <span>{actionLoading ? 'Accepting...' : 'Accept Friend'}</span>
+            </button>
+          ) : (
             <button
               id="add-friend-btn"
               type="button"
-              onClick={handleAddFriendClick}
-              disabled={!isGuest && (requestSent || sendingRequest)}
+              onClick={handleFriendActionClick}
+              disabled={actionLoading}
               className="btn-cyan"
               style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
                 padding: '8px 14px',
                 fontSize: '0.85rem',
-                cursor: (!isGuest && (requestSent || sendingRequest)) ? 'default' : 'pointer',
-                opacity: (!isGuest && requestSent) ? 0.85 : 1,
-                background: (!isGuest && requestSent) ? 'rgba(52, 199, 89, 0.2)' : undefined,
-                borderColor: (!isGuest && requestSent) ? '#34C759' : undefined
+                cursor: 'pointer'
               }}
-              title={isGuest ? "Sign up to add friends" : (requestSent ? "Friend Request Sent" : "Add to Friends")}
+              title={isGuest ? "Sign up to add friends" : "Add to Friends"}
             >
               {isGuest ? (
                 <>
                   <Lock size={15} />
                   <span>Add Friend</span>
                 </>
-              ) : requestSent ? (
-                <>
-                  <UserCheck size={16} color="#34C759" />
-                  <span style={{ color: '#34C759', fontWeight: 600 }}>Request Sent</span>
-                </>
               ) : (
                 <>
                   <UserPlus size={16} />
-                  <span>{sendingRequest ? 'Sending...' : 'Add Friend'}</span>
+                  <span>{actionLoading ? 'Sending...' : 'Add Friend'}</span>
                 </>
               )}
             </button>
@@ -265,6 +422,7 @@ export function ChatBox() {
 
           const myUsername = user?.username || user?.id;
           const isMe = msg.senderId === myUsername;
+          const isUndelivered = msg.status === 'UNDELIVERED';
 
           return (
             <div
@@ -280,25 +438,69 @@ export function ChatBox() {
                 maxWidth: '75%',
                 padding: '12px 18px',
                 borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                background: isMe 
-                  ? 'linear-gradient(135deg, var(--primary-purple) 0%, #6366f1 100%)' 
-                  : 'rgba(255, 255, 255, 0.08)',
-                border: isMe ? 'none' : '1px solid var(--border-color)',
+                background: isUndelivered
+                  ? 'rgba(239, 68, 68, 0.18)'
+                  : isMe 
+                    ? 'linear-gradient(135deg, var(--primary-purple) 0%, #6366f1 100%)' 
+                    : 'rgba(255, 255, 255, 0.08)',
+                border: isUndelivered
+                  ? '1px dashed #ef4444'
+                  : isMe ? 'none' : '1px solid var(--border-color)',
                 color: '#ffffff',
                 fontSize: '0.95rem',
                 lineHeight: '1.4',
-                boxShadow: isMe ? 'var(--shadow-glow)' : 'none'
+                boxShadow: isMe && !isUndelivered ? 'var(--shadow-glow)' : 'none'
               }}>
-                {msg.text}
+                {msg.text || msg.message}
               </div>
-              <span style={{
-                fontSize: '0.7rem',
-                color: 'var(--text-muted)',
-                marginTop: '4px',
-                padding: '0 4px'
-              }}>
-                {msg.time || msg.timestamp}
-              </span>
+
+              {isUndelivered ? (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginTop: '6px',
+                  fontSize: '0.78rem',
+                  color: '#f87171'
+                }}>
+                  <span>⚠️ User will not receive this message. Wait to come online and then retry.</span>
+                  <button
+                    id="retry-message-btn"
+                    type="button"
+                    onClick={() => {
+                      const success = retryMessage(msg.id);
+                      if (!success) {
+                        alert(`${peerName} is still offline. Please wait until they return online.`);
+                      }
+                    }}
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.25)',
+                      border: '1px solid rgba(239, 68, 68, 0.5)',
+                      color: '#ffffff',
+                      borderRadius: '8px',
+                      padding: '2px 8px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <RefreshCw size={12} />
+                    <span>Retry</span>
+                  </button>
+                </div>
+              ) : (
+                <span style={{
+                  fontSize: '0.7rem',
+                  color: 'var(--text-muted)',
+                  marginTop: '4px',
+                  padding: '0 4px'
+                }}>
+                  {msg.time || msg.timestamp}
+                </span>
+              )}
             </div>
           );
         })}

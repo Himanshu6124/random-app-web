@@ -199,6 +199,16 @@ export function FriendsView({ onStartMatch }) {
     }
   }, [friends, isMobile, selectedFriend]);
 
+  // Keep selectedFriend in sync with friends list changes (e.g. online presence)
+  useEffect(() => {
+    if (!selectedFriend) return;
+    const targetUsername = selectedFriend.username || selectedFriend.friendUserId || selectedFriend.id;
+    const found = friends.find(f => (f.username === targetUsername || f.friendUserId === targetUsername || f.id === targetUsername));
+    if (found && (found.isOnline !== selectedFriend.isOnline || found.photoUrl !== selectedFriend.photoUrl || found.name !== selectedFriend.name)) {
+      setSelectedFriend(prev => ({ ...prev, ...found }));
+    }
+  }, [friends, selectedFriend]);
+
   // Load latest friends and pending requests from API on mount
   useEffect(() => {
     loadFriendsFromApi();

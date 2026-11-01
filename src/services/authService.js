@@ -382,11 +382,39 @@ export const authService = {
   },
 
   /**
-   * GET /users/profile-pictures
+   * PUT /users/me
    */
-  async getProfilePictures() {
+  async updateProfile(profileData, token) {
+    const response = await fetch(`${BASE_URL}/users/me`, {
+      method: 'PUT',
+      headers: getAuthHeaders(token),
+      body: JSON.stringify(profileData)
+    });
+    const data = await handleApiResponse(response);
+    return {
+      id: data.username,
+      username: data.username,
+      name: data.name || data.username,
+      email: data.email || '',
+      gender: data.gender || '',
+      location: data.location || null,
+      bio: data.bio || '',
+      photoUrl: data.photoUrl || '',
+      isOnline: data.isOnline ?? true,
+      lastOnline: data.lastOnline || null,
+      isGuest: Boolean(data.isGuest || data.guest)
+    };
+  },
+
+  /**
+   * GET /users/profile-pictures(?gender=boy|girl)
+   */
+  async getProfilePictures(gender) {
     try {
-      const response = await fetch(`${BASE_URL}/users/profile-pictures`, {
+      const url = gender
+        ? `${BASE_URL}/users/profile-pictures?gender=${encodeURIComponent(gender)}`
+        : `${BASE_URL}/users/profile-pictures`;
+      const response = await fetch(url, {
         headers: { 'Accept': 'application/json' }
       });
       return await handleApiResponse(response);
@@ -662,6 +690,14 @@ export const authService = {
       headers: getAuthHeaders(token)
     });
     return await handleApiResponse(response);
+  },
+
+  async deleteFriendship(friendUsername, token) {
+    return this.removeFriendApi(friendUsername, token);
+  },
+
+  async cancelFriendRequest(friendUsername, token) {
+    return this.removeFriendApi(friendUsername, token);
   },
 
   /**

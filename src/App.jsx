@@ -8,6 +8,7 @@ import { ProfileView } from './views/ProfileView';
 import { LoginView } from './views/LoginView';
 import { LogoutConfirmationDialog } from './components/LogoutConfirmationDialog';
 import { GuestUpgradeModal } from './components/GuestUpgradeModal';
+import { LiveFriendRequestAlert } from './components/LiveFriendRequestAlert';
 
 function AppContent() {
   const { isAuthenticated, authLoading, showLogoutModal, cancelLogout, performLogout } = useAuth();
@@ -48,6 +49,7 @@ function AppContent() {
         onConfirm={performLogout}
       />
       <GuestUpgradeModal />
+      <LiveFriendRequestAlert />
     </div>
   );
 }

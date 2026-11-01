@@ -105,21 +105,38 @@ export function LoginView() {
     }
   };
 
-  // Fallback avatars if profile pictures have not yet loaded
-  const defaultAvatars = [
+  const boyAvatars = [
     '/userImages/boy1.png',
     '/userImages/boy2.png',
     '/userImages/boy3.png',
     '/userImages/boy4.png',
+    '/userImages/boy5.png',
+    '/userImages/boy6.png',
+    '/userImages/boy7.png',
+    '/userImages/boy8.png'
+  ];
+
+  const girlAvatars = [
     '/userImages/girl1.png',
     '/userImages/girl2.png',
     '/userImages/girl3.png',
-    '/userImages/girl4.png'
+    '/userImages/girl4.png',
+    '/userImages/girl5.png',
+    '/userImages/girl6.png',
+    '/userImages/girl7.png',
+    '/userImages/girl8.png'
   ];
 
-  const availablePictures = Array.isArray(profilePictures) && profilePictures.length > 0
-    ? profilePictures
-    : defaultAvatars;
+  const availablePictures = signUpGender === 'girl' ? girlAvatars : boyAvatars;
+
+  const handleGenderChange = (newGender) => {
+    setSignUpGender(newGender);
+    if (newGender === 'girl') {
+      setSelectedPhotoUrl('/userImages/girl1.png');
+    } else {
+      setSelectedPhotoUrl('/userImages/boy1.png');
+    }
+  };
 
   return (
     <div className="login-page-container">
@@ -323,7 +340,7 @@ export function LoginView() {
                   id="signup-gender"
                   className="input-select"
                   value={signUpGender}
-                  onChange={(e) => setSignUpGender(e.target.value)}
+                  onChange={(e) => handleGenderChange(e.target.value)}
                   disabled={loading}
                   required
                 >

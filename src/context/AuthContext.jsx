@@ -32,19 +32,23 @@ export function AuthProvider({ children }) {
   const [friends, setFriends] = useState([]);
   const [friendRequests, setFriendRequests] = useState([]);
   const [friendRequestsLoading, setFriendRequestsLoading] = useState(false);
+  const [liveFriendRequest, setLiveFriendRequest] = useState(null);
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeModalReason, setUpgradeModalReason] = useState('');
+  const [pendingUpgradeAction, setPendingUpgradeAction] = useState(null);
 
   const isGuest = Boolean(user?.isGuest);
 
-  const openUpgradeModal = (reason = '') => {
+  const openUpgradeModal = (reason = '', pendingAction = null) => {
     setUpgradeModalReason(reason);
+    setPendingUpgradeAction(pendingAction);
     setUpgradeModalOpen(true);
   };
 
   const closeUpgradeModal = () => {
     setUpgradeModalOpen(false);
     setUpgradeModalReason('');
+    setPendingUpgradeAction(null);
   };
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
@@ -221,6 +225,17 @@ export function AuthProvider({ children }) {
     setFriendRequests(prev => prev.filter(r => r.username !== targetUsername && r.id !== targetUsername));
   };
 
+  const cancelFriendRequest = async (targetUsername) => {
+    const token = jwtToken || authService.getToken();
+    if (!token || !targetUsername) return;
+    try {
+      await authService.removeFriendApi(targetUsername, token);
+      await loadFriendRequests(token);
+    } catch (e) {
+      console.warn('Failed to cancel friend request:', e);
+    }
+  };
+
   const removeFriend = async (friendUsername) => {
     const token = jwtToken || authService.getToken();
     setFriends(prev => prev.filter(f => f.username !== friendUsername && f.id !== friendUsername));
@@ -298,9 +313,29 @@ export function AuthProvider({ children }) {
       const res = await authService.upgradeGuest(data, jwtToken);
       setUser(res.user);
       setJwtToken(res.authResponse.jwt);
+      const actionToExecute = pendingUpgradeAction;
       closeUpgradeModal();
       loadFriendsFromApi(res.authResponse.jwt);
       loadFriendRequests(res.authResponse.jwt);
+
+      if (actionToExecute) {
+        if (actionToExecute.action === 'ACCEPT_FRIEND' && actionToExecute.targetUsername) {
+          try {
+            await authService.acceptFriendRequest(actionToExecute.targetUsername, res.authResponse.jwt);
+            loadFriendsFromApi(res.authResponse.jwt);
+          } catch (err) {
+            console.warn('[AuthContext] Error auto-accepting friend after upgrade:', err);
+          }
+        } else if (actionToExecute.action === 'SEND_FRIEND' && actionToExecute.targetUsername) {
+          try {
+            await authService.sendFriendRequest(actionToExecute.targetUsername, res.authResponse.jwt);
+            loadFriendRequests(res.authResponse.jwt);
+          } catch (err) {
+            console.warn('[AuthContext] Error auto-sending friend request after upgrade:', err);
+          }
+        }
+      }
+
       return res;
     } catch (err) {
       setAuthError(err.message || 'Upgrade failed.');
@@ -324,12 +359,42 @@ export function AuthProvider({ children }) {
 
   const logout = () => requestLogout();
 
-  const updateUserProfile = (updated) => {
-    setUser(prev => {
-      const nextUser = { ...prev, ...updated };
-      authService.setSession({ userId: nextUser?.username || nextUser?.id, jwt: jwtToken }, nextUser);
-      return nextUser;
-    });
+  const dismissLiveFriendRequest = () => setLiveFriendRequest(null);
+
+  const acceptLiveFriendRequest = async () => {
+    if (!liveFriendRequest) return;
+    const reqUsername = liveFriendRequest.username || liveFriendRequest.friendUserId || liveFriendRequest.id || liveFriendRequest.senderUsername;
+    const senderName = liveFriendRequest.name || liveFriendRequest.senderName || reqUsername;
+    if (isGuest) {
+      setLiveFriendRequest(null);
+      openUpgradeModal(`create an account to accept friend request from ${senderName}`, {
+        action: 'ACCEPT_FRIEND',
+        targetUsername: reqUsername
+      });
+      return;
+    }
+    setLiveFriendRequest(null);
+    if (reqUsername) {
+      await acceptFriendRequest(reqUsername);
+    }
+  };
+
+  const updateUserProfile = async (updated) => {
+    try {
+      const token = jwtToken || authService.getToken();
+      if (token) {
+        const saved = await authService.updateProfile(updated, token);
+        setUser(prev => {
+          const nextUser = { ...prev, ...saved };
+          authService.setSession({ userId: nextUser?.username || nextUser?.id, jwt: token }, nextUser);
+          return nextUser;
+        });
+        return saved;
+      }
+    } catch (e) {
+      console.warn('[AuthContext] Remote profile update failed:', e);
+      throw e;
+    }
   };
 
   const clearAuthError = () => setAuthError('');
@@ -354,6 +419,7 @@ export function AuthProvider({ children }) {
       upgradeGuestAccount,
       upgradeModalOpen,
       upgradeModalReason,
+      pendingUpgradeAction,
       openUpgradeModal,
       closeUpgradeModal,
       logout,
@@ -363,8 +429,13 @@ export function AuthProvider({ children }) {
       friends,
       friendRequests,
       friendRequestsLoading,
+      liveFriendRequest,
+      setLiveFriendRequest,
+      dismissLiveFriendRequest,
+      acceptLiveFriendRequest,
       addFriend,
       sendFriendRequest,
+      cancelFriendRequest,
       loadFriendRequests,
       acceptFriendRequest,
       rejectFriendRequest,

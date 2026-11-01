@@ -100,6 +100,11 @@ export class SocketService {
         // Immediately advertise global online presence to server
         this.sendOnline(null, true);
 
+        // Subscribe to personal notification channels for real-time friend alerts
+        if (this.activeUserId) {
+          this.subscribeUserNotifications(this.activeUserId);
+        }
+
         // Schedule periodic presence keepalive heartbeat every 20 seconds
         if (this._presenceHeartbeat) clearInterval(this._presenceHeartbeat);
         this._presenceHeartbeat = setInterval(() => {
@@ -163,6 +168,7 @@ export class SocketService {
     } catch (e) {}
 
     this.unsubscribeRoom();
+    this.unsubscribeUserNotifications();
     this.cancelMatchmaking();
     this._pendingMatchmaking = null;
     this._lastHandledMatchConvId = null;
@@ -178,6 +184,58 @@ export class SocketService {
 
     this.isConnected = false;
     this.activeConversationId = null;
+  }
+
+  // ==========================================
+  // Notifications Subscriptions
+  // ==========================================
+
+  subscribeUserNotifications(userId) {
+    if (!this.client || !this.client.connected || !userId) return;
+
+    this.unsubscribeUserNotifications();
+
+    const topic = `/topic/users/${userId}/notifications`;
+    const queue = `/user/queue/notifications`;
+
+    const handleNotification = (frame) => {
+      try {
+        const event = JSON.parse(frame.body);
+        console.log('[SocketService] Notification event:', event);
+        if (event.type === 'FRIEND_REQUEST_RECEIVED') {
+          this.callbacks.onFriendRequestReceived?.(event.payload);
+        } else if (event.type === 'FRIEND_REQUEST_ACCEPTED') {
+          this.callbacks.onFriendRequestAccepted?.(event.payload);
+        } else if (event.type === 'FRIEND_REQUEST_CANCELLED') {
+          this.callbacks.onFriendRequestCancelled?.(event.payload);
+        }
+      } catch (e) {
+        console.warn('[SocketService] Failed to parse notification frame:', e, frame.body);
+      }
+    };
+
+    try {
+      this.notificationsTopicSub = this.client.subscribe(topic, handleNotification);
+    } catch (e) {
+      console.warn('[SocketService] Failed to subscribe to topic notifications:', e);
+    }
+
+    try {
+      this.notificationsQueueSub = this.client.subscribe(queue, handleNotification);
+    } catch (e) {
+      console.warn('[SocketService] Failed to subscribe to queue notifications:', e);
+    }
+  }
+
+  unsubscribeUserNotifications() {
+    if (this.notificationsTopicSub) {
+      try { this.notificationsTopicSub.unsubscribe(); } catch (e) {}
+      this.notificationsTopicSub = null;
+    }
+    if (this.notificationsQueueSub) {
+      try { this.notificationsQueueSub.unsubscribe(); } catch (e) {}
+      this.notificationsQueueSub = null;
+    }
   }
 
   // ==========================================
@@ -301,6 +359,13 @@ export class SocketService {
         const disconnectedUser = payload?.senderId || 'Stranger';
         if (this.callbacks.onPeerDisconnected) {
           this.callbacks.onPeerDisconnected(disconnectedUser);
+        }
+        break;
+      }
+
+      case 'PEER_UPDATED': {
+        if (this.callbacks.onPeerUpdated) {
+          this.callbacks.onPeerUpdated(payload);
         }
         break;
       }
@@ -550,6 +615,31 @@ export class SocketService {
           })
         });
       } catch (e) {}
+    }
+  }
+
+  /**
+   * Broadcast peer updated event after upgrade: /app/chat.peer.update
+   */
+  sendPeerUpdated(conversationId, peerData) {
+    if (!this.client || !this.client.connected || !conversationId) return;
+
+    const payload = {
+      conversationId: conversationId,
+      previousUsername: peerData.previousUsername || '',
+      username: peerData.username,
+      name: peerData.name,
+      photoUrl: peerData.photoUrl || ''
+    };
+
+    console.log('[SocketService] Publishing peer update to /app/chat.peer.update:', payload);
+    try {
+      this.client.publish({
+        destination: '/app/chat.peer.update',
+        body: JSON.stringify(payload)
+      });
+    } catch (e) {
+      console.warn('[SocketService] Failed to send peer update:', e);
     }
   }
 

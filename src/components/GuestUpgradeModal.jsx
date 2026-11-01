@@ -17,19 +17,36 @@ export function GuestUpgradeModal() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [gender, setGender] = useState(user?.gender || 'boy');
-  const [photoUrl, setPhotoUrl] = useState(user?.photoUrl || '/userImages/boy1.png');
+  const [photoUrl, setPhotoUrl] = useState(user?.photoUrl || (user?.gender === 'girl' ? '/userImages/girl1.png' : '/userImages/boy1.png'));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   if (!upgradeModalOpen) return null;
 
-  const defaultAvatars = [
+  const boyAvatars = [
     '/userImages/boy1.png',
     '/userImages/boy2.png',
-    '/userImages/girl1.png',
-    '/userImages/girl2.png'
+    '/userImages/boy3.png',
+    '/userImages/boy4.png',
+    '/userImages/boy5.png',
+    '/userImages/boy6.png',
+    '/userImages/boy7.png',
+    '/userImages/boy8.png'
   ];
-  const avatarList = (profilePictures && profilePictures.length > 0) ? profilePictures : defaultAvatars;
+
+  const girlAvatars = [
+    '/userImages/girl1.png',
+    '/userImages/girl2.png',
+    '/userImages/girl3.png',
+    '/userImages/girl4.png',
+    '/userImages/girl5.png',
+    '/userImages/girl6.png',
+    '/userImages/girl7.png',
+    '/userImages/girl8.png'
+  ];
+
+  const currentGender = (gender || user?.gender || 'boy').toLowerCase();
+  const avatarList = currentGender === 'girl' ? girlAvatars : boyAvatars;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -140,7 +157,9 @@ export function GuestUpgradeModal() {
               Create Free Account
             </h2>
             <p style={{ fontSize: '0.85rem', color: '#34d399', margin: '2px 0 0', fontWeight: 500 }}>
-              {upgradeModalReason ? `To ${upgradeModalReason}` : 'Save friends & unlock direct messaging!'}
+              {upgradeModalReason
+                ? (upgradeModalReason.charAt(0).toUpperCase() + upgradeModalReason.slice(1))
+                : 'Save friends & unlock direct messaging!'}
             </p>
           </div>
         </div>
@@ -160,10 +179,46 @@ export function GuestUpgradeModal() {
         )}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* Gender Selector */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#e4e4e7', marginBottom: '6px' }}>
+              Gender *
+            </label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {['boy', 'girl'].map(g => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => {
+                    setGender(g);
+                    if (g === 'girl' && !photoUrl.includes('/girl')) {
+                      setPhotoUrl('/userImages/girl1.png');
+                    } else if (g === 'boy' && !photoUrl.includes('/boy')) {
+                      setPhotoUrl('/userImages/boy1.png');
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '8px',
+                    borderRadius: '10px',
+                    border: currentGender === g ? '2px solid #10b981' : '1px solid rgba(255, 255, 255, 0.1)',
+                    background: currentGender === g ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                    color: '#ffffff',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {g === 'boy' ? '👦 Male (Boy)' : '👧 Female (Girl)'}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Avatar Selector */}
           <div>
             <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#e4e4e7', marginBottom: '6px' }}>
-              Choose Avatar
+              Choose {currentGender === 'girl' ? 'Female' : 'Male'} Avatar (8 Available)
             </label>
             <div style={{
               display: 'flex',
@@ -171,7 +226,7 @@ export function GuestUpgradeModal() {
               overflowX: 'auto',
               paddingBottom: '6px'
             }}>
-              {avatarList.slice(0, 8).map((uri, idx) => (
+              {avatarList.map((uri, idx) => (
                 <button
                   key={idx}
                   type="button"
