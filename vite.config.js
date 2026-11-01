@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const rawBackend = env.VITE_BACKEND_URL || 'https://random-chat-backend-n120.onrender.com';
+  const rawBackend = env.VITE_BACKEND_URL || 'http://localhost:8080';
   const BACKEND = rawBackend.replace(/\/+$/, '');
   const WS_BACKEND = BACKEND.replace(/^http/, 'ws');
 
@@ -12,13 +12,9 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       host: true,
+      port: 5173,
       proxy: {
         '/auth': {
-          target: BACKEND,
-          changeOrigin: true,
-          secure: false,
-        },
-        '/api': {
           target: BACKEND,
           changeOrigin: true,
           secure: false,
@@ -28,7 +24,7 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
-        '/friends': {
+        '/userImages': {
           target: BACKEND,
           changeOrigin: true,
           secure: false,
@@ -59,5 +55,3 @@ export default defineConfig(({ mode }) => {
     }
   }
 })
-
-

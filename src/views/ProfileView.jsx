@@ -1,50 +1,51 @@
 import React, { useState } from 'react';
-import { useAuth, AVATAR_LIST, INTEREST_TAGS } from '../context/AuthContext';
-import { authService } from '../services/authService';
-import { User, Sparkles, Check, Save, Key, AlertCircle } from 'lucide-react';
+import { useAuth, INTEREST_TAGS } from '../context/AuthContext';
+import { User, Sparkles, Check, Save, Key } from 'lucide-react';
 
 export function ProfileView() {
-  const { user, updateUserProfile, jwtToken, logout, profilePictures } = useAuth();
-  if (!user) return null;
+  const { user, isGuest, updateUserProfile, jwtToken, logout, profilePictures, openUpgradeModal } = useAuth();
 
-  const [name, setName] = useState(user.name);
-  const [avatar, setAvatar] = useState(user.photoUrl);
-  const [avatarBg, setAvatarBg] = useState(user.avatarBg);
-  const [gender, setGender] = useState(user.gender);
-  const [bio, setBio] = useState(user.bio || '');
-  const [userInterests, setUserInterests] = useState(user.interests || []);
+  const [name, setName] = useState(user?.name || user?.username || '');
+  const [avatar, setAvatar] = useState(user?.photoUrl || '/userImages/boy1.png');
+  const [gender, setGender] = useState(user?.gender || 'boy');
+  const [bio, setBio] = useState(user?.bio || '');
+  const [userInterests, setUserInterests] = useState(user?.interests || []);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
-  const [saveError, setSaveError] = useState('');
 
-  const handleSave = async (e) => {
+  if (!user) return null;
+
+  const defaultAvatars = [
+    '/userImages/boy1.png',
+    '/userImages/boy2.png',
+    '/userImages/boy3.png',
+    '/userImages/boy4.png',
+    '/userImages/girl1.png',
+    '/userImages/girl2.png',
+    '/userImages/girl3.png',
+    '/userImages/girl4.png'
+  ];
+
+  const availablePictures = Array.isArray(profilePictures) && profilePictures.length > 0
+    ? profilePictures
+    : defaultAvatars;
+
+  const handleSave = (e) => {
     e.preventDefault();
     setSaveLoading(true);
-    setSaveError('');
 
     const profileData = {
       name,
       gender,
       bio,
-      photoUrl: typeof avatar === 'string' && (avatar.startsWith('http') || avatar.startsWith('/')) ? avatar : user.photoUrl,
+      photoUrl: avatar,
       interests: userInterests
     };
 
-    try {
-      // Try real API update first
-      if (user?.id && jwtToken) {
-        await authService.updateProfile(user.id, jwtToken, profileData);
-      }
-    } catch (err) {
-      console.warn('[ProfileView] API save failed, updating locally:', err);
-      setSaveError('Could not sync to server — saved locally.');
-    }
-
-    // Always update local state regardless of API result
-    updateUserProfile({ ...profileData, avatar, avatarBg });
+    updateUserProfile(profileData);
     setSavedSuccess(true);
     setSaveLoading(false);
-    setTimeout(() => { setSavedSuccess(false); setSaveError(''); }, 3000);
+    setTimeout(() => { setSavedSuccess(false); }, 3000);
   };
 
   const toggleInterest = (tag) => {
@@ -63,10 +64,66 @@ export function ProfileView() {
       overflowY: 'auto'
     }}>
       <div className="glass-panel profile-card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '28px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
           <User size={26} color="var(--primary-purple)" />
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 700 }}>Edit My Profile</h2>
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 700 }}>My Profile</h2>
+          {isGuest && (
+            <span style={{
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              backgroundColor: 'rgba(99, 102, 241, 0.2)',
+              color: '#a5b4fc',
+              border: '1px solid rgba(99, 102, 241, 0.4)',
+              padding: '3px 8px',
+              borderRadius: '8px',
+              textTransform: 'uppercase'
+            }}>
+              Guest Session
+            </span>
+          )}
         </div>
+
+        {isGuest && (
+          <div style={{
+            padding: '14px 18px',
+            borderRadius: '16px',
+            backgroundColor: 'rgba(99, 102, 241, 0.12)',
+            border: '1px solid rgba(99, 102, 241, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '24px',
+            gap: '12px',
+            flexWrap: 'wrap'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Sparkles size={20} color="#a5b4fc" />
+              <div>
+                <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.92rem' }}>Temporary Guest Account</div>
+                <div style={{ color: '#a1a1aa', fontSize: '0.8rem' }}>Create a permanent account to keep friends and custom details.</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              id="profile-upgrade-btn"
+              onClick={() => openUpgradeModal('save your profile & friends')}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: '#ffffff',
+                border: 'none',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              Upgrade Now
+            </button>
+          </div>
+        )}
 
         <form onSubmit={handleSave}>
           {/* Avatar Preview */}
@@ -80,7 +137,7 @@ export function ProfileView() {
               width: '100px',
               height: '100px',
               borderRadius: '50%',
-              backgroundColor: avatarBg,
+              backgroundColor: '#8b5cf6',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -89,73 +146,65 @@ export function ProfileView() {
               marginBottom: '16px',
               overflow: 'hidden'
             }}>
-              {typeof avatar === 'string' && (avatar.startsWith('http') || avatar.startsWith('/')) ? (
-                <img src={avatar} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              {avatar ? (
+                <img src={avatar} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
               ) : (
-                avatar
+                '👤'
               )}
             </div>
             
-            {/* Avatar Selector Grid (From API Endpoint) */}
+            {/* Avatar Selector Grid */}
             <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
-              Choose your Profile Picture:
+              Choose your Avatar:
             </label>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-              {Array.isArray(profilePictures) && profilePictures.length > 0 ? (
-                profilePictures.map((picUrl, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      setAvatar(picUrl);
-                    }}
-                    style={{
-                      width: '48px',
-                      height: '48px',
-                      borderRadius: '50%',
-                      overflow: 'hidden',
-                      border: avatar === picUrl ? '3px solid #ffffff' : '1px solid transparent',
-                      cursor: 'pointer',
-                      padding: 0,
-                      transition: 'all 0.2s ease',
-                      boxShadow: avatar === picUrl ? '0 0 15px var(--cyan-accent)' : 'none'
-                    }}
-                  >
-                    <img src={picUrl} alt={`Profile ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  </button>
-                ))
-              ) : (
-                AVATAR_LIST.map(item => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={() => {
-                      setAvatar(item.icon);
-                      setAvatarBg(item.bg);
-                    }}
-                    style={{
-                      width: '46px',
-                      height: '46px',
-                      borderRadius: '50%',
-                      backgroundColor: item.bg,
-                      border: avatar === item.icon ? '3px solid #ffffff' : '1px solid transparent',
-                      cursor: 'pointer',
-                      fontSize: '1.4rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transition: 'all 0.2s ease',
-                      boxShadow: avatar === item.icon ? '0 0 15px ' + item.bg : 'none'
-                    }}
-                  >
-                    {item.icon}
-                  </button>
-                ))
-              )}
+              {availablePictures.map((picUrl, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setAvatar(picUrl)}
+                  style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '50%',
+                    overflow: 'hidden',
+                    border: avatar === picUrl ? '3px solid #ffffff' : '1px solid transparent',
+                    cursor: 'pointer',
+                    padding: 0,
+                    transition: 'all 0.2s ease',
+                    boxShadow: avatar === picUrl ? '0 0 15px var(--cyan-accent)' : 'none'
+                  }}
+                >
+                  <img src={picUrl} alt={`Avatar ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Nickname Input */}
+          {/* Username (Read Only) */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', display: 'block' }}>
+              Username (@):
+            </label>
+            <input
+              type="text"
+              value={user.username || user.id || ''}
+              disabled
+              style={{
+                width: '100%',
+                padding: '12px 18px',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--border-color)',
+                color: 'var(--text-muted)',
+                fontSize: '0.95rem',
+                outline: 'none',
+                cursor: 'not-allowed'
+              }}
+            />
+          </div>
+
+          {/* Display Name */}
           <div style={{ marginBottom: '20px' }}>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', display: 'block' }}>
               Display Name:
@@ -164,7 +213,7 @@ export function ProfileView() {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Your username..."
+              placeholder="Your display name..."
               required
               style={{
                 width: '100%',
@@ -179,19 +228,19 @@ export function ProfileView() {
             />
           </div>
 
-          {/* Gender Input */}
+          {/* Gender */}
           <div style={{ marginBottom: '20px' }}>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', display: 'block' }}>
               Gender:
             </label>
             <div style={{ display: 'flex', gap: '10px' }}>
-              {['Male', 'Female', 'Non-binary'].map(g => (
+              {['boy', 'girl'].map(g => (
                 <button
                   key={g}
                   type="button"
                   onClick={() => setGender(g)}
                   className={gender === g ? 'btn-primary' : 'btn-secondary'}
-                  style={{ flex: 1, padding: '10px', fontSize: '0.85rem' }}
+                  style={{ flex: 1, padding: '10px', fontSize: '0.85rem', textTransform: 'capitalize' }}
                 >
                   {g}
                 </button>
@@ -202,7 +251,7 @@ export function ProfileView() {
           {/* Bio Input */}
           <div style={{ marginBottom: '24px' }}>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', display: 'block' }}>
-              Bio / Mood:
+              Bio:
             </label>
             <textarea
               value={bio}
@@ -227,7 +276,7 @@ export function ProfileView() {
           {/* Personal Interests Selector */}
           <div style={{ marginBottom: '32px' }}>
             <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '10px', display: 'block' }}>
-              My Favorite Topics:
+              Favorite Topics:
             </label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {INTEREST_TAGS.map(tag => {
@@ -274,7 +323,7 @@ export function ProfileView() {
               <Key size={20} color="var(--primary-purple)" />
               <div>
                 <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  JWT Authenticated Session Active
+                  JWT Authenticated Session
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '2px' }}>
                   {jwtToken ? `${jwtToken.substring(0, 35)}...` : 'Valid local session token'}
@@ -293,18 +342,13 @@ export function ProfileView() {
               className="btn-danger"
               onClick={logout}
             >
-              Sign Out / Logout
+              {isGuest ? 'Exit Guest Session' : 'Sign Out'}
             </button>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {savedSuccess && (
                 <span style={{ color: 'var(--green-accent)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Check size={18} /> Profile Saved!
-                </span>
-              )}
-              {saveError && (
-                <span style={{ color: '#f87171', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <AlertCircle size={16} /> {saveError}
                 </span>
               )}
 

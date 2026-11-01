@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth, INTEREST_TAGS } from '../context/AuthContext';
-import { Sparkles, Sliders, XCircle, Search, Zap } from 'lucide-react';
+import { Sparkles, Sliders, XCircle, Zap } from 'lucide-react';
 
 const DOT_COUNT = 8;
 

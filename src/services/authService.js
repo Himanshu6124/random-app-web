@@ -1,17 +1,7 @@
 /**
- * Authentication & User Service connecting to the real RandoMeet backend.
+ * Authentication & Backend REST Service connecting to chat-backend.
  *
- * Endpoints:
- *   POST /auth/login              -> LoginRequest { username, password } -> AuthResponse { userId, jwt }
- *   POST /auth/signup             -> User model payload -> AuthResponse { userId, jwt }
- *   GET  /api/user/getuser/{id}   -> User profile (Bearer JWT)
- *   PUT  /api/user/update/{id}    -> Update user profile (Bearer JWT)
- *   GET  /users/profile-pictures  -> String[] of avatar URLs
- *   GET  /api/friends/{userId}    -> List<FriendDto> (Bearer JWT)
- *   POST /api/friends/add         -> Add friend { userId, friendId } (Bearer JWT)
- *   DELETE /api/friends/remove/{friendId} -> Remove friend (Bearer JWT)
- *
- * AuthResponse fields: { userId: String, jwt: String }
+ * Conforms 100% to FRONTEND_INTEGRATION_GUIDE.md specifications.
  */
 
 const rawBackendUrl = import.meta.env.VITE_BACKEND_URL || '';
@@ -19,6 +9,51 @@ const BASE_URL = rawBackendUrl.replace(/\/+$/, '');
 const TOKEN_KEY = 'randomeet_jwt_token';
 const USER_ID_KEY = 'randomeet_user_id';
 const USER_KEY = 'randomeet_user';
+
+/**
+ * Parses and handles backend API responses adhering to ApiError schema.
+ */
+async function handleApiResponse(response) {
+  if (!response.ok) {
+    let errorMessage = `Request failed (${response.status})`;
+    try {
+      const errorBody = await response.json();
+      if (errorBody && errorBody.error) {
+        errorMessage = errorBody.error;
+      } else if (errorBody && errorBody.message) {
+        errorMessage = errorBody.message;
+      }
+    } catch {
+      const text = await response.text().catch(() => '');
+      if (text) errorMessage = text;
+    }
+    const error = new Error(errorMessage);
+    error.status = response.status;
+    throw error;
+  }
+
+  // Handle 204 No Content
+  if (response.status === 204) {
+    return null;
+  }
+
+  return response.json();
+}
+
+/**
+ * Returns auth headers including Bearer token if present.
+ */
+function getAuthHeaders(token) {
+  const activeToken = token || localStorage.getItem(TOKEN_KEY);
+  const headers = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json'
+  };
+  if (activeToken) {
+    headers['Authorization'] = `Bearer ${activeToken}`;
+  }
+  return headers;
+}
 
 export const authService = {
   getToken() {
@@ -42,7 +77,6 @@ export const authService = {
   },
 
   setSession(authResponse, user) {
-    // authResponse: { userId, jwt }
     if (authResponse?.jwt) {
       localStorage.setItem(TOKEN_KEY, authResponse.jwt);
     }
@@ -60,10 +94,14 @@ export const authService = {
     localStorage.removeItem(USER_KEY);
   },
 
+  // ==========================================
+  // Authentication Endpoints
+  // ==========================================
+
   /**
    * POST /auth/login
    * Body: { username, password }
-   * Returns: { authResponse: { userId, jwt }, user }
+   * Returns: { jwt, userId }
    */
   async login(username, password) {
     if (!username || !password) {
@@ -76,49 +114,29 @@ export const authService = {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username: username.trim(), password: password.trim() })
     });
 
-    if (!response.ok) {
-      let errMsg = `Login failed (${response.status})`;
-      try {
-        const errorData = await response.json();
-        errMsg = errorData.message || errorData.error || errMsg;
-      } catch {
-        const text = await response.text().catch(() => '');
-        if (text) errMsg = text;
-      }
-      throw new Error(errMsg);
-    }
-
-    const data = await response.json();
-    // AuthResponse: { userId, jwt }
-    const jwt = data.jwt || data.jwtToken || data.token;
-    const userId = data.userId || data.id;
-
-    if (!jwt) {
-      throw new Error('Server did not return a valid JWT token.');
-    }
+    const data = await handleApiResponse(response);
+    const jwt = data.jwt;
+    const userId = data.userId || username.trim();
 
     const authResponse = { userId, jwt };
 
-    // Attempt to fetch full profile; fall back to minimal local model
+    // Fetch user profile from GET /users/me
     let userModel = null;
     try {
-      userModel = await this.fetchUserProfile(userId, jwt);
+      userModel = await this.getCurrentUser(jwt);
     } catch (e) {
-      console.warn('Could not fetch remote user profile, using fallback.', e);
-    }
-
-    if (!userModel) {
+      console.warn('Could not fetch user profile via /users/me, using fallback.', e);
       userModel = {
         id: userId,
-        username,
-        name: username,
+        username: userId,
+        name: userId,
         gender: '',
         photoUrl: '',
         bio: '',
-        status: 'Online'
+        isOnline: true
       };
     }
 
@@ -128,34 +146,36 @@ export const authService = {
 
   /**
    * POST /auth/signup
-   * Body: User model (matches KMP User data class)
-   * Returns: { authResponse: { userId, jwt }, user }
+   * Body: { username, password, name, email, gender ('boy'|'girl'), bio, photoUrl }
+   * Returns: { jwt, userId }
    */
   async signUp(userData) {
-    const { username, password, name, email, gender, bio, photoUrl, interests } = userData;
+    const { username, password, name, email, gender, bio, photoUrl } = userData;
 
     if (!username || !password) {
       throw new Error('Username and password are required.');
+    }
+    if (!name) {
+      throw new Error('Name is required.');
+    }
+    if (!email) {
+      throw new Error('Email is required.');
+    }
+    if (!gender || !['boy', 'girl'].includes(gender.toLowerCase())) {
+      throw new Error('Gender must be "boy" or "girl".');
     }
     if (!photoUrl || !photoUrl.trim()) {
       throw new Error('Profile picture is required.');
     }
 
-    // Matches KMP User data class fields
-    const userPayload = {
+    const payload = {
       username: username.trim(),
       password: password.trim(),
-      name: name?.trim() || username.trim(),
-      email: email?.trim() || '',
-      gender: gender || '',
-      bio: bio?.trim() || '',
-      photoUrl: photoUrl || '',
-      location: '',
-      status: 'Online',
-      suspectLevel: 0,
-      lastOnline: new Date().toISOString(),
-      fcmToken: '',
-      interests: interests || []
+      name: name.trim(),
+      email: email.trim(),
+      gender: gender.toLowerCase(),
+      bio: bio ? bio.trim() : '',
+      photoUrl: photoUrl.trim()
     };
 
     const response = await fetch(`${BASE_URL}/auth/signup`, {
@@ -164,36 +184,24 @@ export const authService = {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify(userPayload)
+      body: JSON.stringify(payload)
     });
 
-    if (!response.ok) {
-      let errMsg = `Sign up failed (${response.status})`;
-      try {
-        const errorData = await response.json();
-        errMsg = errorData.message || errorData.error || errMsg;
-      } catch {
-        const text = await response.text().catch(() => '');
-        if (text) errMsg = text;
-      }
-      throw new Error(errMsg);
-    }
-
-    const data = await response.json();
-    const jwt = data.jwt || data.jwtToken || data.token;
-    const userId = data.userId || data.id;
-
-    if (!jwt) {
-      throw new Error('Sign up server did not return a valid JWT token.');
-    }
+    const data = await handleApiResponse(response);
+    const jwt = data.jwt;
+    const userId = data.userId || username.trim();
 
     const authResponse = { userId, jwt };
-
-    // Build the user model saved locally
     const savedUser = {
       id: userId,
-      ...userPayload,
-      interests: interests || []
+      username: userId,
+      name: payload.name,
+      email: payload.email,
+      gender: payload.gender,
+      bio: payload.bio,
+      photoUrl: payload.photoUrl,
+      isOnline: true,
+      interests: userData.interests || []
     };
 
     this.setSession(authResponse, savedUser);
@@ -201,149 +209,284 @@ export const authService = {
   },
 
   /**
-   * GET /api/user/getuser/{userId}
-   * Headers: Authorization: Bearer <jwt>
+   * POST /auth/guest
+   * Body: { name, gender }
+   * Returns: { authResponse, user }
    */
-  async fetchUserProfile(userId, token) {
-    const res = await fetch(`${BASE_URL}/api/user/getuser/${userId}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
-      }
-    });
-
-    if (!res.ok) {
-      throw new Error(`Failed to fetch user profile (${res.status})`);
+  async loginAsGuest({ name, gender }) {
+    if (!name || !name.trim()) {
+      throw new Error('Please enter your name.');
+    }
+    if (!gender) {
+      throw new Error('Please select your gender.');
     }
 
-    const data = await res.json();
+    const response = await fetch(`${BASE_URL}/auth/guest`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ name: name.trim(), gender: gender.toLowerCase() })
+    });
+
+    const data = await handleApiResponse(response);
+    const jwt = data.jwt;
+    const userId = data.userId;
+
+    const authResponse = { userId, jwt };
+
+    let userModel = null;
+    try {
+      userModel = await this.getCurrentUser(jwt);
+    } catch (e) {
+      console.warn('[authService] getCurrentUser failed after guest login, using fallback', e);
+      userModel = {
+        id: userId,
+        username: userId,
+        name: name.trim(),
+        gender: gender.toLowerCase(),
+        photoUrl: gender.toLowerCase() === 'girl' ? '/userImages/girl1.png' : '/userImages/boy1.png',
+        isGuest: true,
+        isOnline: true
+      };
+    }
+
+    this.setSession(authResponse, userModel);
+    return { authResponse, user: userModel };
+  },
+
+  /**
+   * POST /auth/guest/upgrade
+   * Upgrades current guest session to permanent user account.
+   */
+  async upgradeGuest(upgradeData, token) {
+    const activeToken = token || this.getToken();
+    if (!activeToken) {
+      throw new Error('No active guest session to upgrade.');
+    }
+
+    const { username, password, name, email, gender, bio, photoUrl } = upgradeData;
+    if (!username || !password || !name || !email || !gender) {
+      throw new Error('All mandatory fields must be filled.');
+    }
+
+    const response = await fetch(`${BASE_URL}/auth/guest/upgrade`, {
+      method: 'POST',
+      headers: getAuthHeaders(activeToken),
+      body: JSON.stringify({
+        username: username.trim(),
+        password: password.trim(),
+        name: name.trim(),
+        email: email.trim(),
+        gender: gender.toLowerCase(),
+        bio: bio ? bio.trim() : '',
+        photoUrl: photoUrl || ''
+      })
+    });
+
+    const data = await handleApiResponse(response);
+    const jwt = data.jwt;
+    const userId = data.userId || username.trim();
+
+    const authResponse = { userId, jwt };
+
+    let userModel = null;
+    try {
+      userModel = await this.getCurrentUser(jwt);
+    } catch (e) {
+      userModel = {
+        id: userId,
+        username: userId,
+        name: name.trim(),
+        email: email.trim(),
+        gender: gender.toLowerCase(),
+        photoUrl: photoUrl || '',
+        isGuest: false,
+        isOnline: true
+      };
+    }
+
+    this.setSession(authResponse, userModel);
+    return { authResponse, user: userModel };
+  },
+
+  // ==========================================
+  // User Profile & Discovery
+  // ==========================================
+
+  /**
+   * GET /users/me
+   */
+  async getCurrentUser(token) {
+    const response = await fetch(`${BASE_URL}/users/me`, {
+      headers: getAuthHeaders(token)
+    });
+    const data = await handleApiResponse(response);
     return {
-      id: data.username || data.id || userId,
-      name: data.name || data.username || userId,
-      username: data.username || userId,
+      id: data.username,
+      username: data.username,
+      name: data.name || data.username,
       email: data.email || '',
       gender: data.gender || '',
+      location: data.location || null,
       bio: data.bio || '',
       photoUrl: data.photoUrl || '',
-      location: data.location || '',
-      interests: data.interests || [],
-      ...data
+      isOnline: data.isOnline ?? true,
+      lastOnline: data.lastOnline || null,
+      isGuest: Boolean(data.isGuest || data.guest)
     };
   },
 
   /**
-   * PATCH /api/user/update/{userId}
-   * Headers: Authorization: Bearer <jwt>
-   * Body: partial/full user fields
-   * Returns: updated User or 200 OK
+   * GET /users/{userId}
    */
-  async updateProfile(userId, token, profileData) {
-    const res = await fetch(`${BASE_URL}/api/user/update/${userId}`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify(profileData)
+  async getUserById(userId, token) {
+    const response = await fetch(`${BASE_URL}/users/${encodeURIComponent(userId)}`, {
+      headers: getAuthHeaders(token)
     });
-
-    if (!res.ok) {
-      let errMsg = `Profile update failed (${res.status})`;
-      try {
-        const err = await res.json();
-        errMsg = err.message || err.error || errMsg;
-      } catch {
-        const text = await res.text().catch(() => '');
-        if (text) errMsg = text;
-      }
-      throw new Error(errMsg);
-    }
-
-    try {
-      const data = await res.json();
-      return { id: data.username || data.id || userId, ...data };
-    } catch {
-      return profileData; // server returned no body (204 No Content)
-    }
+    return await handleApiResponse(response);
   },
 
+  /**
+   * GET /users?page=0&size=20
+   */
+  async getAllUsers(page = 0, size = 20, token) {
+    const response = await fetch(`${BASE_URL}/users?page=${page}&size=${size}`, {
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
 
   /**
-   * GET /conversations/my-conversations
-   * Returns: List<Conversation> — friend conversations from backend
+   * DELETE /users/{userId}
    */
-  async getFriendConversations(token) {
+  async deleteAccount(userId, token) {
+    const response = await fetch(`${BASE_URL}/users/${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
+   * PUT /users/fcm-token
+   */
+  async updateFcmToken(fcmToken, token) {
+    const response = await fetch(`${BASE_URL}/users/fcm-token`, {
+      method: 'PUT',
+      headers: getAuthHeaders(token),
+      body: JSON.stringify({ fcmToken })
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
+   * GET /users/profile-pictures
+   */
+  async getProfilePictures() {
     try {
-      const res = await fetch(`${BASE_URL}/conversations/my-conversations`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
+      const response = await fetch(`${BASE_URL}/users/profile-pictures`, {
+        headers: { 'Accept': 'application/json' }
       });
-
-      if (!res.ok) {
-        throw new Error(`Failed to fetch friend conversations (${res.status})`);
-      }
-
-      const conversations = await res.json();
-      return Array.isArray(conversations) ? conversations.map(c => ({
-        id: c.friendUserId || c.peerId || c.id || c.conversationId,
-        conversationId: c.conversationId || c.id,
-        peerId: c.peerId || c.friendUserId || c.id,
-        friendUserId: c.friendUserId || c.peerId || c.id,
-        friendUserName: c.friendUserName || c.name || c.username || 'Friend',
-        name: c.friendUserName || c.name || c.username || 'Friend',
-        username: c.username || c.friendUserName,
-        photoUrl: c.friendPhotoUrl || c.photoUrl || c.avatar || '',
-        avatar: c.avatar || '👤',
-        status: c.status || 'Online',
-        lastMessage: c.lastMessage || 'Say hi!',
-        lastMessageTime: c.lastMessageTime || c.timestamp || '',
-        unread: c.unread || 0
-      })) : [];
+      return await handleApiResponse(response);
     } catch (e) {
-      console.warn('[authService] getFriendConversations failed:', e);
-      return null;
+      console.warn('Could not fetch profile pictures:', e);
+      return [];
     }
   },
 
+  // ==========================================
+  // Conversations Endpoints
+  // ==========================================
 
   /**
-   * GET /messages/conversation/{conversationId}?page={page}&size={size}
-   * Headers: Authorization: Bearer <jwt>
-   * Returns: List<Message> from backend matching RandoMeet ChatRepo
+   * POST /conversations
+   * Body: { recipientUsername }
+   * Returns: ConversationResponseDto
    */
-  async fetchConversationMessages(conversationId, token, page = 0, size = 20) {
-    if (!conversationId || !token) return [];
+  async createOrOpenConversation(recipientUsername, token) {
+    const response = await fetch(`${BASE_URL}/conversations`, {
+      method: 'POST',
+      headers: getAuthHeaders(token),
+      body: JSON.stringify({ recipientUsername })
+    });
+    return await handleApiResponse(response);
+  },
 
+  /**
+   * GET /conversations/{id}
+   */
+  async getConversationById(conversationId, token) {
+    const response = await fetch(`${BASE_URL}/conversations/${encodeURIComponent(conversationId)}`, {
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
+   * GET /conversations?page=0&size=20
+   * Returns Page<UserConversationDTO>
+   */
+  async getUserConversations(page = 0, size = 20, token) {
+    try {
+      const response = await fetch(`${BASE_URL}/conversations?page=${page}&size=${size}`, {
+        headers: getAuthHeaders(token)
+      });
+      const data = await handleApiResponse(response);
+      const list = Array.isArray(data?.content) ? data.content : (Array.isArray(data) ? data : []);
+      return list.map(c => ({
+        id: c.friendUserId || c.conversationId,
+        conversationId: c.conversationId,
+        friendUserId: c.friendUserId,
+        friendUserName: c.friendUserName,
+        name: c.friendUserName,
+        username: c.friendUserId,
+        photoUrl: c.photoUrl || '',
+        avatar: c.photoUrl ? '' : '👤',
+        lastMessage: c.lastMessage || 'Say hi!',
+        lastMessageTime: c.lastMessageTime || '',
+        isByYou: c.isByYou,
+        messageStatus: c.messageStatus,
+        messageType: c.messageType,
+        unseenCount: c.unseenCount || 0
+      }));
+    } catch (e) {
+      console.warn('[authService] getUserConversations failed:', e);
+      return [];
+    }
+  },
+
+  /**
+   * GET /conversations/{conversationId}/messages?page=0&size=30
+   */
+  async fetchConversationMessages(conversationId, token, page = 0, size = 30) {
+    if (!conversationId) return [];
     try {
       const myId = this.getUserId();
-      const res = await fetch(`${BASE_URL}/messages/conversation/${conversationId}?page=${page}&size=${size}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
+      const response = await fetch(`${BASE_URL}/conversations/${encodeURIComponent(conversationId)}/messages?page=${page}&size=${size}`, {
+        headers: getAuthHeaders(token)
       });
+      const data = await handleApiResponse(response);
+      const list = Array.isArray(data?.content) ? data.content : (Array.isArray(data) ? data : []);
 
-      if (!res.ok) {
-        throw new Error(`Failed to fetch conversation messages (${res.status})`);
-      }
+      // Messages arrive sorted newest to oldest from backend; reverse for chronological display
+      const chronological = list.slice().reverse();
 
-      const data = await res.json();
-      const list = Array.isArray(data) ? data : (Array.isArray(data.content) ? data.content : []);
-      
-      // Reversing list so messages display chronologically from oldest at top to newest at bottom
-      const chronologicalList = list.slice().reverse();
-
-      return chronologicalList.map(m => {
-        const isMe = (m.senderId && String(m.senderId) === String(myId)) || m.sender === 'me';
+      return chronological.map(m => {
+        const isMe = (m.senderId && String(m.senderId) === String(myId));
         const rawTime = m.timeStamp || m.timestamp || new Date().toISOString();
         return {
           id: m.id || 'msg_' + Math.random(),
-          sender: isMe ? 'me' : (m.senderId || 'peer'),
-          senderId: m.senderId || '',
-          text: m.message || m.text || m.content || '',
+          conversationId: m.conversationId || conversationId,
+          senderId: m.senderId,
+          sender: isMe ? 'me' : m.senderId,
+          text: m.message || '',
+          message: m.message || '',
+          objectUri: m.objectUri || null,
+          referredMessageId: m.referredMessageId || null,
+          status: m.status || 'SENT',
+          type: m.type || 'TEXT',
           time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           timestamp: rawTime
         };
@@ -354,26 +497,83 @@ export const authService = {
     }
   },
 
-
+  /**
+   * POST /conversations/{conversationId}/seen?messageId=...
+   */
+  async markConversationSeen(conversationId, messageId, token) {
+    const response = await fetch(`${BASE_URL}/conversations/${encodeURIComponent(conversationId)}/seen?messageId=${encodeURIComponent(messageId)}`, {
+      method: 'POST',
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
 
   /**
-   * GET /friendships/list
-   * Returns: List<User> — accepted friends
+   * PUT /conversations/{id}/end
    */
-  async getFriendsList(token) {
+  async endConversation(conversationId, token) {
+    const response = await fetch(`${BASE_URL}/conversations/${encodeURIComponent(conversationId)}/end`, {
+      method: 'PUT',
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
+
+  // ==========================================
+  // Message Endpoints (REST Fallback)
+  // ==========================================
+
+  /**
+   * POST /messages
+   */
+  async sendMessageRest(messageData, token) {
+    const response = await fetch(`${BASE_URL}/messages`, {
+      method: 'POST',
+      headers: getAuthHeaders(token),
+      body: JSON.stringify(messageData)
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
+   * DELETE /messages/{messageId}
+   */
+  async deleteMessageRest(messageId, token) {
+    const response = await fetch(`${BASE_URL}/messages/${encodeURIComponent(messageId)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
+
+  // ==========================================
+  // Friendship Endpoints
+  // ==========================================
+
+  /**
+   * GET /friendships?page=0&size=20
+   * Returns: Page<FriendDto>
+   */
+  async getFriendsList(token, page = 0, size = 20) {
     try {
-      const res = await fetch(`${BASE_URL}/friendships/list`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
+      const response = await fetch(`${BASE_URL}/friendships?page=${page}&size=${size}`, {
+        headers: getAuthHeaders(token)
       });
-
-      if (!res.ok) {
-        throw new Error(`Failed to fetch friendships list (${res.status})`);
-      }
-
-      return await res.json();
+      const data = await handleApiResponse(response);
+      const content = Array.isArray(data?.content) ? data.content : (Array.isArray(data) ? data : []);
+      return content.map(f => ({
+        id: f.username,
+        friendUserId: f.username,
+        username: f.username,
+        name: f.name || f.username,
+        photoUrl: f.photoUrl || '',
+        bio: f.bio || '',
+        gender: f.gender || '',
+        location: f.location || null,
+        isOnline: f.isOnline ?? false,
+        lastOnline: f.lastOnline || null,
+        status: f.isOnline ? 'Online' : 'Offline'
+      }));
     } catch (e) {
       console.warn('[authService] getFriendsList failed:', e);
       return [];
@@ -381,29 +581,22 @@ export const authService = {
   },
 
   /**
-   * GET /friendships/to-be-accepted
-   * Returns: List<User> — pending friend requests to be accepted
+   * GET /friendships/requests/pending
+   * Returns: List<FriendDto>
    */
   async getPendingFriendRequests(token) {
     try {
-      const res = await fetch(`${BASE_URL}/friendships/to-be-accepted`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
+      const response = await fetch(`${BASE_URL}/friendships/requests/pending`, {
+        headers: getAuthHeaders(token)
       });
-
-      if (!res.ok) {
-        throw new Error(`Failed to fetch pending friend requests (${res.status})`);
-      }
-
-      const requests = await res.json();
-      return Array.isArray(requests) ? requests.map(r => ({
-        id: r.id || r.userId || r.username,
-        username: r.username || r.name,
-        name: r.name || r.username || 'Unknown',
-        photoUrl: r.photoUrl || r.avatar || '',
-        bio: r.bio || ''
+      const list = await handleApiResponse(response);
+      return Array.isArray(list) ? list.map(r => ({
+        id: r.username,
+        username: r.username,
+        name: r.name || r.username,
+        photoUrl: r.photoUrl || '',
+        bio: r.bio || '',
+        gender: r.gender || ''
       })) : [];
     } catch (e) {
       console.warn('[authService] getPendingFriendRequests failed:', e);
@@ -412,223 +605,97 @@ export const authService = {
   },
 
   /**
-   * POST /friendships/request/{friendId}/send
-   * Send a friend request to friendId (userId or username)
+   * GET /friendships/requests/sent
+   * Returns: List<FriendDto>
    */
-  async sendFriendRequest(friendId, token) {
-    const res = await fetch(`${BASE_URL}/friendships/request/${friendId}/send`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }
-    });
-
-    if (!res.ok) {
-      let errMsg = `Send friend request failed (${res.status})`;
-      try {
-        const err = await res.json();
-        errMsg = err.message || err.error || errMsg;
-      } catch {
-        const text = await res.text().catch(() => '');
-        if (text) errMsg = text;
-      }
-      throw new Error(errMsg);
-    }
-    return true;
-  },
-
-  /**
-   * POST /friendships/request/{friendId}/accept
-   * Accept a pending friend request
-   */
-  async acceptFriendRequest(friendId, token) {
-    const res = await fetch(`${BASE_URL}/friendships/request/${friendId}/accept`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }
-    });
-
-    if (!res.ok) {
-      let errMsg = `Accept friend request failed (${res.status})`;
-      try {
-        const err = await res.json();
-        errMsg = err.message || err.error || errMsg;
-      } catch {
-        const text = await res.text().catch(() => '');
-        if (text) errMsg = text;
-      }
-      throw new Error(errMsg);
-    }
-    return true;
-  },
-
-  /**
-   * POST /friendships/request/{friendId}/reject
-   * Reject a pending friend request
-   */
-  async rejectFriendRequest(friendId, token) {
-    const res = await fetch(`${BASE_URL}/friendships/request/${friendId}/reject`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }
-    });
-
-    if (!res.ok) {
-      let errMsg = `Reject friend request failed (${res.status})`;
-      try {
-        const err = await res.json();
-        errMsg = err.message || err.error || errMsg;
-      } catch {
-        const text = await res.text().catch(() => '');
-        if (text) errMsg = text;
-      }
-      throw new Error(errMsg);
-    }
-    return true;
-  },
-
-  /**
-   * GET /api/friends/{userId}
-   * Returns: List<FriendDto> — all accepted friendships
-   * FriendDto fields (from getAllFriends service): { id, name, username, photoUrl, bio, gender, status }
-   */
-  async getFriends(userId, token) {
+  async getSentFriendRequests(token) {
     try {
-      const res = await fetch(`${BASE_URL}/api/friends/${userId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
+      const response = await fetch(`${BASE_URL}/friendships/requests/sent`, {
+        headers: getAuthHeaders(token)
       });
-
-      if (!res.ok) {
-        throw new Error(`Failed to fetch friends (${res.status})`);
-      }
-
-      const friends = await res.json();
-      // Normalize FriendDto to match our local shape
-      return Array.isArray(friends) ? friends.map(f => ({
-        id: f.id || f.userId || f.friendId,
-        name: f.name || f.username || 'Friend',
-        username: f.username || f.name,
-        photoUrl: f.photoUrl || f.avatar || '',
-        bio: f.bio || '',
-        gender: f.gender || '',
-        status: f.status || 'Online',
-        lastMessage: f.lastMessage || 'Say hi!',
-        unread: f.unread || 0
-      })) : [];
+      return await handleApiResponse(response);
     } catch (e) {
-      console.warn('[authService] getFriends failed, using local cache:', e);
-      return null; // null = caller should use localStorage friends
-    }
-  },
-
-  /**
-   * POST /api/friends/add
-   * Body: { userId, friendId }
-   * Headers: Authorization: Bearer <jwt>
-   */
-  async addFriendApi(myUserId, token, friendId) {
-    try {
-      const res = await fetch(`${BASE_URL}/api/friends/add`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({ userId: myUserId, friendId })
-      });
-
-      if (!res.ok) {
-        throw new Error(`Add friend failed (${res.status})`);
-      }
-      return true;
-    } catch (e) {
-      console.warn('[authService] addFriendApi failed (graceful):', e);
-      return false; // gracefully fall back to localStorage-only
-    }
-  },
-
-  /**
-   * DELETE /api/friends/remove/{friendId}
-   * Headers: Authorization: Bearer <jwt>
-   */
-  async removeFriendApi(myUserId, token, friendId) {
-    try {
-      const res = await fetch(`${BASE_URL}/api/friends/remove/${friendId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-
-      if (!res.ok) {
-        throw new Error(`Remove friend failed (${res.status})`);
-      }
-      return true;
-    } catch (e) {
-      console.warn('[authService] removeFriendApi failed (graceful):', e);
-      return false;
-    }
-  },
-
-  /**
-   * GET /users/profile-pictures
-   * Returns: String[] of avatar image URLs
-   */
-  async getProfilePictures() {
-    console.log("Fetching profile pictures from backend...", BASE_URL);
-    try {
-      const res = await fetch(`${BASE_URL}/users/profile-pictures`, {
-        headers: { 'Accept': 'application/json' }
-      });
-
-      if (!res.ok) {
-        throw new Error(`Failed to fetch profile pictures (${res.status})`);
-      }
-
-      return await res.json();
-    } catch (e) {
-      console.warn('Could not fetch profile pictures:', e);
+      console.warn('[authService] getSentFriendRequests failed:', e);
       return [];
     }
   },
 
   /**
-   * Verify stored JWT token on page load.
-   * Calls GET /api/user/getuser/{userId} to validate.
+   * POST /friendships/requests/{friendUsername}
+   */
+  async sendFriendRequest(friendUsername, token) {
+    const response = await fetch(`${BASE_URL}/friendships/requests/${encodeURIComponent(friendUsername)}`, {
+      method: 'POST',
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
+   * PUT /friendships/requests/{friendUsername}/accept
+   */
+  async acceptFriendRequest(friendUsername, token) {
+    const response = await fetch(`${BASE_URL}/friendships/requests/${encodeURIComponent(friendUsername)}/accept`, {
+      method: 'PUT',
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
+   * PUT /friendships/requests/{friendUsername}/reject
+   */
+  async rejectFriendRequest(friendUsername, token) {
+    const response = await fetch(`${BASE_URL}/friendships/requests/${encodeURIComponent(friendUsername)}/reject`, {
+      method: 'PUT',
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
+   * DELETE /friendships/{friendUsername}
+   */
+  async removeFriendApi(friendUsername, token) {
+    const response = await fetch(`${BASE_URL}/friendships/${encodeURIComponent(friendUsername)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
+   * GET /friendships/status/{friendUsername}
+   */
+  async getFriendshipStatus(friendUsername, token) {
+    const response = await fetch(`${BASE_URL}/friendships/status/${encodeURIComponent(friendUsername)}`, {
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
+
+  // ==========================================
+  // Session Verification
+  // ==========================================
+
+  /**
+   * Validates active session on page load using GET /users/me.
    */
   async checkLandingAuth() {
     const token = this.getToken();
     const userId = this.getUserId();
-    const user = this.getUser();
 
     if (!token || !userId) {
+      this.clearSession();
       return { isAuthenticated: false, user: null, jwt: null };
     }
 
     try {
-      const remoteUser = await this.fetchUserProfile(userId, token);
-      const updatedUser = { id: userId, ...remoteUser };
-      this.setSession({ userId, jwt: token }, updatedUser);
-      return { isAuthenticated: true, user: updatedUser, jwt: token };
+      const user = await this.getCurrentUser(token);
+      this.setSession({ userId: user.id, jwt: token }, user);
+      return { isAuthenticated: true, user, jwt: token };
     } catch (err) {
-      console.warn('Token verification failed, using local session if available.', err);
-      // If we have local user data, trust it (e.g. backend unreachable)
-      if (user && token) {
-        return { isAuthenticated: true, user, jwt: token };
-      }
+      console.warn('Token verification failed:', err);
       this.clearSession();
       return { isAuthenticated: false, user: null, jwt: null };
     }

@@ -1,16 +1,16 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import { Sparkles, Users, MessageSquare, Volume2, VolumeX, LogOut } from 'lucide-react';
+import { Sparkles, Users, MessageSquare, Volume2, VolumeX, LogOut, Lock } from 'lucide-react';
 
 export function Header({ activeTab, setActiveTab }) {
-  const { user, soundEnabled, setSoundEnabled, logout } = useAuth();
+  const { user, isGuest, soundEnabled, setSoundEnabled, logout, openUpgradeModal } = useAuth();
   const { connectionStatus } = useSocket();
 
   const statusConfig = {
-    connected: { color: 'var(--green-accent)', label: '● Live', dot: '#10b981' },
-    connecting: { color: '#eab308', label: '● Connecting...', dot: '#eab308' },
-    disconnected: { color: 'var(--text-muted)', label: '● Offline', dot: '#6b7280' }
+    connected: { color: 'var(--green-accent)', label: 'Online' },
+    connecting: { color: '#eab308', label: 'Connecting...' },
+    disconnected: { color: 'var(--text-muted)', label: 'Offline' }
   };
   const status = statusConfig[connectionStatus] || statusConfig.disconnected;
 
@@ -36,15 +36,7 @@ export function Header({ activeTab, setActiveTab }) {
             RandoMeet
           </h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem' }}>
-            <span style={{
-              display: 'inline-block',
-              width: '7px',
-              height: '7px',
-              borderRadius: '50%',
-              background: status.dot,
-              boxShadow: `0 0 6px ${status.dot}`
-            }} />
-            <span style={{ color: status.color, fontWeight: 500 }}>{status.label}</span>
+            <span style={{ color: status.color, fontWeight: 600 }}>{status.label}</span>
           </div>
         </div>
       </div>
@@ -62,16 +54,51 @@ export function Header({ activeTab, setActiveTab }) {
 
         <button
           className={activeTab === 'friends' ? 'btn-primary' : 'btn-secondary'}
-          onClick={() => setActiveTab('friends')}
-          style={{ padding: '8px 16px', borderRadius: 'var(--radius-full)' }}
+          onClick={() => {
+            if (isGuest) {
+              openUpgradeModal('access Friends & Direct Messages');
+            } else {
+              setActiveTab('friends');
+            }
+          }}
+          style={{ padding: '8px 16px', borderRadius: 'var(--radius-full)', display: 'flex', alignItems: 'center', gap: '6px' }}
+          title={isGuest ? "Sign up to unlock friends" : "View Friends"}
         >
           <Users size={18} />
           <span>Friends</span>
+          {isGuest && <Lock size={13} style={{ opacity: 0.8 }} />}
         </button>
       </nav>
 
       {/* Right User Actions */}
       <div className="header-actions">
+        {/* Upgrade Button for Guests */}
+        {isGuest && (
+          <button
+            type="button"
+            id="header-upgrade-btn"
+            onClick={() => openUpgradeModal('unlock all features')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 'var(--radius-full)',
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: '#ffffff',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: '0.82rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)',
+              flexShrink: 0
+            }}
+          >
+            <Sparkles size={14} />
+            <span>Upgrade</span>
+          </button>
+        )}
+
         {/* Sound Toggle */}
         <button
           onClick={() => setSoundEnabled(!soundEnabled)}
@@ -118,17 +145,32 @@ export function Header({ activeTab, setActiveTab }) {
             )}
           </div>
           <span className="header-user-name" style={{ fontSize: '0.85rem', fontWeight: 600 }}>{user?.name || user?.username}</span>
+          {isGuest && (
+            <span style={{
+              fontSize: '0.65rem',
+              fontWeight: 700,
+              backgroundColor: 'rgba(99, 102, 241, 0.25)',
+              color: '#a5b4fc',
+              border: '1px solid rgba(99, 102, 241, 0.5)',
+              padding: '2px 6px',
+              borderRadius: '6px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              Guest
+            </span>
+          )}
         </button>
 
         {/* Logout Action */}
         <button
           onClick={logout}
           className="btn-secondary header-signout-btn"
-          title="Sign Out / Logout"
+          title={isGuest ? "Exit Guest Session" : "Sign Out / Logout"}
           style={{ padding: '8px 14px', borderRadius: 'var(--radius-full)', fontSize: '0.85rem', flexShrink: 0 }}
         >
           <LogOut size={16} />
-          <span className="header-signout-text">Sign Out</span>
+          <span className="header-signout-text">{isGuest ? 'Exit' : 'Sign Out'}</span>
         </button>
       </div>
     </header>

@@ -7,6 +7,7 @@ import { FriendsView } from './views/FriendsView';
 import { ProfileView } from './views/ProfileView';
 import { LoginView } from './views/LoginView';
 import { LogoutConfirmationDialog } from './components/LogoutConfirmationDialog';
+import { GuestUpgradeModal } from './components/GuestUpgradeModal';
 
 function AppContent() {
   const { isAuthenticated, authLoading, showLogoutModal, cancelLogout, performLogout } = useAuth();
@@ -46,6 +47,7 @@ function AppContent() {
         onClose={cancelLogout}
         onConfirm={performLogout}
       />
+      <GuestUpgradeModal />
     </div>
   );
 }

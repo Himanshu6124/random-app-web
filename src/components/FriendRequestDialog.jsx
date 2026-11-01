@@ -9,17 +9,22 @@ export function FriendRequestDialog({
   onReject
 }) {
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.75)',
-      backdropFilter: 'blur(8px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-      padding: '16px'
-    }}>
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onDismiss();
+      }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        backdropFilter: 'blur(8px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: '16px'
+      }}
+    >
       <div className="glass-panel animate-scale-up" style={{
         width: '100%',
         maxWidth: '440px',
@@ -42,6 +47,7 @@ export function FriendRequestDialog({
             Friend Requests
           </h2>
           <button
+            id="close-requests-modal-btn"
             onClick={onDismiss}
             style={{
               background: 'none',

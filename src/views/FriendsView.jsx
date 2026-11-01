@@ -24,6 +24,7 @@ import { FriendRequestDialog } from '../components/FriendRequestDialog';
 export function FriendsView({ onStartMatch }) {
   const {
     user,
+    isGuest,
     jwtToken,
     friends,
     removeFriend,
@@ -32,7 +33,8 @@ export function FriendsView({ onStartMatch }) {
     loadFriendRequests,
     acceptFriendRequest,
     rejectFriendRequest,
-    loadFriendsFromApi
+    loadFriendsFromApi,
+    openUpgradeModal
   } = useAuth();
 
   const { isLiveConnected } = useSocket();
@@ -48,27 +50,162 @@ export function FriendsView({ onStartMatch }) {
   const messagesEndRef = useRef(null);
   const typingTimerRef = useRef(null);
 
-  // Dynamic window resize listener for instant mobile/desktop adaptation
+  // Resize listener for mobile/desktop layout
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  if (isGuest) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        width: '100%',
+        padding: '24px'
+      }}>
+        <div className="glass-panel animate-scale-up" style={{
+          maxWidth: '480px',
+          width: '100%',
+          padding: '40px 32px',
+          borderRadius: '24px',
+          textAlign: 'center',
+          backgroundColor: '#1C1C1E',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.6)'
+        }}>
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '20px',
+            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 20px',
+            boxShadow: '0 8px 24px rgba(16, 185, 129, 0.35)'
+          }}>
+            <Users size={32} color="#ffffff" />
+          </div>
+
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff', marginBottom: '10px' }}>
+            Friends & Direct Messages
+          </h2>
+          <p style={{ color: '#a1a1aa', fontSize: '0.95rem', lineHeight: 1.5, marginBottom: '24px' }}>
+            Never lose touch with great people you meet! Create a free permanent account to save friends, send direct messages anytime, and see who's online.
+          </p>
+
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            marginBottom: '28px',
+            textAlign: 'left',
+            background: 'rgba(255, 255, 255, 0.04)',
+            padding: '16px',
+            borderRadius: '16px',
+            border: '1px solid rgba(255, 255, 255, 0.08)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem', color: '#e4e4e7' }}>
+              <span style={{ color: '#10b981', fontSize: '1.1rem' }}>✓</span> Save friends met in Random Chat
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem', color: '#e4e4e7' }}>
+              <span style={{ color: '#10b981', fontSize: '1.1rem' }}>✓</span> 1-on-1 private direct messaging
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem', color: '#e4e4e7' }}>
+              <span style={{ color: '#10b981', fontSize: '1.1rem' }}>✓</span> Real-time online status and typing alerts
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <button
+              type="button"
+              id="guest-friends-upgrade-btn"
+              onClick={() => openUpgradeModal('unlock Friends & Direct Messages')}
+              style={{
+                width: '100%',
+                padding: '14px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: '#ffffff',
+                border: 'none',
+                fontWeight: 700,
+                fontSize: '1rem',
+                cursor: 'pointer',
+                boxShadow: '0 8px 20px rgba(16, 185, 129, 0.35)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+            >
+              <Sparkles size={18} />
+              Create Free Account
+            </button>
+
+            <button
+              type="button"
+              onClick={onStartMatch}
+              className="btn-secondary"
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '12px',
+                fontSize: '0.9rem',
+                cursor: 'pointer'
+              }}
+            >
+              Back to Random Match
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle selecting a friend
+  const handleSelectFriend = async (friend) => {
+    if (!friend) return;
+    console.log('[FriendsView] Friend selected:', friend);
+
+    let activeFriend = { ...friend };
+    const targetUsername = friend.username || friend.friendUserId || friend.id;
+
+    // If conversationId is missing, create or open it via POST /conversations
+    if (!activeFriend.conversationId && targetUsername) {
+      try {
+        const conv = await authService.createOrOpenConversation(targetUsername, jwtToken);
+        if (conv?.id) {
+          activeFriend.conversationId = conv.id;
+        }
+      } catch (err) {
+        console.warn('Could not create/open conversation:', err);
+      }
+    }
+
+    setSelectedFriend(activeFriend);
+    setMobileShowChat(true);
+    setIsFriendTyping(false);
+    setShowMenu(false);
+  };
+
   // Auto-select first friend on desktop if none selected
   useEffect(() => {
     if (!selectedFriend && friends.length > 0 && !isMobile) {
-      setSelectedFriend(friends[0]);
+      handleSelectFriend(friends[0]);
     }
-  }, [friends, isMobile]);
+  }, [friends, isMobile, selectedFriend]);
 
-  // Load latest friends and pending requests from API on view mount
+  // Load latest friends and pending requests from API on mount
   useEffect(() => {
     loadFriendsFromApi();
     loadFriendRequests();
-  }, []);
+  }, [loadFriendsFromApi, loadFriendRequests]);
 
-  // Load DM history from localStorage (keyed by friendUserId/id)
+  // In-memory / local storage message cache
   const [dmMessages, setDmMessages] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('randomeet_dms') || '{}');
@@ -77,40 +214,37 @@ export function FriendsView({ onStartMatch }) {
     }
   });
 
-  // Persist DMs to localStorage on change
   useEffect(() => {
     localStorage.setItem('randomeet_dms', JSON.stringify(dmMessages));
   }, [dmMessages]);
 
-  // Fetch existing chat history from backend API when opening a friend card
+  // Subscribe to room and fetch messages when selectedFriend changes
   useEffect(() => {
-    if (!selectedFriend) return;
+    if (!selectedFriend?.conversationId) return;
 
-    const conversationId = selectedFriend.conversationId || selectedFriend.id;
-    const friendUserId = selectedFriend.friendUserId || selectedFriend.peerId || selectedFriend.id;
+    const conversationId = selectedFriend.conversationId;
+    const friendUsername = selectedFriend.username || selectedFriend.friendUserId || selectedFriend.id;
     const token = jwtToken || authService.getToken();
 
-    if (!conversationId || !token) return;
+    // 1. Subscribe to conversation topic
+    socketService.subscribeRoom(conversationId);
 
+    // 2. Fetch message history from GET /conversations/{id}/messages
     let isSubscribed = true;
     setFetchingMessages(true);
 
-    console.log(`[FriendsView] Fetching existing chat history for conversation ${conversationId} (friendUserId: ${friendUserId})`);
-    authService.fetchConversationMessages(conversationId, token)
+    authService.fetchConversationMessages(conversationId, token, 0, 40)
       .then(apiMessages => {
         if (!isSubscribed) return;
         if (Array.isArray(apiMessages) && apiMessages.length > 0) {
           setDmMessages(prev => {
-            const existingLocal = prev[friendUserId] || prev[selectedFriend.id] || [];
+            const existingLocal = prev[conversationId] || prev[friendUsername] || [];
             const mergedMap = new Map();
-            // Add fetched API messages first
             apiMessages.forEach(m => mergedMap.set(m.id, m));
-            // Keep any local unsaved/unique messages
             existingLocal.forEach(m => {
               if (!mergedMap.has(m.id)) mergedMap.set(m.id, m);
             });
             const mergedList = Array.from(mergedMap.values());
-            // Sort chronologically by timestamp
             mergedList.sort((a, b) => {
               const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
               const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
@@ -118,14 +252,14 @@ export function FriendsView({ onStartMatch }) {
             });
             return {
               ...prev,
-              [friendUserId]: mergedList,
-              [selectedFriend.id]: mergedList
+              [conversationId]: mergedList,
+              [friendUsername]: mergedList
             };
           });
         }
       })
       .catch(err => {
-        console.warn('[FriendsView] Failed to load chat history from API:', err);
+        console.warn('[FriendsView] Failed to fetch conversation messages:', err);
       })
       .finally(() => {
         if (isSubscribed) setFetchingMessages(false);
@@ -133,108 +267,58 @@ export function FriendsView({ onStartMatch }) {
 
     return () => {
       isSubscribed = false;
+      socketService.unsubscribeRoom();
     };
-  }, [selectedFriend?.id, selectedFriend?.conversationId, jwtToken]);
+  }, [selectedFriend?.conversationId, jwtToken]);
 
-  // Auto-scroll on new messages or friend selection
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [dmMessages, selectedFriend, isFriendTyping]);
-
-  // Derive stable primitive IDs to prevent effect from re-firing on object reference changes
-  const selectedConversationId = selectedFriend?.conversationId || selectedFriend?.id || null;
-  const selectedFriendUserId = selectedFriend?.friendUserId || selectedFriend?.peerId || selectedFriend?.id || null;
-
-  // Subscribe to STOMP friend chat topics & online status when selectedFriend changes
-  useEffect(() => {
-    if (!selectedConversationId || !selectedFriendUserId) return;
-
-    const myId = user?.id || authService.getUserId();
-
-    if (isLiveConnected) {
-      console.log(`[FriendsView] Subscribing to chat topics: friendUserId=${selectedFriendUserId}, convId=${selectedConversationId}, myUserId=${myId}`);
-      socketService.subscribeChatTopic(selectedFriendUserId, selectedConversationId, myId);
-      socketService.sendOnlineStatus(selectedConversationId, true);
-    }
-
-    return () => {
-      if (isLiveConnected && selectedConversationId) {
-        socketService.sendOnlineStatus(selectedConversationId, false);
-      }
-    };
-  }, [selectedConversationId, selectedFriendUserId, isLiveConnected, user?.id]);
-
-  // Listen for incoming socket events (messages, typing, online status)
+  // Hook into incoming socket events
   useEffect(() => {
     const prevMsgCb = socketService.callbacks.onMessageReceived;
     const prevTypingCb = socketService.callbacks.onTypingStatus;
     const prevOnlineCb = socketService.callbacks.onOnlineStatus;
 
     socketService.callbacks.onMessageReceived = (msg) => {
-      console.log('[FriendsView] Incoming socket message:', msg);
-      const senderId = String(msg.senderId || '');
-      const myId = String(user?.id || authService.getUserId() || '');
+      const activeConvId = selectedFriend?.conversationId;
+      const myUsername = user?.username || user?.id;
 
-      // Ignore our own sent messages if echoed back by server
-      if (senderId && senderId === myId) {
-        console.log('[FriendsView] Ignoring self-echo message');
-        return;
-      }
-
-      const activeFriendUserId = selectedFriend
-        ? String(selectedFriend.friendUserId || selectedFriend.peerId || selectedFriend.id || '')
-        : '';
-      const activeConvId = selectedFriend
-        ? String(selectedFriend.conversationId || selectedFriend.id || '')
-        : '';
-
-      const isFriendMsg = (
-        (activeFriendUserId && senderId === activeFriendUserId) ||
-        (activeConvId && String(msg.conversationId) === activeConvId) ||
-        friends.some(f =>
-          String(f.id) === senderId ||
-          String(f.friendUserId) === senderId ||
-          (f.username && String(f.username) === senderId)
-        )
-      );
-
-      if (isFriendMsg) {
-        const friendKey = activeFriendUserId || senderId;
-        console.log(`[FriendsView] Appending incoming message to friend key ${friendKey}`);
-
+      if (msg.conversationId === activeConvId || (selectedFriend && msg.senderId === (selectedFriend.username || selectedFriend.friendUserId))) {
         setDmMessages(prev => {
-          const currentList = prev[friendKey] || [];
+          const currentList = prev[activeConvId] || [];
           if (msg.id && currentList.some(m => m.id === msg.id)) return prev;
 
-          const rawTime = msg.timestamp || new Date().toISOString();
-          const updatedList = [
-            ...currentList,
-            {
-              id: msg.id || 'dm_' + Date.now(),
-              sender: friendKey,
-              text: msg.text || msg.message || msg.content || '',
-              time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              timestamp: rawTime
-            }
-          ];
+          const rawTime = msg.timestamp || msg.timeStamp || new Date().toISOString();
+          const isMe = msg.senderId === myUsername;
 
-          // Sort chronologically by timestamp
-          updatedList.sort((a, b) => {
-            const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-            const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-            return tA - tB;
-          });
+          const serverMsg = {
+            id: msg.id || 'dm_' + Date.now(),
+            sender: isMe ? 'me' : msg.senderId,
+            senderId: msg.senderId,
+            text: msg.text || msg.message || '',
+            status: 'SENT',
+            time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            timestamp: rawTime
+          };
+
+          // Reconcile optimistic sending message if exists
+          const pendingIdx = currentList.findIndex(
+            m => m.status === 'SENDING' && m.text === (msg.text || msg.message) && m.senderId === msg.senderId
+          );
+
+          if (pendingIdx !== -1) {
+            const updated = [...currentList];
+            updated[pendingIdx] = serverMsg;
+            return { ...prev, [activeConvId]: updated };
+          }
 
           return {
             ...prev,
-            [friendKey]: updatedList,
-            [selectedFriend?.id]: updatedList
+            [activeConvId]: [...currentList, serverMsg]
           };
         });
 
-        // Send seen receipt back to server
-        if (isLiveConnected && msg.id) {
-          socketService.sendSeen(msg.id, msg.conversationId || activeConvId);
+        // Send seen receipt
+        if (msg.id && activeConvId && msg.senderId !== myUsername) {
+          socketService.sendSeen(activeConvId, msg.id);
         }
       }
 
@@ -242,34 +326,20 @@ export function FriendsView({ onStartMatch }) {
     };
 
     socketService.callbacks.onTypingStatus = (typing, payload) => {
-      console.log('[FriendsView] Incoming typing status event:', typing, payload);
-      const senderId = String(payload?.senderId || '');
-      const myId = String(user?.id || authService.getUserId() || '');
-
-      // Ignore my own typing notification echoes
-      if (senderId && senderId === myId) {
-        return;
+      const myUsername = user?.username || user?.id;
+      if (payload?.senderId !== myUsername) {
+        setIsFriendTyping(Boolean(typing));
       }
-
-      setIsFriendTyping(Boolean(typing));
       if (prevTypingCb) prevTypingCb(typing, payload);
     };
 
     socketService.callbacks.onOnlineStatus = (isOnline, payload) => {
-      console.log('[FriendsView] Incoming online status event:', isOnline, payload);
-      const senderId = String(payload?.senderId || '');
-      const myId = String(user?.id || authService.getUserId() || '');
-
-      if (senderId && senderId === myId) return;
-
-      if (selectedFriend && (
-        String(selectedFriend.id) === senderId ||
-        String(selectedFriend.friendUserId) === senderId ||
-        payload?.conversationId === (selectedFriend.conversationId || selectedFriend.id)
-      )) {
-        setSelectedFriend(prev => prev ? { ...prev, isOnline: Boolean(isOnline) } : null);
+      const myUsername = user?.username || user?.id;
+      if (payload?.senderId !== myUsername && selectedFriend) {
+        if (payload?.senderId === (selectedFriend.username || selectedFriend.friendUserId)) {
+          setSelectedFriend(prev => prev ? { ...prev, isOnline: Boolean(isOnline), status: isOnline ? 'Online' : 'Offline' } : null);
+        }
       }
-
       if (prevOnlineCb) prevOnlineCb(isOnline, payload);
     };
 
@@ -278,90 +348,70 @@ export function FriendsView({ onStartMatch }) {
       socketService.callbacks.onTypingStatus = prevTypingCb;
       socketService.callbacks.onOnlineStatus = prevOnlineCb;
     };
-  }, [friends, selectedFriend, isLiveConnected, user?.id]);
+  }, [selectedFriend, user?.username, user?.id]);
 
-  // Handle opening friend chat (Friend Card click)
-  const handleSelectFriend = (friend) => {
-    console.log('[FriendsView] Friend card clicked:', friend);
-    setSelectedFriend(friend);
-    setMobileShowChat(true);
-    setIsFriendTyping(false);
-    setShowMenu(false);
-  };
+  // Scroll to bottom on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [dmMessages, selectedFriend, isFriendTyping]);
 
   const handleSendDm = (e) => {
     if (e) e.preventDefault();
     if (!dmInput.trim() || !selectedFriend) return;
 
     const messageText = dmInput.trim();
-    const friendUserId = selectedFriend.friendUserId || selectedFriend.peerId || selectedFriend.id;
-    const conversationId = selectedFriend.conversationId || selectedFriend.id;
-    const myId = user?.id || authService.getUserId();
-
+    const conversationId = selectedFriend.conversationId;
+    const friendUsername = selectedFriend.username || selectedFriend.friendUserId || selectedFriend.id;
     const rawTime = new Date().toISOString();
+
     const newMsg = {
-      id: 'dm_' + Date.now(),
+      id: 'pending_' + Date.now(),
       sender: 'me',
+      senderId: user?.username || user?.id || 'me',
       text: messageText,
+      status: 'SENDING',
       time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       timestamp: rawTime
     };
 
     setDmMessages(prev => {
-      const friendList = [...(prev[friendUserId] || []), newMsg];
-      friendList.sort((a, b) => {
-        const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        return tA - tB;
-      });
-
-      const selectedFriendList = [...(prev[selectedFriend.id] || []), newMsg];
-      selectedFriendList.sort((a, b) => {
-        const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        return tA - tB;
-      });
-
+      const key = conversationId || friendUsername;
+      const list = [...(prev[key] || []), newMsg];
       return {
         ...prev,
-        [friendUserId]: friendList,
-        [selectedFriend.id]: selectedFriendList
+        [key]: list
       };
     });
+
     setDmInput('');
 
-    // Send via socket & clear typing status
-    if (isLiveConnected) {
-      console.log(`[FriendsView] Sending DM via socket to friendUserId=${friendUserId}, convId=${conversationId}`);
-      socketService.sendTyping(false, friendUserId, conversationId, myId);
-      socketService.sendMessage(messageText, friendUserId, myId, conversationId);
+    if (conversationId) {
+      socketService.sendTyping(conversationId, false);
+      socketService.sendMessage(conversationId, messageText, 'TEXT');
     }
   };
 
   const handleInputChange = (e) => {
     setDmInput(e.target.value);
-    if (!selectedFriend || !isLiveConnected) return;
+    if (!selectedFriend?.conversationId) return;
 
-    const friendUserId = selectedFriend.friendUserId || selectedFriend.peerId || selectedFriend.id;
-    const conversationId = selectedFriend.conversationId || selectedFriend.id;
-    const myId = user?.id || authService.getUserId();
+    const conversationId = selectedFriend.conversationId;
 
     if (e.target.value.trim().length > 0) {
-      socketService.sendTyping(true, friendUserId, conversationId, myId);
+      socketService.sendTyping(conversationId, true);
       if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
       typingTimerRef.current = setTimeout(() => {
-        socketService.sendTyping(false, friendUserId, conversationId, myId);
-      }, 1200);
+        socketService.sendTyping(conversationId, false);
+      }, 1500);
     } else {
       if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-      socketService.sendTyping(false, friendUserId, conversationId, myId);
+      socketService.sendTyping(conversationId, false);
     }
   };
 
   const handleIcebreakerClick = (e) => {
     e.preventDefault();
     if (!selectedFriend) return;
-    console.log('[FriendsView] Icebreaker button clicked for friend:', selectedFriend);
     const randomQ = ICEBREAKER_QUESTIONS[Math.floor(Math.random() * ICEBREAKER_QUESTIONS.length)];
     setDmInput(`🧊 Icebreaker: ${randomQ}`);
   };
@@ -377,26 +427,30 @@ export function FriendsView({ onStartMatch }) {
     };
     setFloatingReactions(prev => [...prev, reactionObj]);
 
-    // Send emoji as message
-    const friendUserId = selectedFriend.friendUserId || selectedFriend.peerId || selectedFriend.id;
-    const conversationId = selectedFriend.conversationId || selectedFriend.id;
-    const myId = user?.id || authService.getUserId();
+    const conversationId = selectedFriend.conversationId;
+    const friendUsername = selectedFriend.username || selectedFriend.friendUserId || selectedFriend.id;
+    const rawTime = new Date().toISOString();
 
     const newMsg = {
-      id: 'dm_' + Date.now(),
+      id: 'pending_' + Date.now(),
       sender: 'me',
+      senderId: user?.username || user?.id || 'me',
       text: emoji,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      status: 'SENDING',
+      time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: rawTime
     };
 
-    setDmMessages(prev => ({
-      ...prev,
-      [friendUserId]: [...(prev[friendUserId] || []), newMsg],
-      [selectedFriend.id]: [...(prev[selectedFriend.id] || []), newMsg]
-    }));
+    setDmMessages(prev => {
+      const key = conversationId || friendUsername;
+      return {
+        ...prev,
+        [key]: [...(prev[key] || []), newMsg]
+      };
+    });
 
-    if (isLiveConnected) {
-      socketService.sendMessage(emoji, friendUserId, myId, conversationId);
+    if (conversationId) {
+      socketService.sendMessage(conversationId, emoji, 'TEXT');
     }
 
     setTimeout(() => {
@@ -404,8 +458,8 @@ export function FriendsView({ onStartMatch }) {
     }, 1800);
   };
 
-  const currentFriendKey = selectedFriend ? (selectedFriend.friendUserId || selectedFriend.id) : null;
-  const currentMessages = currentFriendKey ? (dmMessages[currentFriendKey] || dmMessages[selectedFriend.id] || []) : [];
+  const activeKey = selectedFriend ? (selectedFriend.conversationId || selectedFriend.username || selectedFriend.id) : null;
+  const currentMessages = activeKey ? (dmMessages[activeKey] || []) : [];
 
   return (
     <div style={{
@@ -430,7 +484,7 @@ export function FriendsView({ onStartMatch }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Users size={22} color="var(--primary-purple)" />
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 700 }}>My Friends ({friends.length})</h2>
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Friends ({friends.length})</h2>
           </div>
 
           <button
@@ -471,7 +525,7 @@ export function FriendsView({ onStartMatch }) {
         {friends.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)' }}>
             <p>No friends added yet!</p>
-            <p style={{ fontSize: '0.8rem', marginTop: '8px' }}>Match with strangers and add them to your friends list!</p>
+            <p style={{ fontSize: '0.8rem', marginTop: '8px' }}>Match with strangers and send them friend requests!</p>
             <button
               onClick={onStartMatch}
               className="btn-primary"
@@ -483,10 +537,15 @@ export function FriendsView({ onStartMatch }) {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
             {friends.map(friend => {
-              const isSelected = selectedFriend && (selectedFriend.id === friend.id || selectedFriend.friendUserId === friend.friendUserId);
+              const friendUsername = friend.username || friend.friendUserId || friend.id;
+              const isSelected = selectedFriend && (
+                (selectedFriend.conversationId && selectedFriend.conversationId === friend.conversationId) ||
+                (selectedFriend.username === friendUsername)
+              );
+
               return (
                 <div
-                  key={friend.id || friend.friendUserId}
+                  key={friendUsername || friend.conversationId}
                   onClick={() => handleSelectFriend(friend)}
                   style={{
                     display: 'flex',
@@ -500,29 +559,41 @@ export function FriendsView({ onStartMatch }) {
                     transition: 'all 0.2s ease'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
                     <div style={{
                       width: '42px',
                       height: '42px',
                       borderRadius: '50%',
-                      backgroundColor: friend.avatarBg || '#ec4899',
+                      backgroundColor: '#8b5cf6',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontSize: '1.3rem',
                       overflow: 'hidden',
-                      position: 'relative'
+                      flexShrink: 0
                     }}>
                       {friend.photoUrl ? (
                         <img src={friend.photoUrl} alt={friend.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
                       ) : (
-                        friend.avatar || '👤'
+                        '👤'
                       )}
                     </div>
-                    <div>
-                      <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>{friend.name || friend.friendUserName}</div>
-                      <div style={{ fontSize: '0.75rem', color: isLiveConnected ? 'var(--green-accent)' : 'var(--text-muted)' }}>
-                        {friend.status || 'Tap to chat'}
+                    <div style={{ overflow: 'hidden', flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                        <span style={{ fontSize: '0.95rem', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                          {friend.name || friend.friendUserName || friendUsername}
+                        </span>
+                        <span style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 600,
+                          color: friend.isOnline ? 'var(--green-accent)' : 'var(--text-muted)',
+                          flexShrink: 0
+                        }}>
+                          {friend.isOnline ? 'Online' : 'Offline'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', marginTop: '2px' }}>
+                        {friend.lastMessage || 'Say hi!'}
                       </div>
                     </div>
                   </div>
@@ -530,8 +601,8 @@ export function FriendsView({ onStartMatch }) {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      removeFriend(friend.id);
-                      if (selectedFriend && selectedFriend.id === friend.id) {
+                      removeFriend(friendUsername);
+                      if (selectedFriend && (selectedFriend.username === friendUsername || selectedFriend.friendUserId === friendUsername)) {
                         setSelectedFriend(null);
                         setMobileShowChat(false);
                       }
@@ -586,7 +657,6 @@ export function FriendsView({ onStartMatch }) {
               zIndex: 10
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                {/* Back button on mobile viewports */}
                 <button
                   onClick={() => setMobileShowChat(false)}
                   style={{
@@ -608,7 +678,7 @@ export function FriendsView({ onStartMatch }) {
                   width: '44px',
                   height: '44px',
                   borderRadius: '50%',
-                  backgroundColor: selectedFriend.avatarBg || '#8b5cf6',
+                  backgroundColor: '#8b5cf6',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -619,14 +689,18 @@ export function FriendsView({ onStartMatch }) {
                   {selectedFriend.photoUrl ? (
                     <img src={selectedFriend.photoUrl} alt={selectedFriend.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
                   ) : (
-                    selectedFriend.avatar || '👤'
+                    '👤'
                   )}
                 </div>
 
                 <div>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{selectedFriend.name || selectedFriend.friendUserName}</h3>
-                  <span style={{ fontSize: '0.8rem', color: isLiveConnected ? 'var(--green-accent)' : 'var(--text-muted)' }}>
-                    {isLiveConnected ? '● Live Chat' : '● Local Only'}
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username}</h3>
+                  <span style={{
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: selectedFriend.isOnline ? 'var(--green-accent)' : 'var(--text-muted)'
+                  }}>
+                    {selectedFriend.isOnline ? 'Online' : 'Offline'}
                   </span>
                 </div>
               </div>
@@ -661,7 +735,8 @@ export function FriendsView({ onStartMatch }) {
                   }}>
                     <button
                       onClick={() => {
-                        removeFriend(selectedFriend.id);
+                        const targetUser = selectedFriend.username || selectedFriend.friendUserId || selectedFriend.id;
+                        removeFriend(targetUser);
                         setSelectedFriend(null);
                         setMobileShowChat(false);
                         setShowMenu(false);
@@ -699,10 +774,9 @@ export function FriendsView({ onStartMatch }) {
               zIndex: 10
             }}>
               <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.82rem', margin: '12px 0' }}>
-                Direct conversation with <strong style={{ color: 'white' }}>{selectedFriend.name || selectedFriend.friendUserName}</strong>
+                Direct conversation with <strong style={{ color: 'white' }}>{selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username}</strong>
               </div>
 
-              {/* Loading indicator when fetching chat history */}
               {fetchingMessages && (
                 <div style={{
                   display: 'flex',
@@ -714,12 +788,12 @@ export function FriendsView({ onStartMatch }) {
                   padding: '8px'
                 }}>
                   <Loader2 size={16} className="animate-spin" />
-                  <span>Loading existing messages...</span>
+                  <span>Loading messages...</span>
                 </div>
               )}
 
               {currentMessages.map(m => {
-                const isMe = m.sender === 'me';
+                const isMe = m.sender === 'me' || m.senderId === (user?.username || user?.id);
                 return (
                   <div
                     key={m.id}
@@ -751,17 +825,16 @@ export function FriendsView({ onStartMatch }) {
                 );
               })}
 
-              {/* Typing indicator */}
               {isFriendTyping && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                  <span>{selectedFriend.name || selectedFriend.friendUserName} is typing...</span>
+                  <span>{selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username} is typing...</span>
                 </div>
               )}
 
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick Actions Sub-bar (Icebreaker & Reactions) */}
+            {/* Quick Actions Sub-bar */}
             <div style={{
               padding: '8px 20px',
               borderTop: '1px solid var(--border-color)',
@@ -832,14 +905,11 @@ export function FriendsView({ onStartMatch }) {
                 value={dmInput}
                 onChange={handleInputChange}
                 onBlur={() => {
-                  if (selectedFriend && isLiveConnected) {
-                    const friendUserId = selectedFriend.friendUserId || selectedFriend.peerId || selectedFriend.id;
-                    const conversationId = selectedFriend.conversationId || selectedFriend.id;
-                    const myId = user?.id || authService.getUserId();
-                    socketService.sendTyping(false, friendUserId, conversationId, myId);
+                  if (selectedFriend?.conversationId) {
+                    socketService.sendTyping(selectedFriend.conversationId, false);
                   }
                 }}
-                placeholder={`Message ${selectedFriend.name || selectedFriend.friendUserName}...`}
+                placeholder={`Message ${selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username}...`}
                 style={{
                   flex: 1,
                   padding: '14px 20px',

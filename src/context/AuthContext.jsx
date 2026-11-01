@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { authService } from '../services/authService';
 
 const AuthContext = createContext();
@@ -28,19 +28,127 @@ export function AuthProvider({ children }) {
   const [profilePictures, setProfilePictures] = useState([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // Friends list — starts from localStorage, synced from API when authenticated
-  const [friends, setFriends] = useState(() => {
-    const saved = localStorage.getItem('randomeet_friends');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
-    }
-    return [];
-  });
-
+  // Friends & conversations lists
+  const [friends, setFriends] = useState([]);
   const [friendRequests, setFriendRequests] = useState([]);
   const [friendRequestsLoading, setFriendRequestsLoading] = useState(false);
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [upgradeModalReason, setUpgradeModalReason] = useState('');
 
-  // On landing: verify stored session and fetch profile pictures from API
+  const isGuest = Boolean(user?.isGuest);
+
+  const openUpgradeModal = (reason = '') => {
+    setUpgradeModalReason(reason);
+    setUpgradeModalOpen(true);
+  };
+
+  const closeUpgradeModal = () => {
+    setUpgradeModalOpen(false);
+    setUpgradeModalReason('');
+  };
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  const pollTimerRef = useRef(null);
+
+  /**
+   * Load friends and conversations from backend API.
+   */
+  const loadFriendsFromApi = useCallback(async (token = jwtToken) => {
+    const activeToken = token || authService.getToken();
+    if (!activeToken) return;
+
+    try {
+      const [friendsList, conversations] = await Promise.all([
+        authService.getFriendsList(activeToken).catch(() => []),
+        authService.getUserConversations(0, 50, activeToken).catch(() => [])
+      ]);
+
+      const convMap = new Map();
+      conversations.forEach(c => {
+        if (c.friendUserId) {
+          convMap.set(c.friendUserId, c);
+        }
+      });
+
+      // Merge friends with conversation metadata
+      const mergedFriends = friendsList.map(f => {
+        const conv = convMap.get(f.username);
+        return {
+          ...f,
+          id: f.username,
+          friendUserId: f.username,
+          friendUserName: f.name || f.username,
+          conversationId: conv ? conv.conversationId : null,
+          lastMessage: conv?.lastMessage || 'Say hi!',
+          lastMessageTime: conv?.lastMessageTime || '',
+          unseenCount: conv?.unseenCount || 0
+        };
+      });
+
+      // Add any conversations with users not in friends list
+      conversations.forEach(c => {
+        if (!mergedFriends.some(f => f.username === c.friendUserId)) {
+          mergedFriends.push({
+            id: c.friendUserId,
+            username: c.friendUserId,
+            friendUserId: c.friendUserId,
+            name: c.friendUserName || c.friendUserId,
+            friendUserName: c.friendUserName || c.friendUserId,
+            photoUrl: c.photoUrl || '',
+            conversationId: c.conversationId,
+            lastMessage: c.lastMessage || 'Say hi!',
+            lastMessageTime: c.lastMessageTime || '',
+            unseenCount: c.unseenCount || 0,
+            isOnline: false,
+            status: 'Offline'
+          });
+        }
+      });
+
+      setFriends(mergedFriends);
+      localStorage.setItem('randomeet_friends', JSON.stringify(mergedFriends));
+    } catch (e) {
+      console.warn('[AuthContext] loadFriendsFromApi error:', e);
+    }
+  }, [jwtToken]);
+
+  /**
+   * Fetch pending friend requests.
+   */
+  const loadFriendRequests = useCallback(async (token = jwtToken) => {
+    const activeToken = token || authService.getToken();
+    if (!activeToken) return [];
+    setFriendRequestsLoading(true);
+    try {
+      const requests = await authService.getPendingFriendRequests(activeToken);
+      setFriendRequests(requests);
+      return requests;
+    } catch (e) {
+      console.warn('[AuthContext] Failed to load pending friend requests:', e);
+      return [];
+    } finally {
+      setFriendRequestsLoading(false);
+    }
+  }, [jwtToken]);
+
+  // Periodic polling for social sync (requests, friends list)
+  useEffect(() => {
+    if (!isAuthenticated || !jwtToken || isGuest) {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      return;
+    }
+
+    pollTimerRef.current = setInterval(() => {
+      loadFriendsFromApi(jwtToken);
+      loadFriendRequests(jwtToken);
+    }, 4000);
+
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
+  }, [isAuthenticated, jwtToken, isGuest, loadFriendsFromApi, loadFriendRequests]);
+
+  // Initial Auth check on mount
   useEffect(() => {
     let isMounted = true;
     async function initLandingAuth() {
@@ -49,18 +157,18 @@ export function AuthProvider({ children }) {
           authService.checkLandingAuth(),
           authService.getProfilePictures().catch(() => [])
         ]);
-        console.log('Landing auth check result:', res, 'Profile pictures:', pics);
+
         if (isMounted) {
           setIsAuthenticated(res.isAuthenticated);
           setUser(res.user);
           setJwtToken(res.jwt || null);
+
           if (Array.isArray(pics) && pics.length > 0) {
             setProfilePictures(pics);
           }
 
-          // Load real friends & requests from API if authenticated
-          if (res.isAuthenticated && res.user?.id && res.jwt) {
-            loadFriendsFromApi(res.user.id, res.jwt);
+          if (res.isAuthenticated && res.jwt && !res.user?.isGuest) {
+            loadFriendsFromApi(res.jwt);
             loadFriendRequests(res.jwt);
           }
         }
@@ -79,92 +187,61 @@ export function AuthProvider({ children }) {
 
     initLandingAuth();
     return () => { isMounted = false; };
-  }, []);
+  }, [loadFriendsFromApi, loadFriendRequests]);
 
-  // Persist friends to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('randomeet_friends', JSON.stringify(friends));
-  }, [friends]);
-
-  /**
-   * Load friends & conversations from backend API.
-   * Matches FriendRepository.kt: GET /conversations/my-conversations
-   */
-  const loadFriendsFromApi = async (userId = user?.id, token = jwtToken) => {
-    if (!token) return;
-    const conversations = await authService.getFriendConversations(token);
-    if (conversations !== null) {
-      setFriends(conversations);
-      return;
+  const sendFriendRequest = async (targetUsername) => {
+    const token = jwtToken || authService.getToken();
+    if (!token || !targetUsername) {
+      throw new Error('User token or target username missing.');
     }
+    try {
+      await authService.sendFriendRequest(targetUsername, token);
+    } catch (err) {
+      if (err.status === 409 || (err.message && err.message.toLowerCase().includes('already exists'))) {
+        // Request or friendship already exists on server, treat gracefully
+        return;
+      }
+      throw err;
+    }
+    await loadFriendRequests(token);
+  };
 
-    // Fall back to GET /api/friends/{userId}
-    if (userId) {
-      const apiFriends = await authService.getFriends(userId, token);
-      if (apiFriends !== null) {
-        setFriends(apiFriends);
+  const acceptFriendRequest = async (targetUsername) => {
+    const token = jwtToken || authService.getToken();
+    if (!token || !targetUsername) return;
+    await authService.acceptFriendRequest(targetUsername, token);
+    setFriendRequests(prev => prev.filter(r => r.username !== targetUsername && r.id !== targetUsername));
+    await loadFriendsFromApi(token);
+  };
+
+  const rejectFriendRequest = async (targetUsername) => {
+    const token = jwtToken || authService.getToken();
+    if (!token || !targetUsername) return;
+    await authService.rejectFriendRequest(targetUsername, token);
+    setFriendRequests(prev => prev.filter(r => r.username !== targetUsername && r.id !== targetUsername));
+  };
+
+  const removeFriend = async (friendUsername) => {
+    const token = jwtToken || authService.getToken();
+    setFriends(prev => prev.filter(f => f.username !== friendUsername && f.id !== friendUsername));
+
+    if (token && friendUsername) {
+      try {
+        await authService.removeFriendApi(friendUsername, token);
+        await loadFriendsFromApi(token);
+      } catch (e) {
+        console.warn('Failed to delete friendship on server:', e);
       }
     }
   };
 
-  /**
-   * Fetch pending friend requests from backend API.
-   * Matches FriendRepository.kt: GET /friendships/to-be-accepted
-   */
-  const loadFriendRequests = async (token = jwtToken) => {
-    if (!token) return [];
-    setFriendRequestsLoading(true);
-    try {
-      const requests = await authService.getPendingFriendRequests(token);
-      setFriendRequests(requests);
-      return requests;
-    } catch (e) {
-      console.warn('Failed to load pending friend requests:', e);
-      return [];
-    } finally {
-      setFriendRequestsLoading(false);
+  const addFriend = async (newFriend) => {
+    const targetUsername = newFriend.username || newFriend.friendUserId || newFriend.id;
+    if (targetUsername) {
+      await sendFriendRequest(targetUsername);
     }
   };
 
-  /**
-   * Send friend request to target friendId (userId or username).
-   * Matches FriendRepository.kt: POST /friendships/request/{friendId}/send
-   */
-  const sendFriendRequest = async (friendId) => {
-    const token = jwtToken || authService.getToken();
-    if (!token || !friendId) {
-      throw new Error('User token or friend ID missing.');
-    }
-    await authService.sendFriendRequest(friendId, token);
-  };
-
-  /**
-   * Accept pending friend request.
-   * Matches FriendRepository.kt: POST /friendships/request/{friendId}/accept
-   */
-  const acceptFriendRequest = async (friendId) => {
-    const token = jwtToken || authService.getToken();
-    if (!token || !friendId) return;
-    await authService.acceptFriendRequest(friendId, token);
-    setFriendRequests(prev => prev.filter(r => (r.id !== friendId && r.username !== friendId)));
-    // Refresh friends list after accepting
-    await loadFriendsFromApi(user?.id, token);
-  };
-
-  /**
-   * Reject pending friend request.
-   * Matches FriendRepository.kt: POST /friendships/request/{friendId}/reject
-   */
-  const rejectFriendRequest = async (friendId) => {
-    const token = jwtToken || authService.getToken();
-    if (!token || !friendId) return;
-    await authService.rejectFriendRequest(friendId, token);
-    setFriendRequests(prev => prev.filter(r => (r.id !== friendId && r.username !== friendId)));
-  };
-
-  /**
-   * Login with username + password
-   */
   const login = async (username, password) => {
     setAuthError('');
     try {
@@ -173,12 +250,8 @@ export function AuthProvider({ children }) {
       setUser(res.user);
       setJwtToken(res.authResponse.jwt);
 
-      // Load real friends & requests from API after login
-      if (res.user?.id && res.authResponse?.jwt) {
-        loadFriendsFromApi(res.user.id, res.authResponse.jwt);
-        loadFriendRequests(res.authResponse.jwt);
-      }
-
+      loadFriendsFromApi(res.authResponse.jwt);
+      loadFriendRequests(res.authResponse.jwt);
       return res;
     } catch (err) {
       setAuthError(err.message || 'Login failed.');
@@ -186,9 +259,6 @@ export function AuthProvider({ children }) {
     }
   };
 
-  /**
-   * Register a new account
-   */
   const signUp = async (userData) => {
     setAuthError('');
     try {
@@ -196,6 +266,9 @@ export function AuthProvider({ children }) {
       setIsAuthenticated(true);
       setUser(res.user);
       setJwtToken(res.authResponse.jwt);
+
+      loadFriendsFromApi(res.authResponse.jwt);
+      loadFriendRequests(res.authResponse.jwt);
       return res;
     } catch (err) {
       setAuthError(err.message || 'Sign up failed.');
@@ -203,15 +276,40 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
-
-  const requestLogout = () => {
-    setShowLogoutModal(true);
+  const loginAsGuest = async ({ name, gender }) => {
+    setAuthError('');
+    try {
+      const res = await authService.loginAsGuest({ name, gender });
+      setIsAuthenticated(true);
+      setUser(res.user);
+      setJwtToken(res.authResponse.jwt);
+      setFriends([]);
+      setFriendRequests([]);
+      return res;
+    } catch (err) {
+      setAuthError(err.message || 'Guest entry failed.');
+      throw err;
+    }
   };
 
-  const cancelLogout = () => {
-    setShowLogoutModal(false);
+  const upgradeGuestAccount = async (data) => {
+    setAuthError('');
+    try {
+      const res = await authService.upgradeGuest(data, jwtToken);
+      setUser(res.user);
+      setJwtToken(res.authResponse.jwt);
+      closeUpgradeModal();
+      loadFriendsFromApi(res.authResponse.jwt);
+      loadFriendRequests(res.authResponse.jwt);
+      return res;
+    } catch (err) {
+      setAuthError(err.message || 'Upgrade failed.');
+      throw err;
+    }
   };
+
+  const requestLogout = () => setShowLogoutModal(true);
+  const cancelLogout = () => setShowLogoutModal(false);
 
   const performLogout = () => {
     setShowLogoutModal(false);
@@ -224,35 +322,14 @@ export function AuthProvider({ children }) {
     setFriendRequests([]);
   };
 
-  const logout = () => {
-    requestLogout();
-  };
+  const logout = () => requestLogout();
 
   const updateUserProfile = (updated) => {
     setUser(prev => {
       const nextUser = { ...prev, ...updated };
-      authService.setSession({ userId: nextUser?.id, jwt: jwtToken }, nextUser);
+      authService.setSession({ userId: nextUser?.username || nextUser?.id, jwt: jwtToken }, nextUser);
       return nextUser;
     });
-  };
-
-  /**
-   * Add friend — sends API friend request to friendId.
-   */
-  const addFriend = async (newFriend) => {
-    const targetId = newFriend.id || newFriend.username || newFriend.friendUserId;
-    if (targetId) {
-      await sendFriendRequest(targetId);
-    }
-  };
-
-  const removeFriend = async (friendId) => {
-    setFriends(prev => prev.filter(f => f.id !== friendId && f.friendUserId !== friendId));
-
-    // Also remove from API (best-effort)
-    if (user?.id && jwtToken && friendId) {
-      authService.removeFriendApi(user.id, jwtToken, friendId);
-    }
   };
 
   const clearAuthError = () => setAuthError('');
@@ -260,6 +337,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       isAuthenticated,
+      isGuest,
       jwtToken,
       user,
       profilePictures,
@@ -272,6 +350,12 @@ export function AuthProvider({ children }) {
       clearAuthError,
       login,
       signUp,
+      loginAsGuest,
+      upgradeGuestAccount,
+      upgradeModalOpen,
+      upgradeModalReason,
+      openUpgradeModal,
+      closeUpgradeModal,
       logout,
       updateUserProfile,
       soundEnabled,

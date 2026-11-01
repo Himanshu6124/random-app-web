@@ -52,6 +52,7 @@ export function SocketProvider({ children }) {
   const [currentPeer, setCurrentPeer] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isPeerTyping, setIsPeerTyping] = useState(false);
+  const [isPeerOnline, setIsPeerOnline] = useState(true);
   const [floatingReactions, setFloatingReactions] = useState([]);
 
   // Connection status: 'connecting' | 'connected' | 'disconnected'
@@ -63,34 +64,36 @@ export function SocketProvider({ children }) {
   });
 
   const typingTimerRef = useRef(null);
-  
-  const matchStateRef = useRef('idle');
-  useEffect(() => { matchStateRef.current = matchState; }, [matchState]);
-
   const soundEnabledRef = useRef(soundEnabled);
   const userRef = useRef(user);
+
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
   useEffect(() => { userRef.current = user; }, [user]);
 
   /**
-   * Called when match is found from server CONVERSATION_DTO
+   * Called when a match is found from server CONVERSATION_DTO
    */
   const handleMatchFound = useCallback((peer) => {
     const resolvedName = extractPeerName(peer);
+    const peerUsername = peer.friendUserId || peer.username || peer.peerId || '';
     const peerObj = {
       ...peer,
+      username: peerUsername,
+      friendUserId: peerUsername,
       name: resolvedName,
       friendUserName: resolvedName,
       userName: resolvedName
     };
 
     setCurrentPeer(peerObj);
+    setIsPeerOnline(true);
+    setIsPeerTyping(false);
     setMatchState('matched');
 
-    // Subscribe to chat topic & send online status
-    if (socketService.isConnected) {
-      socketService.subscribeChatTopic(peerObj.peerId || peerObj.id, peerObj.id || peerObj.conversationId);
-      socketService.sendOnlineStatus(peerObj.id || peerObj.conversationId, true);
+    // Subscribe to unified room channel
+    const conversationId = peerObj.conversationId || peerObj.id;
+    if (conversationId) {
+      socketService.subscribeRoom(conversationId);
     }
 
     setMessages([
@@ -106,22 +109,35 @@ export function SocketProvider({ children }) {
   }, []);
 
   const handleMessageReceived = useCallback((msg) => {
-    setMessages(prev => [...prev, msg]);
-    // Send seen receipt back to server
-    if (socketService.isConnected && msg.id && currentPeer?.id) {
-      socketService.sendSeen(msg.id, currentPeer.id);
+    const myUsername = userRef.current?.username || userRef.current?.id;
+
+    setMessages(prev => {
+      // Prevent duplicate messages if already in list
+      if (prev.some(m => m.id === msg.id)) {
+        return prev;
+      }
+      return [...prev, msg];
+    });
+
+    // Mark as seen immediately in random chat
+    if (msg.id && msg.conversationId && msg.senderId !== myUsername) {
+      socketService.sendRandomChatSeen(msg.conversationId, msg.id);
     }
-    if (soundEnabledRef.current && msg.senderId !== userRef.current?.id) playChime('message');
-  }, [currentPeer]);
+
+    if (soundEnabledRef.current && msg.senderId !== myUsername) {
+      playChime('message');
+    }
+  }, []);
 
   const handleMatchFoundRef = useRef(handleMatchFound);
   const handleMessageReceivedRef = useRef(handleMessageReceived);
   useEffect(() => { handleMatchFoundRef.current = handleMatchFound; }, [handleMatchFound]);
   useEffect(() => { handleMessageReceivedRef.current = handleMessageReceived; }, [handleMessageReceived]);
 
-  // Connect STOMP socket
+  // Connect STOMP socket when authenticated
   useEffect(() => {
-    if (!jwtToken || !user?.id) {
+    const userId = user?.username || user?.id;
+    if (!jwtToken || !userId) {
       setConnectionStatus('disconnected');
       socketService.disconnect();
       return;
@@ -132,10 +148,10 @@ export function SocketProvider({ children }) {
     socketService.connect(
       '/ws-chat',
       jwtToken,
-      user.id,
+      userId,
       {
-        onConnect: (sessionId) => {
-          console.log('[SocketContext] STOMP connected, session:', sessionId);
+        onConnect: () => {
+          console.log('[SocketContext] STOMP connected successfully');
           setConnectionStatus('connected');
         },
         onDisconnect: () => {
@@ -148,10 +164,25 @@ export function SocketProvider({ children }) {
         onMessageReceived: (msg) => {
           handleMessageReceivedRef.current(msg);
         },
-        onTypingStatus: (typing) => {
-          setIsPeerTyping(typing);
+        onTypingStatus: (typing, payload) => {
+          const myId = userRef.current?.username || userRef.current?.id;
+          if (payload?.senderId && payload.senderId === myId) return;
+          setIsPeerTyping(Boolean(typing));
+          if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+          if (typing) {
+            typingTimerRef.current = setTimeout(() => {
+              setIsPeerTyping(false);
+            }, 3000);
+          }
+        },
+        onOnlineStatus: (isOnline, payload) => {
+          const myId = userRef.current?.username || userRef.current?.id;
+          if (payload?.senderId && payload.senderId === myId) return;
+          setIsPeerOnline(Boolean(isOnline));
         },
         onPeerDisconnected: (disconnectedUser) => {
+          setIsPeerOnline(false);
+          setIsPeerTyping(false);
           const peerName = typeof disconnectedUser === 'string' && disconnectedUser.trim() ? disconnectedUser : 'Stranger';
           setMessages(prev => [
             ...prev,
@@ -165,6 +196,7 @@ export function SocketProvider({ children }) {
           setTimeout(() => {
             setMatchState('idle');
             setCurrentPeer(null);
+            socketService.unsubscribeRoom();
           }, 2500);
         },
         onError: (err) => {
@@ -174,23 +206,10 @@ export function SocketProvider({ children }) {
       }
     );
 
-    const connectionTimeout = setTimeout(() => {
-      if (!socketService.isConnected) {
-        console.log('[SocketContext] STOMP connection timeout');
-        setConnectionStatus('disconnected');
-      }
-    }, 4000);
-
-    return () => {
-      clearTimeout(connectionTimeout);
-    };
-  }, [jwtToken, user?.id]);
-
-  useEffect(() => {
     return () => {
       socketService.disconnect();
     };
-  }, []);
+  }, [jwtToken, user?.username, user?.id]);
 
   const isLiveConnected = connectionStatus === 'connected' && socketService.isConnected;
 
@@ -198,81 +217,63 @@ export function SocketProvider({ children }) {
     setMatchState('searching');
     setCurrentPeer(null);
     setMessages([]);
-
-    if (isLiveConnected) {
-      socketService.findMatch(user, filters);
-    }
-  }, [isLiveConnected, user, filters]);
+    socketService.startMatchmaking(user);
+  }, [user]);
 
   const cancelSearch = useCallback(() => {
     setMatchState('idle');
+    socketService.cancelMatchmaking();
   }, []);
 
   const skipStranger = useCallback(() => {
-    if (isLiveConnected && currentPeer) {
-      socketService.skipPeer(currentPeer.peerId || currentPeer.id, currentPeer.id);
+    setIsPeerTyping(false);
+    setIsPeerOnline(true);
+    if (currentPeer) {
+      const convId = currentPeer.conversationId || currentPeer.id;
+      socketService.sendDisconnect(convId);
+      socketService.unsubscribeRoom();
     }
     setCurrentPeer(null);
     setMessages([]);
-
     setMatchState('searching');
+
     setTimeout(() => {
-      if (isLiveConnected) {
-        socketService.findMatch(user, filters);
-      }
-    }, 0);
-  }, [isLiveConnected, currentPeer, user, filters]);
+      socketService.startMatchmaking(user);
+    }, 150);
+  }, [currentPeer, user]);
 
   const disconnectChat = useCallback(() => {
-    if (isLiveConnected && currentPeer) {
-      socketService.skipPeer(currentPeer.peerId || currentPeer.id, currentPeer.id);
+    setIsPeerTyping(false);
+    setIsPeerOnline(true);
+    if (currentPeer) {
+      const convId = currentPeer.conversationId || currentPeer.id;
+      socketService.sendDisconnect(convId);
+      socketService.unsubscribeRoom();
     }
     setCurrentPeer(null);
     setMatchState('idle');
     setMessages([]);
-  }, [isLiveConnected, currentPeer]);
+  }, [currentPeer]);
 
   const sendMessage = useCallback((text) => {
     if (!text || !text.trim() || !currentPeer) return;
 
     const messageText = text.trim();
     const conversationId = currentPeer.conversationId || currentPeer.id;
-    const peerId = currentPeer.peerId || currentPeer.friendUserId || currentPeer.id;
 
-    const newMsg = {
-      id: 'msg_' + Date.now(),
-      senderId: user?.id || 'me',
-      senderName: user?.name || user?.username || 'Me',
-      text: messageText,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-
-    // setMessages(prev => [...prev, newMsg]);
-
-    if (isLiveConnected) {
-      socketService.sendRandomChatMessage(messageText, peerId, conversationId, user?.id);
-      socketService.sendTyping(false, peerId, conversationId, user?.id);
+    if (conversationId) {
+      // Use /app/chat.random.send for random matchmaking chat
+      socketService.sendRandomChatMessage(conversationId, messageText, 'TEXT');
     }
-  }, [isLiveConnected, currentPeer, user]);
+  }, [currentPeer]);
 
   const notifyTyping = useCallback((isCurrentlyTyping) => {
-    if (!isLiveConnected || !currentPeer) return;
-
+    if (!currentPeer) return;
     const conversationId = currentPeer.conversationId || currentPeer.id;
-    const peerId = currentPeer.peerId || currentPeer.friendUserId || currentPeer.id;
-
-    if (isCurrentlyTyping) {
-      socketService.sendTyping(true, peerId, conversationId, user?.id);
-
-      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-      typingTimerRef.current = setTimeout(() => {
-        socketService.sendTyping(false, peerId, conversationId, user?.id);
-      }, 1000);
-    } else {
-      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-      socketService.sendTyping(false, peerId, conversationId, user?.id);
+    if (conversationId) {
+      socketService.sendTyping(conversationId, isCurrentlyTyping);
     }
-  }, [isLiveConnected, currentPeer, user?.id]);
+  }, [currentPeer]);
 
   const sendReaction = useCallback((emoji) => {
     const reactionObj = {
@@ -310,6 +311,7 @@ export function SocketProvider({ children }) {
       currentPeer,
       messages,
       isPeerTyping,
+      isPeerOnline,
       filters,
       setFilters,
       toggleInterestFilter,
@@ -331,4 +333,3 @@ export function SocketProvider({ children }) {
 }
 
 export const useSocket = () => useContext(SocketContext);
-

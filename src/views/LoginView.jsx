@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { useAuth, AVATAR_LIST, INTEREST_TAGS } from '../context/AuthContext';
+import { useAuth, INTEREST_TAGS } from '../context/AuthContext';
+import { GuestEntryModal } from '../components/GuestEntryModal';
 import './LoginView.css';
 
 export function LoginView() {
-  const { login, signUp, authError, clearAuthError, profilePictures } = useAuth();
+  const { login, signUp, loginAsGuest, authError, clearAuthError, profilePictures } = useAuth();
 
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
   const [loading, setLoading] = useState(false);
+  const [guestModalOpen, setGuestModalOpen] = useState(false);
   const [localError, setLocalError] = useState('');
 
   // Login form state
@@ -18,10 +20,9 @@ export function LoginView() {
   const [signUpPassword, setSignUpPassword] = useState('');
   const [signUpName, setSignUpName] = useState('');
   const [signUpEmail, setSignUpEmail] = useState('');
-
-  const [signUpGender, setSignUpGender] = useState('Non-binary');
+  const [signUpGender, setSignUpGender] = useState('boy');
   const [signUpBio, setSignUpBio] = useState('');
-  const [selectedPhotoUrl, setSelectedPhotoUrl] = useState('');
+  const [selectedPhotoUrl, setSelectedPhotoUrl] = useState('/userImages/boy1.png');
   const [signUpAvatar, setSignUpAvatar] = useState(null);
   const [selectedInterests, setSelectedInterests] = useState(['Tech', 'Gaming']);
 
@@ -41,7 +42,7 @@ export function LoginView() {
     e.preventDefault();
     setLocalError('');
     if (!loginUsername.trim() || !loginPassword.trim()) {
-      setLocalError('Please fill in both username and password.');
+      setLocalError('Please enter both username and password.');
       return;
     }
     setLoading(true);
@@ -57,10 +58,23 @@ export function LoginView() {
   const handleSignUpSubmit = async (e) => {
     e.preventDefault();
     setLocalError('');
+
     const photoUrl = selectedPhotoUrl || signUpAvatar?.icon || '';
 
     if (!signUpUsername.trim() || !signUpPassword.trim()) {
       setLocalError('Username and password are required.');
+      return;
+    }
+    if (!signUpName.trim()) {
+      setLocalError('Display name is required.');
+      return;
+    }
+    if (!signUpEmail.trim()) {
+      setLocalError('Valid email address is required.');
+      return;
+    }
+    if (!signUpGender || !['boy', 'girl'].includes(signUpGender.toLowerCase())) {
+      setLocalError('Gender must be "boy" or "girl".');
       return;
     }
     if (signUpPassword.length < 6) {
@@ -68,7 +82,7 @@ export function LoginView() {
       return;
     }
     if (!photoUrl) {
-      setLocalError('Profile picture is required. Please select a profile picture.');
+      setLocalError('Profile picture is required. Please select an avatar.');
       return;
     }
 
@@ -77,12 +91,11 @@ export function LoginView() {
       await signUp({
         username: signUpUsername.trim(),
         password: signUpPassword.trim(),
-        name: signUpName.trim() || signUpUsername.trim(),
+        name: signUpName.trim(),
         email: signUpEmail.trim(),
-        gender: signUpGender,
+        gender: signUpGender.toLowerCase(),
         bio: signUpBio.trim(),
-        // photoUrl is the API field (matches KMP User.photoUrl)
-        photoUrl,
+        photoUrl: photoUrl.trim(),
         interests: selectedInterests
       });
     } catch (err) {
@@ -91,6 +104,22 @@ export function LoginView() {
       setLoading(false);
     }
   };
+
+  // Fallback avatars if profile pictures have not yet loaded
+  const defaultAvatars = [
+    '/userImages/boy1.png',
+    '/userImages/boy2.png',
+    '/userImages/boy3.png',
+    '/userImages/boy4.png',
+    '/userImages/girl1.png',
+    '/userImages/girl2.png',
+    '/userImages/girl3.png',
+    '/userImages/girl4.png'
+  ];
+
+  const availablePictures = Array.isArray(profilePictures) && profilePictures.length > 0
+    ? profilePictures
+    : defaultAvatars;
 
   return (
     <div className="login-page-container">
@@ -137,13 +166,13 @@ export function LoginView() {
         {mode === 'login' ? (
           <form className="auth-form" onSubmit={handleLoginSubmit}>
             <div className="form-group">
-              <label htmlFor="login-username">Username or Email</label>
+              <label htmlFor="login-username">Username</label>
               <div className="input-wrapper">
                 <span className="input-icon">👤</span>
                 <input
                   id="login-username"
                   type="text"
-                  placeholder="e.g. VibeSeeker99"
+                  placeholder="e.g. alice"
                   value={loginUsername}
                   onChange={(e) => setLoginUsername(e.target.value)}
                   disabled={loading}
@@ -185,7 +214,7 @@ export function LoginView() {
         ) : (
           /* Sign Up Form */
           <form className="auth-form" onSubmit={handleSignUpSubmit}>
-            {/* Avatar / Profile Picture Selector (From API Endpoint) */}
+            {/* Avatar / Profile Picture Selector */}
             <div className="form-group">
               <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>Profile Picture *</span>
@@ -200,38 +229,23 @@ export function LoginView() {
                 )}
               </label>
               <div className="avatar-picker-grid">
-                {Array.isArray(profilePictures) && profilePictures.length > 0 ? (
-                  profilePictures.map((picUrl, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      className={`avatar-pick-item api-pic ${selectedPhotoUrl === picUrl ? 'selected' : ''}`}
-                      onClick={() => { setSelectedPhotoUrl(picUrl); setSignUpAvatar(null); }}
-                      title={`Profile Picture ${idx + 1}`}
-                      style={{ padding: 0, overflow: 'hidden' }}
-                    >
-                      <img 
-                        src={picUrl} 
-                        alt={`Profile ${idx + 1}`} 
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                        onError={(e) => { e.target.style.display = 'none'; }}
-                      />
-                    </button>
-                  ))
-                ) : (
-                  AVATAR_LIST.map((item, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      className={`avatar-pick-item ${signUpAvatar?.icon === item.icon ? 'selected' : ''}`}
-                      style={{ backgroundColor: item.bg }}
-                      onClick={() => { setSignUpAvatar(item); setSelectedPhotoUrl(''); }}
-                      title={item.label}
-                    >
-                      <span>{item.icon}</span>
-                    </button>
-                  ))
-                )}
+                {availablePictures.map((picUrl, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className={`avatar-pick-item api-pic ${selectedPhotoUrl === picUrl ? 'selected' : ''}`}
+                    onClick={() => { setSelectedPhotoUrl(picUrl); setSignUpAvatar(null); }}
+                    title={`Avatar ${idx + 1}`}
+                    style={{ padding: 0, overflow: 'hidden' }}
+                  >
+                    <img 
+                      src={picUrl} 
+                      alt={`Avatar ${idx + 1}`} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -243,7 +257,7 @@ export function LoginView() {
                   <input
                     id="signup-username"
                     type="text"
-                    placeholder="coolusername"
+                    placeholder="alice"
                     value={signUpUsername}
                     onChange={(e) => setSignUpUsername(e.target.value)}
                     disabled={loading}
@@ -253,33 +267,35 @@ export function LoginView() {
               </div>
 
               <div className="form-group">
-                <label htmlFor="signup-name">Display Name</label>
+                <label htmlFor="signup-name">Display Name *</label>
                 <div className="input-wrapper">
                   <span className="input-icon">✨</span>
                   <input
                     id="signup-name"
                     type="text"
-                    placeholder="Alex Smith"
+                    placeholder="Alice Wonderland"
                     value={signUpName}
                     onChange={(e) => setSignUpName(e.target.value)}
                     disabled={loading}
+                    required
                   />
                 </div>
               </div>
             </div>
 
             <div className="form-group">
-              <label htmlFor="signup-email">Email</label>
+              <label htmlFor="signup-email">Email *</label>
               <div className="input-wrapper">
                 <span className="input-icon">✉️</span>
                 <input
                   id="signup-email"
                   type="email"
-                  placeholder="you@example.com"
+                  placeholder="alice@example.com"
                   value={signUpEmail}
                   onChange={(e) => setSignUpEmail(e.target.value)}
                   disabled={loading}
                   autoComplete="email"
+                  required
                 />
               </div>
             </div>
@@ -302,18 +318,17 @@ export function LoginView() {
               </div>
 
               <div className="form-group">
-                <label htmlFor="signup-gender">Gender</label>
+                <label htmlFor="signup-gender">Gender *</label>
                 <select
                   id="signup-gender"
                   className="input-select"
                   value={signUpGender}
                   onChange={(e) => setSignUpGender(e.target.value)}
                   disabled={loading}
+                  required
                 >
-                  <option value="Non-binary">Non-binary</option>
-                  <option value="Female">Female</option>
-                  <option value="Male">Male</option>
-                  <option value="Prefer not to say">Prefer not to say</option>
+                  <option value="boy">Boy</option>
+                  <option value="girl">Girl</option>
                 </select>
               </div>
             </div>
@@ -361,11 +376,57 @@ export function LoginView() {
           </form>
         )}
 
+        {/* Guest Mode Entry Section */}
+        <div style={{
+          marginTop: '20px',
+          paddingTop: '20px',
+          borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+          textAlign: 'center'
+        }}>
+          <button
+            type="button"
+            id="continue-as-guest-btn"
+            onClick={() => setGuestModalOpen(true)}
+            style={{
+              width: '100%',
+              padding: '13px 18px',
+              borderRadius: '12px',
+              background: 'rgba(99, 102, 241, 0.15)',
+              border: '1px solid rgba(99, 102, 241, 0.4)',
+              color: '#a5b4fc',
+              fontWeight: 700,
+              fontSize: '0.98rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              boxShadow: '0 4px 14px rgba(99, 102, 241, 0.15)'
+            }}
+          >
+            <span style={{ fontSize: '1.2rem' }}>⚡</span>
+            Continue as Guest
+          </button>
+          <p style={{ fontSize: '0.78rem', color: '#71717a', marginTop: '8px', marginBottom: 0 }}>
+            Enter with just your name & gender • Instant matching
+          </p>
+        </div>
+
         {/* Footer info */}
         <div className="login-footer">
-          <p>Protected by JWT Token Authentication • RandoMeet KMP Engine</p>
+          <p>Protected by JWT Token Authentication • Chat Monolith Engine</p>
         </div>
       </div>
+
+      <GuestEntryModal
+        isOpen={guestModalOpen}
+        onClose={() => setGuestModalOpen(false)}
+        onGuestSubmit={async (guestData) => {
+          await loginAsGuest(guestData);
+          setGuestModalOpen(false);
+        }}
+      />
     </div>
   );
 }

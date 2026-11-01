@@ -1,15 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
-import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Sparkles, Hand } from 'lucide-react';
+import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Sparkles, Hand, Lock } from 'lucide-react';
 import { extractPeerName } from '../services/socketService';
 
 export function ChatBox() {
-  const { user, addFriend, sendFriendRequest, friends } = useAuth();
+  const { user, isGuest, sendFriendRequest, friends, openUpgradeModal } = useAuth();
   const {
     currentPeer,
     messages,
     isPeerTyping,
+    isPeerOnline,
     sendMessage,
     sendReaction,
     sendIcebreaker,
@@ -23,28 +24,33 @@ export function ChatBox() {
   const [requestSent, setRequestSent] = useState(false);
   const [sendingRequest, setSendingRequest] = useState(false);
   const messagesEndRef = useRef(null);
+  const typingTimerRef = useRef(null);
 
   const peerName = extractPeerName(currentPeer);
-  const peerId = currentPeer ? (currentPeer.peerId || currentPeer.friendUserId || currentPeer.id || currentPeer.username) : '';
-  const isAlreadyFriend = friends.some(f => (f.id === peerId || f.friendUserId === peerId || f.username === peerId));
+  const peerUsername = currentPeer ? (currentPeer.friendUserId || currentPeer.username || currentPeer.peerId || currentPeer.id) : '';
+  const isAlreadyFriend = friends.some(f => (f.username === peerUsername || f.friendUserId === peerUsername || f.id === peerUsername));
 
   // Reset requestSent state whenever peer changes
   useEffect(() => {
     setRequestSent(false);
-  }, [peerId]);
+  }, [peerUsername]);
 
   const handleAddFriendClick = async () => {
-    if (!peerId || sendingRequest || requestSent) return;
+    if (isGuest) {
+      openUpgradeModal(`add ${peerName || 'this user'} to your friends`);
+      return;
+    }
+    if (!peerUsername || sendingRequest || requestSent) return;
     setSendingRequest(true);
     try {
-      await sendFriendRequest(peerId);
+      await sendFriendRequest(peerUsername);
       setRequestSent(true);
     } catch (err) {
-      console.warn("Failed to send friend request via API, fallback to addFriend:", err);
-      try {
-        await addFriend({ ...currentPeer, name: peerName });
+      if (err?.status === 409 || (err?.message && err.message.toLowerCase().includes('already exists'))) {
         setRequestSent(true);
-      } catch (e) {}
+      } else {
+        console.warn("Failed to send friend request via API:", err);
+      }
     } finally {
       setSendingRequest(false);
     }
@@ -66,7 +72,12 @@ export function ChatBox() {
     setInputMsg(e.target.value);
     if (e.target.value.trim().length > 0) {
       notifyTyping(true);
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        notifyTyping(false);
+      }, 1500);
     } else {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
       notifyTyping(false);
     }
   };
@@ -74,14 +85,12 @@ export function ChatBox() {
   const handleIcebreakerClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('[ChatBox] Icebreaker button clicked');
     sendIcebreaker();
   };
 
   const handleReactionClick = (e, emoji) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('[ChatBox] Reaction clicked:', emoji);
     sendReaction(emoji);
   };
 
@@ -125,13 +134,14 @@ export function ChatBox() {
             width: '46px',
             height: '46px',
             borderRadius: '50%',
-            backgroundColor: currentPeer.avatarBg || '#8b5cf6',
+            backgroundColor: '#8b5cf6',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: '1.6rem',
             boxShadow: 'var(--shadow-glow)',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            flexShrink: 0
           }}>
             {currentPeer.photoUrl ? (
               <img
@@ -141,17 +151,23 @@ export function ChatBox() {
                 onError={(e) => { e.target.style.display = 'none'; }}
               />
             ) : (
-              currentPeer.avatar || '⚡'
+              '⚡'
             )}
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{peerName}</h3>
-              {currentPeer.country && (
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '10px' }}>
-                  {currentPeer.country}
-                </span>
-              )}
+              <span style={{
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                color: isPeerOnline ? 'var(--green-accent)' : 'var(--text-muted)',
+                background: isPeerOnline ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.05)',
+                border: isPeerOnline ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(255, 255, 255, 0.1)',
+                padding: '2px 8px',
+                borderRadius: '10px'
+              }}>
+                {isPeerOnline ? 'Online' : 'Offline'}
+              </span>
             </div>
             <p className="chat-peer-bio" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
               {currentPeer.bio || 'Random Chat Partner'}
@@ -163,21 +179,27 @@ export function ChatBox() {
         <div className="chat-header-actions">
           {!isAlreadyFriend && (
             <button
+              id="add-friend-btn"
               type="button"
               onClick={handleAddFriendClick}
-              disabled={requestSent || sendingRequest}
+              disabled={!isGuest && (requestSent || sendingRequest)}
               className="btn-cyan"
               style={{
                 padding: '8px 14px',
                 fontSize: '0.85rem',
-                cursor: (requestSent || sendingRequest) ? 'default' : 'pointer',
-                opacity: requestSent ? 0.85 : 1,
-                background: requestSent ? 'rgba(52, 199, 89, 0.2)' : undefined,
-                borderColor: requestSent ? '#34C759' : undefined
+                cursor: (!isGuest && (requestSent || sendingRequest)) ? 'default' : 'pointer',
+                opacity: (!isGuest && requestSent) ? 0.85 : 1,
+                background: (!isGuest && requestSent) ? 'rgba(52, 199, 89, 0.2)' : undefined,
+                borderColor: (!isGuest && requestSent) ? '#34C759' : undefined
               }}
-              title={requestSent ? "Friend Request Sent" : "Add to Friends"}
+              title={isGuest ? "Sign up to add friends" : (requestSent ? "Friend Request Sent" : "Add to Friends")}
             >
-              {requestSent ? (
+              {isGuest ? (
+                <>
+                  <Lock size={15} />
+                  <span>Add Friend</span>
+                </>
+              ) : requestSent ? (
                 <>
                   <UserCheck size={16} color="#34C759" />
                   <span style={{ color: '#34C759', fontWeight: 600 }}>Request Sent</span>
@@ -192,6 +214,7 @@ export function ChatBox() {
           )}
 
           <button
+            id="next-stranger-btn"
             type="button"
             onClick={skipStranger}
             className="btn-primary"
@@ -202,6 +225,7 @@ export function ChatBox() {
           </button>
 
           <button
+            id="disconnect-chat-btn"
             type="button"
             onClick={disconnectChat}
             className="btn-danger"
@@ -212,34 +236,6 @@ export function ChatBox() {
           </button>
         </div>
       </div>
-
-      {/* Interest Pills Sub-bar */}
-      {currentPeer.interests && currentPeer.interests.length > 0 && (
-        <div style={{
-          padding: '8px 20px',
-          background: 'rgba(0, 0, 0, 0.2)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          fontSize: '0.8rem',
-          color: 'var(--text-muted)',
-          position: 'relative',
-          zIndex: 10
-        }}>
-          <span>Common Interests:</span>
-          {currentPeer.interests.map(t => (
-            <span key={t} style={{
-              background: 'rgba(139, 92, 246, 0.2)',
-              color: '#a78bfa',
-              padding: '2px 10px',
-              borderRadius: 'var(--radius-full)',
-              fontSize: '0.75rem'
-            }}>
-              #{t}
-            </span>
-          ))}
-        </div>
-      )}
 
       {/* Messages Scroll Feed */}
       <div style={{
@@ -267,7 +263,8 @@ export function ChatBox() {
             );
           }
 
-          const isMe = user?.id && msg.senderId === user.id;
+          const myUsername = user?.username || user?.id;
+          const isMe = msg.senderId === myUsername;
 
           return (
             <div
@@ -300,7 +297,7 @@ export function ChatBox() {
                 marginTop: '4px',
                 padding: '0 4px'
               }}>
-                {msg.timestamp}
+                {msg.time || msg.timestamp}
               </span>
             </div>
           );
@@ -339,10 +336,7 @@ export function ChatBox() {
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
-            position: 'relative',
-            zIndex: 30,
-            pointerEvents: 'auto'
+            gap: '6px'
           }}
         >
           <HelpCircle size={15} color="var(--cyan-accent)" />
@@ -350,7 +344,7 @@ export function ChatBox() {
         </button>
 
         {/* Quick Emojis */}
-        <div className="chat-subbar-reactions" style={{ display: 'flex', gap: '6px', position: 'relative', zIndex: 30 }}>
+        <div className="chat-subbar-reactions" style={{ display: 'flex', gap: '6px' }}>
           {[
             { icon: <Heart size={16} color="#ec4899" />, emoji: '❤️' },
             { icon: <Flame size={16} color="#f97316" />, emoji: '🔥' },
@@ -371,8 +365,7 @@ export function ChatBox() {
                 transition: 'all 0.2s ease',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                pointerEvents: 'auto'
+                justifyContent: 'center'
               }}
             >
               {item.icon}
