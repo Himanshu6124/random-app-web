@@ -1,79 +1,45 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Sparkles, X, Lock, User, Mail, Key } from 'lucide-react';
+import { signInWithGooglePopup } from '../services/firebaseClient';
+import { Sparkles, X } from 'lucide-react';
 
 export function GuestUpgradeModal() {
   const {
-    user,
-    profilePictures,
     upgradeModalOpen,
     upgradeModalReason,
     closeUpgradeModal,
-    upgradeGuestAccount
+    linkGoogleAccount,
+    firebaseConfigured,
+    performLogout
   } = useAuth();
 
-  const [username, setUsername] = useState('');
-  const [name, setName] = useState(user?.name || '');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [gender, setGender] = useState(user?.gender || 'boy');
-  const [photoUrl, setPhotoUrl] = useState(user?.photoUrl || (user?.gender === 'girl' ? '/userImages/girl1.png' : '/userImages/boy1.png'));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [conflictChoice, setConflictChoice] = useState(false);
 
   if (!upgradeModalOpen) return null;
 
-  const boyAvatars = [
-    '/userImages/boy1.png',
-    '/userImages/boy2.png',
-    '/userImages/boy3.png',
-    '/userImages/boy4.png',
-    '/userImages/boy5.png',
-    '/userImages/boy6.png',
-    '/userImages/boy7.png',
-    '/userImages/boy8.png'
-  ];
-
-  const girlAvatars = [
-    '/userImages/girl1.png',
-    '/userImages/girl2.png',
-    '/userImages/girl3.png',
-    '/userImages/girl4.png',
-    '/userImages/girl5.png',
-    '/userImages/girl6.png',
-    '/userImages/girl7.png',
-    '/userImages/girl8.png'
-  ];
-
-  const currentGender = (gender || user?.gender || 'boy').toLowerCase();
-  const avatarList = currentGender === 'girl' ? girlAvatars : boyAvatars;
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  /**
+   * CONTRACT B1-4: upgrading is "Sign in with Google" — no password/email fields.
+   * The backend updates the guest's row IN PLACE (same stable id), so the active chat,
+   * its history, room membership and subscriptions survive the JWT swap untouched.
+   */
+  const handleGoogleLink = async () => {
     setError('');
-
-    if (!username.trim() || !name.trim() || !email.trim() || !password.trim()) {
-      setError('Please fill in all required fields.');
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
-    }
-
     setLoading(true);
     try {
-      await upgradeGuestAccount({
-        username: username.trim(),
-        name: name.trim(),
-        email: email.trim(),
-        password: password.trim(),
-        gender,
-        photoUrl
-      });
+      const fbUser = await signInWithGooglePopup();
+      const idToken = await fbUser.getIdToken();
+      await linkGoogleAccount(idToken);
+      closeUpgradeModal();
     } catch (err) {
-      setError(err.message || 'Upgrade failed.');
+      const message = err.message || 'Google account linking failed.';
+      if (message.toLowerCase().includes('already has a profile')) {
+        setConflictChoice(true);
+      } else {
+        setError(message);
+      }
+    } finally {
       setLoading(false);
     }
   };
@@ -178,251 +144,100 @@ export function GuestUpgradeModal() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {/* Gender Selector */}
-          <div>
-            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#e4e4e7', marginBottom: '6px' }}>
-              Gender *
-            </label>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {['boy', 'girl'].map(g => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => {
-                    setGender(g);
-                    if (g === 'girl' && !photoUrl.includes('/girl')) {
-                      setPhotoUrl('/userImages/girl1.png');
-                    } else if (g === 'boy' && !photoUrl.includes('/boy')) {
-                      setPhotoUrl('/userImages/boy1.png');
-                    }
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '8px',
-                    borderRadius: '10px',
-                    border: currentGender === g ? '2px solid #10b981' : '1px solid rgba(255, 255, 255, 0.1)',
-                    background: currentGender === g ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                    color: '#ffffff',
-                    fontSize: '0.85rem',
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}
-                >
-                  {g === 'boy' ? '👦 Male (Boy)' : '👧 Female (Girl)'}
-                </button>
-              ))}
-            </div>
+        {conflictChoice ? (
+          /* CONFLICT: this Google account already has a profile. Offer a clear choice
+             instead of silently dropping the user out of their chat (CONTRACT B1-4). */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <p style={{ fontSize: '0.9rem', color: '#e4e4e7', margin: 0 }}>
+              Your Google account already has a profile in this app. You can open the login
+              screen and sign into it — but that means leaving your <strong>current chat</strong>.
+            </p>
+            <button
+              type="button"
+              id="upgrade-conflict-leave-btn"
+              onClick={() => {
+                closeUpgradeModal();
+                performLogout();
+              }}
+              style={{
+                padding: '12px', borderRadius: '12px', border: 'none',
+                background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
+                color: '#ffffff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer'
+              }}
+            >
+              Leave chat & open login screen
+            </button>
+            <button
+              type="button"
+              onClick={() => { setConflictChoice(false); setError(''); }}
+              style={{
+                padding: '12px', borderRadius: '12px',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                background: 'rgba(255, 255, 255, 0.06)',
+                color: '#ffffff', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer'
+              }}
+            >
+              Stay in this chat
+            </button>
           </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <p style={{ fontSize: '0.88rem', color: '#a1a1aa', margin: 0 }}>
+              Sign in with Google to keep your <strong style={{ color: '#e4e4e7' }}>current
+              username</strong> — your active chat, messages and friends stay exactly as they are.
+            </p>
 
-          {/* Avatar Selector */}
-          <div>
-            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#e4e4e7', marginBottom: '6px' }}>
-              Choose {currentGender === 'girl' ? 'Female' : 'Male'} Avatar (8 Available)
-            </label>
-            <div style={{
-              display: 'flex',
-              gap: '8px',
-              overflowX: 'auto',
-              paddingBottom: '6px'
-            }}>
-              {avatarList.map((uri, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setPhotoUrl(uri)}
-                  style={{
-                    width: '46px',
-                    height: '46px',
-                    borderRadius: '12px',
-                    border: photoUrl === uri ? '2px solid #10b981' : '1px solid rgba(255, 255, 255, 0.1)',
-                    padding: 0,
-                    background: photoUrl === uri ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                    cursor: 'pointer',
-                    flexShrink: 0,
-                    overflow: 'hidden'
-                  }}
-                >
-                  <img src={uri} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Username */}
-          <div>
-            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#e4e4e7', marginBottom: '6px' }}>
-              Username *
-            </label>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: '10px',
-              padding: '0 12px'
-            }}>
-              <User size={16} color="#71717a" style={{ marginRight: '8px' }} />
-              <input
-                id="upgrade-username-input"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g. alex24"
-                required
-                style={{
-                  width: '100%',
-                  background: 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  color: '#ffffff',
-                  fontSize: '0.9rem',
-                  padding: '10px 0'
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Display Name */}
-          <div>
-            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#e4e4e7', marginBottom: '6px' }}>
-              Display Name *
-            </label>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: '10px',
-              padding: '0 12px'
-            }}>
-              <User size={16} color="#71717a" style={{ marginRight: '8px' }} />
-              <input
-                id="upgrade-name-input"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Display Name"
-                required
-                style={{
-                  width: '100%',
-                  background: 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  color: '#ffffff',
-                  fontSize: '0.9rem',
-                  padding: '10px 0'
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Email */}
-          <div>
-            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#e4e4e7', marginBottom: '6px' }}>
-              Email *
-            </label>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: '10px',
-              padding: '0 12px'
-            }}>
-              <Mail size={16} color="#71717a" style={{ marginRight: '8px' }} />
-              <input
-                id="upgrade-email-input"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                required
-                style={{
-                  width: '100%',
-                  background: 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  color: '#ffffff',
-                  fontSize: '0.9rem',
-                  padding: '10px 0'
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Password */}
-          <div>
-            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#e4e4e7', marginBottom: '6px' }}>
-              Password (min 6 chars) *
-            </label>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: '10px',
-              padding: '0 12px'
-            }}>
-              <Key size={16} color="#71717a" style={{ marginRight: '8px' }} />
-              <input
-                id="upgrade-password-input"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                minLength={6}
-                style={{
-                  width: '100%',
-                  background: 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  color: '#ffffff',
-                  fontSize: '0.9rem',
-                  padding: '10px 0'
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Submit Button */}
-          <button
-            type="submit"
-            id="upgrade-modal-submit-btn"
-            disabled={loading}
-            style={{
-              marginTop: '10px',
-              padding: '14px',
-              borderRadius: '12px',
-              border: 'none',
-              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-              color: '#ffffff',
-              fontWeight: 700,
-              fontSize: '1rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.7 : 1,
-              boxShadow: '0 8px 20px rgba(16, 185, 129, 0.4)',
-              transition: 'all 0.2s'
-            }}
-          >
-            {loading ? (
-              <>
+            <button
+              type="button"
+              id="upgrade-modal-submit-btn"
+              onClick={handleGoogleLink}
+              disabled={loading || !firebaseConfigured}
+              title={firebaseConfigured
+                ? 'Link your Google account to this guest profile'
+                : 'Google sign-in is not configured on this server yet'}
+              style={{
+                padding: '14px',
+                borderRadius: '12px',
+                border: 'none',
+                background: (loading || !firebaseConfigured) ? 'rgba(255, 255, 255, 0.15)' : '#ffffff',
+                color: (loading || !firebaseConfigured) ? '#71717a' : '#1f2937',
+                fontWeight: 700,
+                fontSize: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                cursor: (loading || !firebaseConfigured) ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              {loading ? (
                 <span className="spinner-border spinner-border-sm me-2" />
-                Upgrading Account...
-              </>
-            ) : (
-              <>
-                <Lock size={18} />
-                Create Account & Unlock All
-              </>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                </svg>
+              )}
+              <span>
+                {!firebaseConfigured ? 'Google sign-in not configured' : (loading ? 'Linking…' : 'Sign in with Google')}
+              </span>
+            </button>
+
+            {!firebaseConfigured && (
+              <p style={{ fontSize: '0.78rem', color: '#fbbf24', margin: 0 }}>
+                Google sign-in is not configured on this server yet. Your guest account still
+                works; ask the admin to set the Firebase configuration to enable upgrades.
+              </p>
             )}
-          </button>
-        </form>
+
+            <p style={{ fontSize: '0.75rem', color: '#52525b', margin: 0, textAlign: 'center' }}>
+              Mid-chat upgrade keeps the conversation alive — nothing is lost.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -77,14 +77,18 @@ export const authService = {
   },
 
   setSession(authResponse, user) {
-    if (authResponse?.jwt) {
-      localStorage.setItem(TOKEN_KEY, authResponse.jwt);
-    }
-    if (authResponse?.userId) {
-      localStorage.setItem(USER_ID_KEY, authResponse.userId);
-    }
-    if (user) {
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
+    try {
+      if (authResponse?.jwt) {
+        localStorage.setItem(TOKEN_KEY, authResponse.jwt);
+      }
+      if (authResponse?.userId) {
+        localStorage.setItem(USER_ID_KEY, authResponse.userId);
+      }
+      if (user) {
+        localStorage.setItem(USER_KEY, JSON.stringify(user));
+      }
+    } catch (e) {
+      console.warn('[authService] Could not persist session to localStorage:', e);
     }
   },
 
@@ -97,6 +101,51 @@ export const authService = {
   // ==========================================
   // Authentication Endpoints
   // ==========================================
+
+  /**
+   * POST /auth/firebase
+   * Step 1 of Google sign-in: exchange a verified Firebase ID token for either an app
+   * session (returning user / linked email) or a NEEDS_USERNAME response with a
+   * short-lived registration token.
+   * Returns: { status, registrationToken?, suggestedUsername?, name?, email?, photoUrl?,
+   *            jwt?, userId?, username?, isGuest? }
+   */
+  async firebaseSignIn(idToken) {
+    const response = await fetch(`${BASE_URL}/auth/firebase`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ idToken })
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
+   * POST /auth/firebase/complete
+   * Step 2 for brand-new Google users: claim a username and create the account.
+   * Returns the same shape as firebaseSignIn with jwt/userId populated.
+   */
+  async firebaseCompleteSignup(registrationToken, { username, name, gender }) {
+    const response = await fetch(`${BASE_URL}/auth/firebase/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ registrationToken, username, name, gender })
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
+   * POST /auth/firebase/link
+   * Guest upgrades to Google mid-chat. Same stable user id — the active chat survives.
+   * Requires the caller's current JWT.
+   */
+  async firebaseLinkAccount(idToken, { username, name, gender } = {}, token) {
+    const response = await fetch(`${BASE_URL}/auth/firebase/link`, {
+      method: 'POST',
+      headers: getAuthHeaders(token),
+      body: JSON.stringify({ idToken, username, name, gender })
+    });
+    return await handleApiResponse(response);
+  },
 
   /**
    * POST /auth/login
@@ -114,12 +163,13 @@ export const authService = {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify({ username: username.trim(), password: password.trim() })
+      body: JSON.stringify({ username: username.trim(), password })
     });
 
     const data = await handleApiResponse(response);
     const jwt = data.jwt;
-    const userId = data.userId || username.trim();
+    // userId is the STABLE INTERNAL ID issued by the backend - never the typed handle.
+    const userId = data.userId;
 
     const authResponse = { userId, jwt };
 
@@ -131,8 +181,8 @@ export const authService = {
       console.warn('Could not fetch user profile via /users/me, using fallback.', e);
       userModel = {
         id: userId,
-        username: userId,
-        name: userId,
+        username: data.username || username.trim(),
+        name: data.name || data.username || username.trim(),
         gender: '',
         photoUrl: '',
         bio: '',
@@ -170,7 +220,7 @@ export const authService = {
 
     const payload = {
       username: username.trim(),
-      password: password.trim(),
+      password,
       name: name.trim(),
       email: email.trim(),
       gender: gender.toLowerCase(),
@@ -189,12 +239,12 @@ export const authService = {
 
     const data = await handleApiResponse(response);
     const jwt = data.jwt;
-    const userId = data.userId || username.trim();
+    const userId = data.userId;
 
     const authResponse = { userId, jwt };
     const savedUser = {
       id: userId,
-      username: userId,
+      username: data.username || username.trim(),
       name: payload.name,
       email: payload.email,
       gender: payload.gender,
@@ -243,8 +293,8 @@ export const authService = {
       console.warn('[authService] getCurrentUser failed after guest login, using fallback', e);
       userModel = {
         id: userId,
-        username: userId,
-        name: name.trim(),
+        username: data.username || userId,
+        name: data.name || name.trim(),
         gender: gender.toLowerCase(),
         photoUrl: gender.toLowerCase() === 'girl' ? '/userImages/girl1.png' : '/userImages/boy1.png',
         isGuest: true,
@@ -276,7 +326,7 @@ export const authService = {
       headers: getAuthHeaders(activeToken),
       body: JSON.stringify({
         username: username.trim(),
-        password: password.trim(),
+        password,
         name: name.trim(),
         email: email.trim(),
         gender: gender.toLowerCase(),
@@ -287,7 +337,8 @@ export const authService = {
 
     const data = await handleApiResponse(response);
     const jwt = data.jwt;
-    const userId = data.userId || username.trim();
+    // The id is UNCHANGED by an upgrade - that is what keeps an in-flight chat alive.
+    const userId = data.userId;
 
     const authResponse = { userId, jwt };
 
@@ -297,7 +348,7 @@ export const authService = {
     } catch (e) {
       userModel = {
         id: userId,
-        username: userId,
+        username: data.username || username.trim(),
         name: name.trim(),
         email: email.trim(),
         gender: gender.toLowerCase(),
@@ -324,7 +375,8 @@ export const authService = {
     });
     const data = await handleApiResponse(response);
     return {
-      id: data.username,
+      // id = stable identity; username/name are display only.
+      id: data.id,
       username: data.username,
       name: data.name || data.username,
       email: data.email || '',
@@ -332,7 +384,7 @@ export const authService = {
       location: data.location || null,
       bio: data.bio || '',
       photoUrl: data.photoUrl || '',
-      isOnline: data.isOnline ?? true,
+      isOnline: data.online ?? data.isOnline ?? true,
       lastOnline: data.lastOnline || null,
       isGuest: Boolean(data.isGuest || data.guest)
     };
@@ -392,7 +444,8 @@ export const authService = {
     });
     const data = await handleApiResponse(response);
     return {
-      id: data.username,
+      // id = stable identity; username/name are display only.
+      id: data.id,
       username: data.username,
       name: data.name || data.username,
       email: data.email || '',
@@ -400,7 +453,7 @@ export const authService = {
       location: data.location || null,
       bio: data.bio || '',
       photoUrl: data.photoUrl || '',
-      isOnline: data.isOnline ?? true,
+      isOnline: data.online ?? data.isOnline ?? true,
       lastOnline: data.lastOnline || null,
       isGuest: Boolean(data.isGuest || data.guest)
     };
@@ -430,14 +483,14 @@ export const authService = {
 
   /**
    * POST /conversations
-   * Body: { recipientUsername }
+   * Body: { recipientId }  - the peer's stable user id, not their handle.
    * Returns: ConversationResponseDto
    */
-  async createOrOpenConversation(recipientUsername, token) {
+  async createOrOpenConversation(recipientId, token) {
     const response = await fetch(`${BASE_URL}/conversations`, {
       method: 'POST',
       headers: getAuthHeaders(token),
-      body: JSON.stringify({ recipientUsername })
+      body: JSON.stringify({ recipientId })
     });
     return await handleApiResponse(response);
   },
@@ -469,7 +522,7 @@ export const authService = {
         friendUserId: c.friendUserId,
         friendUserName: c.friendUserName,
         name: c.friendUserName,
-        username: c.friendUserId,
+        username: c.friendId || '',
         photoUrl: c.photoUrl || '',
         avatar: c.photoUrl ? '' : '👤',
         lastMessage: c.lastMessage || 'Say hi!',
@@ -590,17 +643,17 @@ export const authService = {
       const data = await handleApiResponse(response);
       const content = Array.isArray(data?.content) ? data.content : (Array.isArray(data) ? data : []);
       return content.map(f => ({
-        id: f.username,
-        friendUserId: f.username,
+        id: f.id,
+        friendUserId: f.id,
         username: f.username,
         name: f.name || f.username,
         photoUrl: f.photoUrl || '',
         bio: f.bio || '',
         gender: f.gender || '',
         location: f.location || null,
-        isOnline: f.isOnline ?? false,
+        isOnline: f.online ?? f.isOnline ?? false,
         lastOnline: f.lastOnline || null,
-        status: f.isOnline ? 'Online' : 'Offline'
+        status: (f.online ?? f.isOnline) ? 'Online' : 'Offline'
       }));
     } catch (e) {
       console.warn('[authService] getFriendsList failed:', e);
@@ -619,7 +672,7 @@ export const authService = {
       });
       const list = await handleApiResponse(response);
       return Array.isArray(list) ? list.map(r => ({
-        id: r.username,
+        id: r.id,
         username: r.username,
         name: r.name || r.username,
         photoUrl: r.photoUrl || '',
@@ -649,10 +702,10 @@ export const authService = {
   },
 
   /**
-   * POST /friendships/requests/{friendUsername}
+   * POST /friendships/requests/{friendId}
    */
-  async sendFriendRequest(friendUsername, token) {
-    const response = await fetch(`${BASE_URL}/friendships/requests/${encodeURIComponent(friendUsername)}`, {
+  async sendFriendRequest(friendId, token) {
+    const response = await fetch(`${BASE_URL}/friendships/requests/${encodeURIComponent(friendId)}`, {
       method: 'POST',
       headers: getAuthHeaders(token)
     });
@@ -660,10 +713,10 @@ export const authService = {
   },
 
   /**
-   * PUT /friendships/requests/{friendUsername}/accept
+   * PUT /friendships/requests/{friendId}/accept
    */
-  async acceptFriendRequest(friendUsername, token) {
-    const response = await fetch(`${BASE_URL}/friendships/requests/${encodeURIComponent(friendUsername)}/accept`, {
+  async acceptFriendRequest(friendId, token) {
+    const response = await fetch(`${BASE_URL}/friendships/requests/${encodeURIComponent(friendId)}/accept`, {
       method: 'PUT',
       headers: getAuthHeaders(token)
     });
@@ -671,10 +724,10 @@ export const authService = {
   },
 
   /**
-   * PUT /friendships/requests/{friendUsername}/reject
+   * PUT /friendships/requests/{friendId}/reject
    */
-  async rejectFriendRequest(friendUsername, token) {
-    const response = await fetch(`${BASE_URL}/friendships/requests/${encodeURIComponent(friendUsername)}/reject`, {
+  async rejectFriendRequest(friendId, token) {
+    const response = await fetch(`${BASE_URL}/friendships/requests/${encodeURIComponent(friendId)}/reject`, {
       method: 'PUT',
       headers: getAuthHeaders(token)
     });
@@ -682,29 +735,29 @@ export const authService = {
   },
 
   /**
-   * DELETE /friendships/{friendUsername}
+   * DELETE /friendships/{friendId}
    */
-  async removeFriendApi(friendUsername, token) {
-    const response = await fetch(`${BASE_URL}/friendships/${encodeURIComponent(friendUsername)}`, {
+  async removeFriendApi(friendId, token) {
+    const response = await fetch(`${BASE_URL}/friendships/${encodeURIComponent(friendId)}`, {
       method: 'DELETE',
       headers: getAuthHeaders(token)
     });
     return await handleApiResponse(response);
   },
 
-  async deleteFriendship(friendUsername, token) {
-    return this.removeFriendApi(friendUsername, token);
+  async deleteFriendship(friendId, token) {
+    return this.removeFriendApi(friendId, token);
   },
 
-  async cancelFriendRequest(friendUsername, token) {
-    return this.removeFriendApi(friendUsername, token);
+  async cancelFriendRequest(friendId, token) {
+    return this.removeFriendApi(friendId, token);
   },
 
   /**
-   * GET /friendships/status/{friendUsername}
+   * GET /friendships/status/{friendId}
    */
-  async getFriendshipStatus(friendUsername, token) {
-    const response = await fetch(`${BASE_URL}/friendships/status/${encodeURIComponent(friendUsername)}`, {
+  async getFriendshipStatus(friendId, token) {
+    const response = await fetch(`${BASE_URL}/friendships/status/${encodeURIComponent(friendId)}`, {
       headers: getAuthHeaders(token)
     });
     return await handleApiResponse(response);

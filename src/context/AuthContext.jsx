@@ -1,7 +1,23 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { authService } from '../services/authService';
+import { signInWithGooglePopup, ensureAnonymousFirebaseSession, isFirebaseConfigured } from '../services/firebaseClient';
 
 const AuthContext = createContext();
+
+// Safety-net poll only; live updates arrive on /user/queue/notifications.
+const POLL_BASE_MS = 60000;
+const POLL_JITTER_MS = 15000;
+
+/** Replaces state only when the payload really changed, so consumers keep their identities. */
+const replaceIfChanged = (setter, next) => {
+  setter(prev => {
+    try {
+      return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+    } catch (e) {
+      return next;
+    }
+  });
+};
 
 export const AVATAR_LIST = [
   { icon: '👾', bg: '#8b5cf6', label: 'Alien' },
@@ -39,18 +55,20 @@ export function AuthProvider({ children }) {
 
   const isGuest = Boolean(user?.isGuest);
 
-  const openUpgradeModal = (reason = '', pendingAction = null) => {
+  const openUpgradeModal = useCallback((reason = '', pendingAction = null) => {
     setUpgradeModalReason(reason);
     setPendingUpgradeAction(pendingAction);
     setUpgradeModalOpen(true);
-  };
+  }, []);
 
-  const closeUpgradeModal = () => {
+  const closeUpgradeModal = useCallback(() => {
     setUpgradeModalOpen(false);
     setUpgradeModalReason('');
     setPendingUpgradeAction(null);
-  };
+  }, []);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  // Bumped on logout so socket-owned state can drop the previous user's session
+  const [sessionEpoch, setSessionEpoch] = useState(0);
 
   const pollTimerRef = useRef(null);
 
@@ -74,13 +92,13 @@ export function AuthProvider({ children }) {
         }
       });
 
-      // Merge friends with conversation metadata
+      // Merge friends with conversation metadata. Keys are STABLE USER IDS.
       const mergedFriends = friendsList.map(f => {
-        const conv = convMap.get(f.username);
+        const conv = convMap.get(f.id);
         return {
           ...f,
-          id: f.username,
-          friendUserId: f.username,
+          id: f.id,
+          friendUserId: f.id,
           friendUserName: f.name || f.username,
           conversationId: conv ? conv.conversationId : null,
           lastMessage: conv?.lastMessage || 'Say hi!',
@@ -91,13 +109,13 @@ export function AuthProvider({ children }) {
 
       // Add any conversations with users not in friends list
       conversations.forEach(c => {
-        if (!mergedFriends.some(f => f.username === c.friendUserId)) {
+        if (!mergedFriends.some(f => f.id === c.friendUserId)) {
           mergedFriends.push({
             id: c.friendUserId,
-            username: c.friendUserId,
+            username: c.username || '',
             friendUserId: c.friendUserId,
-            name: c.friendUserName || c.friendUserId,
-            friendUserName: c.friendUserName || c.friendUserId,
+            name: c.friendUserName || c.username || 'Unknown',
+            friendUserName: c.friendUserName || c.username || 'Unknown',
             photoUrl: c.photoUrl || '',
             conversationId: c.conversationId,
             lastMessage: c.lastMessage || 'Say hi!',
@@ -109,8 +127,7 @@ export function AuthProvider({ children }) {
         }
       });
 
-      setFriends(mergedFriends);
-      localStorage.setItem('randomeet_friends', JSON.stringify(mergedFriends));
+      replaceIfChanged(setFriends, mergedFriends);
     } catch (e) {
       console.warn('[AuthContext] loadFriendsFromApi error:', e);
     }
@@ -125,7 +142,7 @@ export function AuthProvider({ children }) {
     setFriendRequestsLoading(true);
     try {
       const requests = await authService.getPendingFriendRequests(activeToken);
-      setFriendRequests(requests);
+      replaceIfChanged(setFriendRequests, requests);
       return requests;
     } catch (e) {
       console.warn('[AuthContext] Failed to load pending friend requests:', e);
@@ -135,20 +152,49 @@ export function AuthProvider({ children }) {
     }
   }, [jwtToken]);
 
-  // Periodic polling for social sync (requests, friends list)
-  useEffect(() => {
-    if (!isAuthenticated || !jwtToken || isGuest) {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-      return;
-    }
+  /**
+   * Applies a presence event pushed over the socket to the friends list, so a
+   * friend does not stay "Offline" until the next poll.
+   */
+  const applyFriendPresence = useCallback((userId, online) => {
+    if (!userId) return;
+    setFriends(prev => {
+      let changed = false;
+      const next = prev.map(f => {
+        const key = f.id || f.friendUserId;
+        if (key !== userId || f.isOnline === online) return f;
+        changed = true;
+        return { ...f, isOnline: online, status: online ? 'Online' : 'Offline' };
+      });
+      return changed ? next : prev;
+    });
+  }, []);
 
-    pollTimerRef.current = setInterval(() => {
-      loadFriendsFromApi(jwtToken);
-      loadFriendRequests(jwtToken);
-    }, 4000);
+  // Safety-net social sync. Live updates come over the socket; this only covers
+  // what a missed frame would lose, so it is slow, jittered and visible-tab only.
+  useEffect(() => {
+    if (!isAuthenticated || !jwtToken || isGuest) return;
+
+    let cancelled = false;
+
+    const scheduleNext = () => {
+      if (cancelled) return;
+      const delay = POLL_BASE_MS + Math.floor(Math.random() * POLL_JITTER_MS);
+      pollTimerRef.current = setTimeout(() => {
+        if (cancelled) return;
+        if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+          loadFriendsFromApi(jwtToken);
+          loadFriendRequests(jwtToken);
+        }
+        scheduleNext();
+      }, delay);
+    };
+
+    scheduleNext();
 
     return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      cancelled = true;
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
   }, [isAuthenticated, jwtToken, isGuest, loadFriendsFromApi, loadFriendRequests]);
 
@@ -175,6 +221,12 @@ export function AuthProvider({ children }) {
             loadFriendsFromApi(res.jwt);
             loadFriendRequests(res.jwt);
           }
+
+          // A guest reloading the page also re-ensures their anonymous Firebase identity
+          // (CONTRACT B1-5). Quiet no-op when Firebase is unconfigured.
+          if (res.isAuthenticated && res.user?.isGuest) {
+            ensureAnonymousFirebaseSession();
+          }
         }
       } catch (err) {
         if (isMounted) {
@@ -193,13 +245,14 @@ export function AuthProvider({ children }) {
     return () => { isMounted = false; };
   }, [loadFriendsFromApi, loadFriendRequests]);
 
-  const sendFriendRequest = async (targetUsername) => {
+
+  const sendFriendRequest = useCallback(async (targetUserId) => {
     const token = jwtToken || authService.getToken();
-    if (!token || !targetUsername) {
-      throw new Error('User token or target username missing.');
+    if (!token || !targetUserId) {
+      throw new Error('User token or target user id missing.');
     }
     try {
-      await authService.sendFriendRequest(targetUsername, token);
+      await authService.sendFriendRequest(targetUserId, token);
     } catch (err) {
       if (err.status === 409 || (err.message && err.message.toLowerCase().includes('already exists'))) {
         // Request or friendship already exists on server, treat gracefully
@@ -208,56 +261,56 @@ export function AuthProvider({ children }) {
       throw err;
     }
     await loadFriendRequests(token);
-  };
+  }, [jwtToken, loadFriendRequests]);
 
-  const acceptFriendRequest = async (targetUsername) => {
+  const acceptFriendRequest = useCallback(async (targetUserId) => {
     const token = jwtToken || authService.getToken();
-    if (!token || !targetUsername) return;
-    await authService.acceptFriendRequest(targetUsername, token);
-    setFriendRequests(prev => prev.filter(r => r.username !== targetUsername && r.id !== targetUsername));
+    if (!token || !targetUserId) return;
+    await authService.acceptFriendRequest(targetUserId, token);
+    setFriendRequests(prev => prev.filter(r => r.id !== targetUserId));
     await loadFriendsFromApi(token);
-  };
+  }, [jwtToken, loadFriendsFromApi]);
 
-  const rejectFriendRequest = async (targetUsername) => {
+  const rejectFriendRequest = useCallback(async (targetUserId) => {
     const token = jwtToken || authService.getToken();
-    if (!token || !targetUsername) return;
-    await authService.rejectFriendRequest(targetUsername, token);
-    setFriendRequests(prev => prev.filter(r => r.username !== targetUsername && r.id !== targetUsername));
-  };
+    if (!token || !targetUserId) return;
+    await authService.rejectFriendRequest(targetUserId, token);
+    setFriendRequests(prev => prev.filter(r => r.id !== targetUserId));
+  }, [jwtToken]);
 
-  const cancelFriendRequest = async (targetUsername) => {
+  const cancelFriendRequest = useCallback(async (targetUserId) => {
     const token = jwtToken || authService.getToken();
-    if (!token || !targetUsername) return;
+    if (!token || !targetUserId) return;
     try {
-      await authService.removeFriendApi(targetUsername, token);
+      await authService.removeFriendApi(targetUserId, token);
       await loadFriendRequests(token);
     } catch (e) {
       console.warn('Failed to cancel friend request:', e);
     }
-  };
+  }, [jwtToken, loadFriendRequests]);
 
-  const removeFriend = async (friendUsername) => {
+  const removeFriend = useCallback(async (friendId) => {
     const token = jwtToken || authService.getToken();
-    setFriends(prev => prev.filter(f => f.username !== friendUsername && f.id !== friendUsername));
+    setFriends(prev => prev.filter(f => f.id !== friendId));
 
-    if (token && friendUsername) {
+    if (token && friendId) {
       try {
-        await authService.removeFriendApi(friendUsername, token);
+        await authService.removeFriendApi(friendId, token);
         await loadFriendsFromApi(token);
       } catch (e) {
         console.warn('Failed to delete friendship on server:', e);
       }
     }
-  };
+  }, [jwtToken, loadFriendsFromApi]);
 
-  const addFriend = async (newFriend) => {
-    const targetUsername = newFriend.username || newFriend.friendUserId || newFriend.id;
-    if (targetUsername) {
-      await sendFriendRequest(targetUsername);
+  const addFriend = useCallback(async (newFriend) => {
+    const targetUserId = newFriend.id || newFriend.friendUserId;
+    if (targetUserId) {
+      await sendFriendRequest(targetUserId);
     }
-  };
+  }, [sendFriendRequest]);
 
-  const login = async (username, password) => {
+  const login = useCallback(async (username, password) => {
     setAuthError('');
     try {
       const res = await authService.login(username, password);
@@ -269,12 +322,14 @@ export function AuthProvider({ children }) {
       loadFriendRequests(res.authResponse.jwt);
       return res;
     } catch (err) {
-      setAuthError(err.message || 'Login failed.');
+      // One neutral message: distinguishing "no such user" from "bad password"
+      // lets anyone enumerate usernames.
+      setAuthError(err.status ? 'Incorrect username or password.' : 'Unable to sign in right now. Please try again.');
       throw err;
     }
-  };
+  }, [loadFriendsFromApi, loadFriendRequests]);
 
-  const signUp = async (userData) => {
+  const signUp = useCallback(async (userData) => {
     setAuthError('');
     try {
       const res = await authService.signUp(userData);
@@ -289,9 +344,9 @@ export function AuthProvider({ children }) {
       setAuthError(err.message || 'Sign up failed.');
       throw err;
     }
-  };
+  }, [loadFriendsFromApi, loadFriendRequests]);
 
-  const loginAsGuest = async ({ name, gender }) => {
+  const loginAsGuest = useCallback(async ({ name, gender }) => {
     setAuthError('');
     try {
       const res = await authService.loginAsGuest({ name, gender });
@@ -300,14 +355,17 @@ export function AuthProvider({ children }) {
       setJwtToken(res.authResponse.jwt);
       setFriends([]);
       setFriendRequests([]);
+      // Guests get an anonymous Firebase identity so they can upload chat media too
+      // (CONTRACT 6). Quiet no-op when Firebase is unconfigured.
+      ensureAnonymousFirebaseSession();
       return res;
     } catch (err) {
       setAuthError(err.message || 'Guest entry failed.');
       throw err;
     }
-  };
+  }, []);
 
-  const upgradeGuestAccount = async (data) => {
+  const upgradeGuestAccount = useCallback(async (data) => {
     setAuthError('');
     try {
       const res = await authService.upgradeGuest(data, jwtToken);
@@ -319,16 +377,16 @@ export function AuthProvider({ children }) {
       loadFriendRequests(res.authResponse.jwt);
 
       if (actionToExecute) {
-        if (actionToExecute.action === 'ACCEPT_FRIEND' && actionToExecute.targetUsername) {
+        if (actionToExecute.action === 'ACCEPT_FRIEND' && actionToExecute.targetUserId) {
           try {
-            await authService.acceptFriendRequest(actionToExecute.targetUsername, res.authResponse.jwt);
+            await authService.acceptFriendRequest(actionToExecute.targetUserId, res.authResponse.jwt);
             loadFriendsFromApi(res.authResponse.jwt);
           } catch (err) {
             console.warn('[AuthContext] Error auto-accepting friend after upgrade:', err);
           }
-        } else if (actionToExecute.action === 'SEND_FRIEND' && actionToExecute.targetUsername) {
+        } else if (actionToExecute.action === 'SEND_FRIEND' && actionToExecute.targetUserId) {
           try {
-            await authService.sendFriendRequest(actionToExecute.targetUsername, res.authResponse.jwt);
+            await authService.sendFriendRequest(actionToExecute.targetUserId, res.authResponse.jwt);
             loadFriendRequests(res.authResponse.jwt);
           } catch (err) {
             console.warn('[AuthContext] Error auto-sending friend request after upgrade:', err);
@@ -341,52 +399,148 @@ export function AuthProvider({ children }) {
       setAuthError(err.message || 'Upgrade failed.');
       throw err;
     }
-  };
+  }, [jwtToken, pendingUpgradeAction, closeUpgradeModal, loadFriendsFromApi, loadFriendRequests]);
 
-  const requestLogout = () => setShowLogoutModal(true);
-  const cancelLogout = () => setShowLogoutModal(false);
+  const requestLogout = useCallback(() => setShowLogoutModal(true), []);
+  const cancelLogout = useCallback(() => setShowLogoutModal(false), []);
 
-  const performLogout = () => {
+  // ==========================================
+  // Google sign-in flows (Stage B1)
+  // ==========================================
+
+  /** Applies a FirebaseLoginResponseDto that carries a jwt to local state. */
+  const applyFirebaseSession = useCallback((res) => {
+    const authResponse = { jwt: res.jwt, userId: res.userId };
+    const nextUser = {
+      id: res.userId,
+      username: res.username,
+      name: res.name || res.username,
+      isGuest: Boolean(res.isGuest)
+    };
+    authService.setSession(authResponse, nextUser);
+    setIsAuthenticated(true);
+    setUser(nextUser);
+    setJwtToken(res.jwt);
+    loadFriendsFromApi(res.jwt);
+    loadFriendRequests(res.jwt);
+    return res;
+  }, [loadFriendRequests, loadFriendsFromApi]);
+
+  /**
+   * Google popup -> POST /auth/firebase. When the Google user is brand-new the backend
+   * answers NEEDS_USERNAME and the UI shows the username-claim step (which calls
+   * completeGoogleSignup). A guest who wants to upgrade mid-chat calls linkGoogleAccount
+   * instead, which keeps the current chat alive.
+   */
+  const signInWithGoogle = useCallback(async () => {
+    setAuthError('');
+    if (!isFirebaseConfigured()) {
+      throw new Error('Google sign-in is not configured yet. Please continue as a guest for now.');
+    }
+    try {
+      const fbUser = await signInWithGooglePopup();
+      const idToken = await fbUser.getIdToken();
+      const res = await authService.firebaseSignIn(idToken);
+      if (res.status === 'NEEDS_USERNAME') {
+        return res; // caller renders the username-claim step
+      }
+      return applyFirebaseSession(res);
+    } catch (err) {
+      setAuthError(err.message || 'Google sign-in failed.');
+      throw err;
+    }
+  }, [applyFirebaseSession]);
+
+  /** Step 2 for brand-new Google users: create the account with the claimed username. */
+  const completeGoogleSignup = useCallback(async ({ registrationToken, username, name, gender }) => {
+    setAuthError('');
+    try {
+      const res = await authService.firebaseCompleteSignup(registrationToken, { username, name, gender });
+      return applyFirebaseSession(res);
+    } catch (err) {
+      setAuthError(err.message || 'Account creation failed.');
+      throw err;
+    }
+  }, [applyFirebaseSession]);
+
+  /**
+   * A guest links a Google account mid-chat. The backend updates the guest's row IN PLACE
+   * (same stable id), so the active random chat, its history and the socket room all
+   * survive the JWT swap.
+   */
+  const linkGoogleAccount = useCallback(async (idToken, profile = {}) => {
+    setAuthError('');
+    try {
+      const token = jwtToken || authService.getToken();
+      const res = await authService.firebaseLinkAccount(idToken, profile, token);
+
+      // Same user id, new JWT: persist the swap. The socket effect reconnects with the
+      // same principal, so room membership still resolves and messages keep flowing.
+      const nextUser = {
+        ...(user || {}),
+        id: res.userId,
+        username: res.username || user?.username,
+        name: (user && user.name) || res.username,
+        isGuest: false
+      };
+      authService.setSession({ jwt: res.jwt, userId: res.userId }, nextUser);
+      setUser(nextUser);
+      setJwtToken(res.jwt);
+      return res;
+    } catch (err) {
+      setAuthError(err.message || 'Google account linking failed.');
+      throw err;
+    }
+  }, [jwtToken, user]);
+
+  const performLogout = useCallback(() => {
     setShowLogoutModal(false);
     authService.clearSession();
+    // The next user on this tab must not inherit the previous one's cached chats
+    try {
+      localStorage.removeItem('randomeet_dms');
+      localStorage.removeItem('randomeet_friends');
+    } catch (e) {}
     setIsAuthenticated(false);
     setUser(null);
     setJwtToken(null);
     setAuthError('');
     setFriends([]);
     setFriendRequests([]);
-  };
+    setLiveFriendRequest(null);
+    setSessionEpoch(prev => prev + 1);
+  }, []);
 
-  const logout = () => requestLogout();
+  const logout = useCallback(() => requestLogout(), [requestLogout]);
 
-  const dismissLiveFriendRequest = () => setLiveFriendRequest(null);
+  const dismissLiveFriendRequest = useCallback(() => setLiveFriendRequest(null), []);
 
-  const acceptLiveFriendRequest = async () => {
+  const acceptLiveFriendRequest = useCallback(async () => {
     if (!liveFriendRequest) return;
-    const reqUsername = liveFriendRequest.username || liveFriendRequest.friendUserId || liveFriendRequest.id || liveFriendRequest.senderUsername;
-    const senderName = liveFriendRequest.name || liveFriendRequest.senderName || reqUsername;
+    const reqUserId = liveFriendRequest.id || liveFriendRequest.friendUserId;
+    const senderName = liveFriendRequest.name || liveFriendRequest.senderName || liveFriendRequest.username || 'Someone';
     if (isGuest) {
       setLiveFriendRequest(null);
       openUpgradeModal(`create an account to accept friend request from ${senderName}`, {
         action: 'ACCEPT_FRIEND',
-        targetUsername: reqUsername
+        targetUserId: reqUserId
       });
       return;
     }
     setLiveFriendRequest(null);
-    if (reqUsername) {
-      await acceptFriendRequest(reqUsername);
+    if (reqUserId) {
+      await acceptFriendRequest(reqUserId);
     }
-  };
+  }, [liveFriendRequest, isGuest, openUpgradeModal, acceptFriendRequest]);
 
-  const updateUserProfile = async (updated) => {
+  const updateUserProfile = useCallback(async (updated) => {
     try {
       const token = jwtToken || authService.getToken();
       if (token) {
         const saved = await authService.updateProfile(updated, token);
         setUser(prev => {
           const nextUser = { ...prev, ...saved };
-          authService.setSession({ userId: nextUser?.username || nextUser?.id, jwt: token }, nextUser);
+          authService.setSession({ userId: nextUser?.id, jwt: token }, nextUser);
           return nextUser;
         });
         return saved;
@@ -395,53 +549,71 @@ export function AuthProvider({ children }) {
       console.warn('[AuthContext] Remote profile update failed:', e);
       throw e;
     }
-  };
+  }, [jwtToken]);
 
-  const clearAuthError = () => setAuthError('');
+  const clearAuthError = useCallback(() => setAuthError(''), []);
+
+  const value = useMemo(() => ({
+    isAuthenticated,
+    isGuest,
+    jwtToken,
+    user,
+    sessionEpoch,
+    profilePictures,
+    authLoading,
+    authError,
+    showLogoutModal,
+    requestLogout,
+    cancelLogout,
+    performLogout,
+    clearAuthError,
+    login,
+    signUp,
+    loginAsGuest,
+    upgradeGuestAccount,
+    signInWithGoogle,
+    completeGoogleSignup,
+    linkGoogleAccount,
+    firebaseConfigured: isFirebaseConfigured(),
+    upgradeModalOpen,
+    upgradeModalReason,
+    pendingUpgradeAction,
+    openUpgradeModal,
+    closeUpgradeModal,
+    logout,
+    updateUserProfile,
+    soundEnabled,
+    setSoundEnabled,
+    friends,
+    friendRequests,
+    friendRequestsLoading,
+    liveFriendRequest,
+    setLiveFriendRequest,
+    dismissLiveFriendRequest,
+    acceptLiveFriendRequest,
+    applyFriendPresence,
+    addFriend,
+    sendFriendRequest,
+    cancelFriendRequest,
+    loadFriendRequests,
+    acceptFriendRequest,
+    rejectFriendRequest,
+    removeFriend,
+    loadFriendsFromApi
+  }), [
+    isAuthenticated, isGuest, jwtToken, user, sessionEpoch, profilePictures, authLoading,
+    authError, showLogoutModal, requestLogout, cancelLogout, performLogout, clearAuthError,
+    login, signUp, loginAsGuest, upgradeGuestAccount, signInWithGoogle, completeGoogleSignup,
+    linkGoogleAccount, upgradeModalOpen, upgradeModalReason,
+    pendingUpgradeAction, openUpgradeModal, closeUpgradeModal, logout, updateUserProfile,
+    soundEnabled, friends, friendRequests, friendRequestsLoading, liveFriendRequest,
+    dismissLiveFriendRequest, acceptLiveFriendRequest, applyFriendPresence, addFriend,
+    sendFriendRequest, cancelFriendRequest, loadFriendRequests, acceptFriendRequest,
+    rejectFriendRequest, removeFriend, loadFriendsFromApi
+  ]);
 
   return (
-    <AuthContext.Provider value={{
-      isAuthenticated,
-      isGuest,
-      jwtToken,
-      user,
-      profilePictures,
-      authLoading,
-      authError,
-      showLogoutModal,
-      requestLogout,
-      cancelLogout,
-      performLogout,
-      clearAuthError,
-      login,
-      signUp,
-      loginAsGuest,
-      upgradeGuestAccount,
-      upgradeModalOpen,
-      upgradeModalReason,
-      pendingUpgradeAction,
-      openUpgradeModal,
-      closeUpgradeModal,
-      logout,
-      updateUserProfile,
-      soundEnabled,
-      setSoundEnabled,
-      friends,
-      friendRequests,
-      friendRequestsLoading,
-      liveFriendRequest,
-      setLiveFriendRequest,
-      dismissLiveFriendRequest,
-      acceptLiveFriendRequest,
-      addFriend,
-      sendFriendRequest,
-      cancelFriendRequest,
-      loadFriendRequests,
-      acceptFriendRequest,
-      rejectFriendRequest,
-      removeFriend,
-      loadFriendsFromApi
-    }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

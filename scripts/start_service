@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+
+# Resolve script directory and project root dynamically
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+LOG_FILE="$SCRIPT_DIR/service.log"
+PID_FILE="$SCRIPT_DIR/service.pid"
+PORT=5173
+DETACHED=false
+
+# Parse command line arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -d|--detached)
+            DETACHED=true
+            shift
+            ;;
+        -p|--port)
+            PORT="$2"
+            shift 2
+            ;;
+        -h|--help)
+            echo "Usage: $0 [-d|--detached] [-p|--port <port>] [port]"
+            echo "  (no flags)  Run frontend in foreground (logs to terminal & $LOG_FILE)"
+            echo "  -d          Run frontend in background / detached mode"
+            echo "  -p <port>   Specify port (default: 5173)"
+            exit 0
+            ;;
+        *)
+            if [[ "$1" =~ ^[0-9]+$ ]]; then
+                PORT="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Resolve node/npm (PATH first, then $NODE_HOME)
+if ! command -v npm >/dev/null 2>&1; then
+    if [ -n "${NODE_HOME:-}" ]; then
+        export PATH="$NODE_HOME/bin:$NODE_HOME:$PATH"
+    fi
+    if ! command -v npm >/dev/null 2>&1; then
+        echo "❌ [start] ERROR: npm not found. Install Node.js (or set NODE_HOME)." >&2
+        exit 1
+    fi
+fi
+
+# Locate and source .env from default project root
+ENV_FILE=""
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    ENV_FILE="$PROJECT_ROOT/.env"
+elif [ -f "$SCRIPT_DIR/.env" ]; then
+    ENV_FILE="$SCRIPT_DIR/.env"
+fi
+
+if [ -n "$ENV_FILE" ]; then
+    echo "📄 Loading environment variables from $ENV_FILE"
+    set -a
+    # shellcheck disable=SC1090
+    . "$ENV_FILE"
+    set +a
+else
+    echo "⚠️  No .env file found at default location ($PROJECT_ROOT/.env)"
+fi
+
+# Function to check if service is already running
+is_running() {
+    if [ -f "$PID_FILE" ]; then
+        local pid
+        pid=$(cat "$PID_FILE" 2>/dev/null)
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            return 0
+        else
+            rm -f "$PID_FILE"
+        fi
+    fi
+    local port_pid
+    port_pid=$(lsof -ti tcp:"$PORT" 2>/dev/null | head -n 1)
+    if [ -n "$port_pid" ]; then
+        return 0
+    fi
+    return 1
+}
+
+if is_running; then
+    ACTIVE_PID=$(cat "$PID_FILE" 2>/dev/null || lsof -ti tcp:"$PORT" 2>/dev/null | head -n 1)
+    echo "⚠️  Frontend is ALREADY running on port $PORT (PID: $ACTIVE_PID)."
+    echo "   Logs: $LOG_FILE"
+    echo "   Stop command: $SCRIPT_DIR/stop_script"
+    exit 1
+fi
+
+echo "========================================================"
+echo "🚀 Initializing chat-frontend (Vite Dev Server)"
+echo "========================================================"
+echo "📁 Project Root : $PROJECT_ROOT"
+echo "📄 Env File     : ${ENV_FILE:-None (using defaults)}"
+echo "🌐 Port         : $PORT"
+echo "📜 Log File     : $LOG_FILE"
+echo "========================================================"
+
+cd "$PROJECT_ROOT" || exit 1
+chmod +x "$PROJECT_ROOT/node_modules/.bin"/* 2>/dev/null || true
+
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+if [ "$DETACHED" = true ]; then
+    echo "[$TIMESTAMP] Starting frontend in DETACHED (background) mode..." >> "$LOG_FILE"
+
+    setsid npm run dev -- --port "$PORT" --strictPort --host >> "$LOG_FILE" 2>&1 &
+    SERVICE_PID=$!
+    disown "$SERVICE_PID" 2>/dev/null || true
+    echo "$SERVICE_PID" > "$PID_FILE"
+
+    echo "⏳ Waiting for Vite dev server to respond on port $PORT..."
+    UP=0
+    for _ in $(seq 1 45); do
+        if curl -sf -o /dev/null "http://localhost:${PORT}" 2>/dev/null; then
+            UP=1
+            break
+        fi
+        sleep 1
+    done
+
+    if [ "$UP" -eq 1 ]; then
+        echo "✅ Frontend started successfully in detached mode (PID: $SERVICE_PID)."
+        echo "========================================================"
+        echo "🌐 Frontend Access URLs:"
+        echo "   Localhost : http://localhost:${PORT}"
+        for ip in $(hostname -I 2>/dev/null); do
+            echo "   Network   : http://${ip}:${PORT}"
+        done
+        echo "========================================================"
+        echo "🔍 View logs: tail -f $LOG_FILE"
+        echo "⏹️  Stop:      $SCRIPT_DIR/stop_script"
+        echo "========================================================"
+        exit 0
+    else
+        echo "⚠️  Frontend process started (PID: $SERVICE_PID) but port $PORT is not answering yet."
+        echo "Check logs: tail -n 30 $LOG_FILE"
+        exit 1
+    fi
+else
+    echo "[$TIMESTAMP] Starting frontend in FOREGROUND mode..." >> "$LOG_FILE"
+    echo "💻 Running in terminal. Press Ctrl+C to stop."
+    echo "========================================================"
+    echo "🌐 Frontend Access URLs:"
+    echo "   Localhost : http://localhost:${PORT}"
+    for ip in $(hostname -I 2>/dev/null); do
+        echo "   Network   : http://${ip}:${PORT}"
+    done
+    echo "========================================================"
+
+    # Trap Ctrl+C (SIGINT) and SIGTERM to clean up nicely
+    cleanup() {
+        echo ""
+        echo "🛑 Shutting down frontend..."
+        local children
+        children=$(pgrep -P "$$" 2>/dev/null)
+        if [ -n "$children" ]; then
+            kill -15 $children 2>/dev/null || true
+        fi
+        rm -f "$PID_FILE"
+        exit 0
+    }
+    trap cleanup INT TERM EXIT
+
+    echo "$$" > "$PID_FILE"
+
+    # Run vite and pipe to console and log file
+    npm run dev -- --port "$PORT" --strictPort --host 2>&1 | tee -a "$LOG_FILE"
+fi

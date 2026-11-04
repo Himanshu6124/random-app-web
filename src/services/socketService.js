@@ -1,4 +1,23 @@
-import { Client } from '@stomp/stompjs';
+import { Client, ReconnectionTimeMode } from '@stomp/stompjs';
+import { authService } from './authService';
+
+const DEV = Boolean(import.meta.env && import.meta.env.DEV);
+
+/** Chat payload logging is noisy and privacy sensitive: dev builds only. */
+const log = (...args) => {
+  if (DEV) console.log(...args);
+};
+
+const PRESENCE_HEARTBEAT_MS = 20000;
+const TYPING_REPEAT_MS = 2500;
+const SEARCH_REFRESH_MS = 30000;
+const ROOM_PREFIX = '/topic/conversations/';
+const MATCH_QUEUE = '/user/queue/random-match';
+const NOTIFICATIONS_QUEUE = '/user/queue/notifications';
+const ERRORS_QUEUE = '/user/queue/errors';
+
+/** Must match MessageLimits.MAX_MESSAGE_LENGTH on the server. */
+export const MAX_MESSAGE_LENGTH = 4000;
 
 /**
  * Extracts a friendly peer display name from various payload formats.
@@ -10,6 +29,7 @@ export function extractPeerName(payload) {
   const candidates = [
     payload.friendUserName,
     payload.friendName,
+    payload.friendUsername,
     payload.userName,
     payload.name,
     payload.nickname,
@@ -36,6 +56,9 @@ export function extractPeerName(payload) {
 
 /**
  * SocketService - Handles STOMP WebSocket communication with chat-backend.
+ *
+ * Clients only ever publish to /app/* and only ever subscribe to /user/queue/**
+ * and /topic/conversations/{id}; the server rejects anything else.
  */
 export class SocketService {
   constructor() {
@@ -44,80 +67,116 @@ export class SocketService {
     this.authToken = '';
     this.activeUserId = '';
     this.callbacks = {};
+    this.wsPath = '/ws-chat';
 
-    // Active room subscription
-    this.roomSubscription = null;
+    // Desired subscriptions survive a drop, live handles do not. On reconnect the
+    // whole desired registry is replayed, otherwise the client goes silently deaf.
+    this.desiredSubscriptions = new Map(); // destination -> handler
+    this.liveSubscriptions = new Map();    // destination -> StompSubscription
+
+    // Several rooms can be open at once (random chat + an open DM thread)
+    this.roomListeners = new Map();        // conversationId -> Set<listener>
     this.activeConversationId = null;
 
-    // Matchmaking state & subscriptions
-    this.matchQueueSubscription = null;
-    this.matchTopicSubscription = null;
+    // Matchmaking state
     this._pendingMatchmaking = null;
     this._lastHandledMatchConvId = null;
+    this._isSearching = false;
+    this._searchRefresh = null;
+
     this._presenceHeartbeat = null;
+    this._typingState = new Map();         // conversationId -> { active, lastSent }
+    this._authExpired = false;
+    this._firstConnect = true;
+    this._networkListenersBound = false;
+    this._onWindowOnline = null;
+    this._onWindowOffline = null;
   }
+
+  // ==========================================
+  // Connection lifecycle
+  // ==========================================
 
   /**
    * Initializes STOMP Client connection.
    */
   connect(url = '/ws-chat', token = '', userId = '', callbacks = {}) {
+    this.disconnect();
+
     this.authToken = token || '';
     this.activeUserId = userId || '';
     this.callbacks = callbacks;
-
-    this.disconnect();
+    this.wsPath = url.startsWith('/') ? url : `/${url}`;
+    this._authExpired = false;
+    this._firstConnect = true;
 
     if (!this.authToken) {
       console.warn('[SocketService] Cannot connect without auth token');
       return;
     }
 
-    const envBackend = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '');
-    let wsBase;
-    if (envBackend) {
-      wsBase = envBackend.replace(/^http/, 'ws');
-    } else {
-      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
-      const host = typeof window !== 'undefined' ? window.location.host : 'localhost:8080';
-      wsBase = `${isHttps ? 'wss' : 'ws'}://${host}`;
-    }
-
-    const cleanPath = url.startsWith('/') ? url : `/${url}`;
-    const wsUrl = `${wsBase}${cleanPath}?token=${encodeURIComponent(this.authToken)}`;
-
-    console.log('[SocketService] Connecting to STOMP broker:', wsUrl.replace(/token=.*$/, 'token=***'));
+    this._bindNetworkListeners();
 
     this.client = new Client({
-      brokerURL: wsUrl,
-      reconnectDelay: 5000,
+      brokerURL: this._buildBrokerUrl(this.authToken),
+      // Exponential backoff with jitter: a fixed timer makes every client in the
+      // fleet retry in lockstep after an outage.
+      reconnectDelay: 2000,
+      reconnectTimeMode: ReconnectionTimeMode.EXPONENTIAL,
+      maxReconnectDelay: 60000,
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
       debug: () => {},
+      beforeConnect: async () => {
+        // Always connect with the token that is current *now*, not the one captured
+        // when the client was built (it may have been refreshed by a guest upgrade).
+        const token = authService.getToken() || this.authToken;
+        if (!token || this._isTokenExpired(token)) {
+          this._handleAuthFailure();
+          return;
+        }
+        this.authToken = token;
+        this.client.brokerURL = this._buildBrokerUrl(token);
+
+        if (!this._firstConnect) {
+          const jitter = Math.floor(Math.random() * 1500);
+          if (jitter > 0) {
+            await new Promise(resolve => setTimeout(resolve, jitter));
+          }
+        }
+      },
       onConnect: (frame) => {
         this.isConnected = true;
-        console.log('✅ [SocketService] Connected to STOMP broker');
+        this._firstConnect = false;
+        this._authExpired = false;
+        log('✅ [SocketService] Connected to STOMP broker');
 
-        // Immediately advertise global online presence to server
-        this.sendOnline(null, true);
-
-        // Subscribe to personal notification channels for real-time friend alerts
+        // Handles from the previous session are dead objects: re-SUBSCRIBE everything.
+        this.liveSubscriptions.clear();
         if (this.activeUserId) {
           this.subscribeUserNotifications(this.activeUserId);
+          this.subscribeUserErrors();
+        }
+        this._replayDesiredSubscriptions();
+
+        // Advertise global presence, then presence in every room we hold open
+        this.sendOnline(null, true);
+        for (const conversationId of this._roomIds()) {
+          this.sendOnline(conversationId, true);
         }
 
-        // Schedule periodic presence keepalive heartbeat every 20 seconds
         if (this._presenceHeartbeat) clearInterval(this._presenceHeartbeat);
         this._presenceHeartbeat = setInterval(() => {
           if (this.isConnected) {
             this.sendOnline(null, true);
           }
-        }, 20000);
+        }, PRESENCE_HEARTBEAT_MS);
 
-        // Execute queued matchmaking if requested prior to connection
-        if (this._pendingMatchmaking) {
+        // Resume (or start) a search that is still owned by the UI
+        if (this._pendingMatchmaking || this._isSearching) {
           const pending = this._pendingMatchmaking;
           this._pendingMatchmaking = null;
-          this.startMatchmaking(pending);
+          this.startMatchmaking(pending || {});
         }
 
         if (this.callbacks.onConnect) {
@@ -125,29 +184,25 @@ export class SocketService {
         }
       },
       onStompError: (frame) => {
-        console.error('❌ [SocketService] STOMP error:', frame?.headers?.message || frame);
+        console.error('❌ [SocketService] STOMP error:', frame?.headers?.message || 'protocol error');
         if (this.callbacks.onError) {
           this.callbacks.onError(frame?.headers?.message || 'STOMP Protocol Error');
         }
       },
-      onWebSocketClose: () => {
-        this.isConnected = false;
-        if (this._presenceHeartbeat) {
-          clearInterval(this._presenceHeartbeat);
-          this._presenceHeartbeat = null;
+      onWebSocketClose: (evt) => {
+        this._markDisconnected();
+        log('🔌 [SocketService] WebSocket connection closed');
+        // 1008 / 4401 means the handshake was rejected: retrying forever is pointless.
+        if (evt && (evt.code === 1008 || evt.code === 4401)) {
+          this._handleAuthFailure();
         }
-        console.log('🔌 [SocketService] WebSocket connection closed');
         if (this.callbacks.onDisconnect) {
           this.callbacks.onDisconnect();
         }
       },
       onDisconnect: () => {
-        this.isConnected = false;
-        if (this._presenceHeartbeat) {
-          clearInterval(this._presenceHeartbeat);
-          this._presenceHeartbeat = null;
-        }
-        console.log('🔌 [SocketService] STOMP Client disconnected');
+        this._markDisconnected();
+        log('🔌 [SocketService] STOMP Client disconnected');
         if (this.callbacks.onDisconnect) {
           this.callbacks.onDisconnect();
         }
@@ -163,13 +218,15 @@ export class SocketService {
       this._presenceHeartbeat = null;
     }
 
-    try {
-      this.sendOnline(null, false);
-    } catch (e) {}
+    // Rooms are left by the server's own disconnect cleanup once the socket drops,
+    // so we only drop the waiting matchmaking ticket and our presence here.
+    this.cancelMatchmaking({ notifyServer: true });
+    this.sendOnline(null, false);
 
-    this.unsubscribeRoom();
-    this.unsubscribeUserNotifications();
-    this.cancelMatchmaking();
+    this.desiredSubscriptions.clear();
+    this.liveSubscriptions.clear();
+    this.roomListeners.clear();
+    this._typingState.clear();
     this._pendingMatchmaking = null;
     this._lastHandledMatchConvId = null;
 
@@ -182,8 +239,147 @@ export class SocketService {
       this.client = null;
     }
 
+    this._unbindNetworkListeners();
     this.isConnected = false;
     this.activeConversationId = null;
+  }
+
+  _buildBrokerUrl(token) {
+    const envBackend = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '');
+    let wsBase;
+    if (envBackend) {
+      wsBase = envBackend.replace(/^http/, 'ws');
+    } else {
+      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+      const host = typeof window !== 'undefined' ? window.location.host : 'localhost:8080';
+      wsBase = `${isHttps ? 'wss' : 'ws'}://${host}`;
+    }
+    return `${wsBase}${this.wsPath}?token=${encodeURIComponent(token)}`;
+  }
+
+  /** Reads `exp` out of the JWT without verifying it (the server still does that). */
+  _isTokenExpired(token) {
+    try {
+      const part = String(token).split('.')[1];
+      if (!part) return false;
+      const payload = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/')));
+      return typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now();
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** Stops the reconnect loop and asks the app to route the user back to login. */
+  _handleAuthFailure() {
+    if (this._authExpired) return;
+    this._authExpired = true;
+    console.warn('[SocketService] Session expired or rejected, stopping reconnects');
+    try {
+      this.client?.deactivate();
+    } catch (e) {}
+    if (this.callbacks.onAuthExpired) {
+      this.callbacks.onAuthExpired();
+    }
+  }
+
+  _markDisconnected() {
+    this.isConnected = false;
+    if (this._presenceHeartbeat) {
+      clearInterval(this._presenceHeartbeat);
+      this._presenceHeartbeat = null;
+    }
+    // Keep the desired registry, throw away the dead handles.
+    this.liveSubscriptions.clear();
+    this._typingState.clear();
+  }
+
+  _bindNetworkListeners() {
+    if (this._networkListenersBound || typeof window === 'undefined') return;
+
+    this._onWindowOffline = () => {
+      if (!this.isConnected) return;
+      log('[SocketService] Browser went offline');
+      this._markDisconnected();
+      if (this.callbacks.onDisconnect) {
+        this.callbacks.onDisconnect();
+      }
+    };
+
+    this._onWindowOnline = () => {
+      if (!this.client || this.client.connected || this._authExpired) return;
+      log('[SocketService] Browser back online, retrying immediately');
+      try {
+        const result = this.client.deactivate();
+        if (result && typeof result.then === 'function') {
+          result
+            .then(() => {
+              if (this.client && !this._authExpired) this.client.activate();
+            })
+            .catch(() => {});
+        } else if (this.client) {
+          this.client.activate();
+        }
+      } catch (e) {}
+    };
+
+    window.addEventListener('offline', this._onWindowOffline);
+    window.addEventListener('online', this._onWindowOnline);
+    this._networkListenersBound = true;
+  }
+
+  _unbindNetworkListeners() {
+    if (!this._networkListenersBound || typeof window === 'undefined') return;
+    window.removeEventListener('offline', this._onWindowOffline);
+    window.removeEventListener('online', this._onWindowOnline);
+    this._networkListenersBound = false;
+  }
+
+  // ==========================================
+  // Subscription registry
+  // ==========================================
+
+  _addSubscription(destination, handler) {
+    this.desiredSubscriptions.set(destination, handler);
+    if (!this.client || !this.client.connected) return;
+    if (this.liveSubscriptions.has(destination)) return;
+
+    try {
+      log(`[SocketService] Subscribing to ${destination}`);
+      this.liveSubscriptions.set(destination, this.client.subscribe(destination, handler));
+    } catch (e) {
+      console.warn('[SocketService] Failed to subscribe to', destination, e);
+    }
+  }
+
+  _removeSubscription(destination) {
+    this.desiredSubscriptions.delete(destination);
+    const live = this.liveSubscriptions.get(destination);
+    if (live) {
+      try { live.unsubscribe(); } catch (e) {}
+      this.liveSubscriptions.delete(destination);
+    }
+  }
+
+  _replayDesiredSubscriptions() {
+    for (const [destination, handler] of this.desiredSubscriptions) {
+      if (this.liveSubscriptions.has(destination)) continue;
+      try {
+        log(`[SocketService] Re-subscribing to ${destination}`);
+        this.liveSubscriptions.set(destination, this.client.subscribe(destination, handler));
+      } catch (e) {
+        console.warn('[SocketService] Failed to re-subscribe to', destination, e);
+      }
+    }
+  }
+
+  _roomIds() {
+    const ids = [];
+    for (const destination of this.desiredSubscriptions.keys()) {
+      if (destination.startsWith(ROOM_PREFIX)) {
+        ids.push(destination.slice(ROOM_PREFIX.length));
+      }
+    }
+    return ids;
   }
 
   // ==========================================
@@ -191,17 +387,12 @@ export class SocketService {
   // ==========================================
 
   subscribeUserNotifications(userId) {
-    if (!this.client || !this.client.connected || !userId) return;
+    if (!userId) return;
 
-    this.unsubscribeUserNotifications();
-
-    const topic = `/topic/users/${userId}/notifications`;
-    const queue = `/user/queue/notifications`;
-
-    const handleNotification = (frame) => {
+    this._addSubscription(NOTIFICATIONS_QUEUE, (frame) => {
       try {
         const event = JSON.parse(frame.body);
-        console.log('[SocketService] Notification event:', event);
+        log('[SocketService] Notification event:', event.type);
         if (event.type === 'FRIEND_REQUEST_RECEIVED') {
           this.callbacks.onFriendRequestReceived?.(event.payload);
         } else if (event.type === 'FRIEND_REQUEST_ACCEPTED') {
@@ -210,32 +401,36 @@ export class SocketService {
           this.callbacks.onFriendRequestCancelled?.(event.payload);
         }
       } catch (e) {
-        console.warn('[SocketService] Failed to parse notification frame:', e, frame.body);
+        console.warn('[SocketService] Failed to parse notification frame:', e);
       }
-    };
-
-    try {
-      this.notificationsTopicSub = this.client.subscribe(topic, handleNotification);
-    } catch (e) {
-      console.warn('[SocketService] Failed to subscribe to topic notifications:', e);
-    }
-
-    try {
-      this.notificationsQueueSub = this.client.subscribe(queue, handleNotification);
-    } catch (e) {
-      console.warn('[SocketService] Failed to subscribe to queue notifications:', e);
-    }
+    });
   }
 
   unsubscribeUserNotifications() {
-    if (this.notificationsTopicSub) {
-      try { this.notificationsTopicSub.unsubscribe(); } catch (e) {}
-      this.notificationsTopicSub = null;
-    }
-    if (this.notificationsQueueSub) {
-      try { this.notificationsQueueSub.unsubscribe(); } catch (e) {}
-      this.notificationsQueueSub = null;
-    }
+    this._removeSubscription(NOTIFICATIONS_QUEUE);
+  }
+
+  /**
+   * Private error queue. The server refuses a message (over-length, or a failed save)
+   * by sending ERROR here instead of dropping it silently; without this subscription the
+   * sender's text just vanishes with no feedback at all.
+   */
+  subscribeUserErrors() {
+    this._addSubscription(ERRORS_QUEUE, (frame) => {
+      try {
+        const event = JSON.parse(frame.body);
+        if (event.type !== 'ERROR') return;
+        const payload = event.payload || {};
+        console.warn('[SocketService] Server refused a message:', payload.reason);
+        this.callbacks.onChatError?.(payload);
+      } catch (e) {
+        console.warn('[SocketService] Failed to parse error frame:', e);
+      }
+    });
+  }
+
+  unsubscribeUserErrors() {
+    this._removeSubscription(ERRORS_QUEUE);
   }
 
   // ==========================================
@@ -243,31 +438,21 @@ export class SocketService {
   // ==========================================
 
   /**
-   * Subscribes to conversation room topic: /topic/conversations/{conversationId}
+   * Subscribes to a conversation room topic: /topic/conversations/{conversationId}.
+   * Several rooms may be subscribed at the same time.
    */
   subscribeRoom(conversationId) {
     if (!conversationId) return;
-    if (this.activeConversationId === conversationId && this.roomSubscription) {
-      return;
-    }
 
-    this.unsubscribeRoom();
     this.activeConversationId = conversationId;
+    const destination = `${ROOM_PREFIX}${conversationId}`;
 
-    if (!this.client || !this.client.connected) {
-      console.warn('[SocketService] Cannot subscribe to room: STOMP not connected');
-      return;
-    }
-
-    const topic = `/topic/conversations/${conversationId}`;
-    console.log(`[SocketService] Subscribing to room topic: ${topic}`);
-
-    this.roomSubscription = this.client.subscribe(topic, (message) => {
+    this._addSubscription(destination, (message) => {
       try {
         const event = JSON.parse(message.body);
-        this._handleRoomEvent(event);
+        this._handleRoomEvent(event, conversationId);
       } catch (e) {
-        console.warn('[SocketService] Failed to parse room event body:', e, message.body);
+        console.warn('[SocketService] Failed to parse room event body:', e);
       }
     });
 
@@ -275,38 +460,75 @@ export class SocketService {
     this.sendOnline(conversationId, true);
   }
 
-  unsubscribeRoom() {
-    if (this.roomSubscription) {
-      try {
-        if (this.activeConversationId) {
-          this.sendOnline(this.activeConversationId, false);
-        }
-        this.roomSubscription.unsubscribe();
-      } catch (e) {
-        console.warn('[SocketService] Error unsubscribing from room:', e);
-      }
-      this.roomSubscription = null;
+  /** Unsubscribes exactly one room, leaving every other open room alone. */
+  unsubscribeRoom(conversationId) {
+    if (!conversationId) return;
+
+    this.sendOnline(conversationId, false);
+    this._removeSubscription(`${ROOM_PREFIX}${conversationId}`);
+    this._typingState.delete(conversationId);
+    if (this.activeConversationId === conversationId) {
+      this.activeConversationId = null;
     }
-    this.activeConversationId = null;
   }
 
-  _handleRoomEvent(event) {
+  unsubscribeAllRooms() {
+    for (const conversationId of this._roomIds()) {
+      this.unsubscribeRoom(conversationId);
+    }
+  }
+
+  /**
+   * Registers per-conversation listeners so a view can follow one room without
+   * clobbering the global callbacks. Returns an unregister function.
+   */
+  addRoomListener(conversationId, listener) {
+    if (!conversationId || !listener) return () => {};
+
+    let listeners = this.roomListeners.get(conversationId);
+    if (!listeners) {
+      listeners = new Set();
+      this.roomListeners.set(conversationId, listeners);
+    }
+    listeners.add(listener);
+
+    return () => {
+      const current = this.roomListeners.get(conversationId);
+      if (!current) return;
+      current.delete(listener);
+      if (current.size === 0) this.roomListeners.delete(conversationId);
+    };
+  }
+
+  _emitRoom(conversationId, name, ...args) {
+    const listeners = this.roomListeners.get(conversationId);
+    if (!listeners) return;
+    for (const listener of listeners) {
+      try {
+        listener[name]?.(...args);
+      } catch (e) {
+        console.warn('[SocketService] Room listener threw:', e);
+      }
+    }
+  }
+
+  _handleRoomEvent(event, conversationId) {
     if (!event || !event.type) {
-      console.log('[SocketService] Received unknown room frame:', event);
+      log('[SocketService] Received unknown room frame');
       return;
     }
 
     const type = event.type;
-    const payload = event.payload;
+    const payload = { ...(event.payload || {}), conversationId: event.payload?.conversationId || conversationId };
 
-    console.log(`[SocketService] Room event [${type}]:`, payload);
+    log(`[SocketService] Room event [${type}] in ${conversationId}`);
 
     switch (type) {
       case 'MESSAGE': {
         const rawTime = payload.timeStamp || payload.timestamp || new Date().toISOString();
         const msg = {
           id: payload.id || 'msg_' + Date.now(),
-          conversationId: payload.conversationId || this.activeConversationId,
+          conversationId: payload.conversationId,
           senderId: payload.senderId,
           receiverId: payload.receiverId,
           text: payload.message || payload.text || '',
@@ -318,60 +540,48 @@ export class SocketService {
           timestamp: rawTime,
           time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
-        if (this.callbacks.onMessageReceived) {
-          this.callbacks.onMessageReceived(msg);
-        }
+        this.callbacks.onMessageReceived?.(msg);
+        this._emitRoom(conversationId, 'onMessage', msg);
         break;
       }
 
       case 'TYPING': {
-        const isTyping = Boolean(payload?.typing);
-        const sender = payload?.senderId;
-        if (sender && sender === this.activeUserId) {
-          break;
-        }
-        if (this.callbacks.onTypingStatus) {
-          this.callbacks.onTypingStatus(isTyping, payload);
-        }
+        if (payload.senderId && payload.senderId === this.activeUserId) break;
+        const isTyping = Boolean(payload.typing);
+        this.callbacks.onTypingStatus?.(isTyping, payload);
+        this._emitRoom(conversationId, 'onTyping', isTyping, payload);
         break;
       }
 
       case 'ONLINE_STATUS': {
-        const isOnline = Boolean(payload?.online);
-        const sender = payload?.senderId;
-        if (sender && sender === this.activeUserId) {
-          break;
-        }
-        if (this.callbacks.onOnlineStatus) {
-          this.callbacks.onOnlineStatus(isOnline, payload);
-        }
+        if (payload.senderId && payload.senderId === this.activeUserId) break;
+        const isOnline = Boolean(payload.online);
+        this.callbacks.onOnlineStatus?.(isOnline, payload);
+        this._emitRoom(conversationId, 'onOnlineStatus', isOnline, payload);
         break;
       }
 
       case 'SEEN': {
-        if (this.callbacks.onMessageSeen) {
-          this.callbacks.onMessageSeen(payload);
-        }
+        this.callbacks.onMessageSeen?.(payload);
+        this._emitRoom(conversationId, 'onSeen', payload);
         break;
       }
 
       case 'DISCONNECTED_DTO': {
-        const disconnectedUser = payload?.senderId || 'Stranger';
-        if (this.callbacks.onPeerDisconnected) {
-          this.callbacks.onPeerDisconnected(disconnectedUser);
-        }
+        if (payload.senderId && payload.senderId === this.activeUserId) break;
+        this.callbacks.onPeerDisconnected?.(payload.senderId || '', conversationId);
+        this._emitRoom(conversationId, 'onPeerDisconnected', payload.senderId || '');
         break;
       }
 
       case 'PEER_UPDATED': {
-        if (this.callbacks.onPeerUpdated) {
-          this.callbacks.onPeerUpdated(payload);
-        }
+        this.callbacks.onPeerUpdated?.(payload);
+        this._emitRoom(conversationId, 'onPeerUpdated', payload);
         break;
       }
 
       default:
-        console.log('[SocketService] Unhandled room event type:', type, payload);
+        log('[SocketService] Unhandled room event type:', type);
         break;
     }
   }
@@ -380,303 +590,215 @@ export class SocketService {
   // Random Chat Matchmaking
   // ==========================================
 
+  /** True while a search ticket is owned by this client. */
+  get isSearching() {
+    return this._isSearching;
+  }
+
   /**
-   * Starts random matchmaking queue search.
+   * Starts (or resumes) the random matchmaking search.
    */
   startMatchmaking(userProfile = {}) {
-    this.cancelMatchmaking();
+    this._isSearching = true;
     this._lastHandledMatchConvId = null;
 
     if (!this.client || !this.client.connected) {
-      console.log('[SocketService] STOMP not connected yet, queueing matchmaking');
-      this._pendingMatchmaking = userProfile;
+      log('[SocketService] STOMP not connected yet, queueing matchmaking');
+      this._pendingMatchmaking = userProfile || {};
       return;
     }
 
-    const userId = this.activeUserId || userProfile.id || userProfile.username;
+    this._pendingMatchmaking = null;
+    this._addSubscription(MATCH_QUEUE, (frame) => this._handleMatchmakingEvent(frame));
+    this._publishSearch();
 
-    // 1. Subscribe to personal queue (/user/queue/random-match)
-    console.log('[SocketService] Subscribing to /user/queue/random-match');
-    this.matchQueueSubscription = this.client.subscribe('/user/queue/random-match', (frame) => {
-      this._handleMatchmakingEvent(frame);
-    });
+    // Refresh the ticket periodically so a long wait cannot strand the user.
+    if (this._searchRefresh) clearInterval(this._searchRefresh);
+    this._searchRefresh = setInterval(() => {
+      if (this._isSearching && this.isConnected) {
+        this._publishSearch();
+      }
+    }, SEARCH_REFRESH_MS);
+  }
 
-    // 2. Also subscribe to /topic/users/{userId}/random-match fallback channel
-    if (userId) {
-      const userTopic = `/topic/users/${userId}/random-match`;
-      console.log(`[SocketService] Subscribing to fallback match topic: ${userTopic}`);
-      this.matchTopicSubscription = this.client.subscribe(userTopic, (frame) => {
-        this._handleMatchmakingEvent(frame);
-      });
-    }
-
-    // 3. Publish matchmaking search trigger to /app/chat.random
-    console.log('[SocketService] Publishing match search to /app/chat.random');
-    this.client.publish({
-      destination: '/app/chat.random',
-      body: JSON.stringify({})
-    });
+  _publishSearch() {
+    log('[SocketService] Publishing match search to /app/chat.random');
+    this._publish('/app/chat.random', {});
   }
 
   _handleMatchmakingEvent(frame) {
     try {
       const event = JSON.parse(frame.body);
-      console.log('[SocketService] Matchmaking event received:', event);
+      log('[SocketService] Matchmaking event received:', event.type);
 
       if (event.type === 'CONVERSATION_DTO' && event.payload) {
         const payload = event.payload;
 
-        // Prevent duplicate callback when event arrives on both queue and topic
         if (this._lastHandledMatchConvId && this._lastHandledMatchConvId === payload.conversationId) {
-          console.log('[SocketService] Ignoring duplicate match event for:', payload.conversationId);
           return;
         }
         this._lastHandledMatchConvId = payload.conversationId;
 
-        // Unsubscribe from match queues immediately upon match
+        // We have a match, the ticket is spent
         this.cancelMatchmaking();
 
         const peerName = extractPeerName(payload);
+        // friendUserId is the peer's STABLE ID. friendUsername/name are display only and must
+        // never be used to decide who a message or event came from.
+        const peerId = payload.friendUserId || '';
         const matchInfo = {
           conversationId: payload.conversationId,
           id: payload.conversationId,
           friendUserName: peerName,
-          friendUserId: payload.friendUserId || payload.username || 'peer',
-          peerId: payload.friendUserId || payload.username || 'peer',
+          friendUserId: peerId,
+          peerId,
+          username: payload.friendUsername || '',
           name: peerName,
           photoUrl: payload.photoUrl || '',
           avatarBg: '#8b5cf6',
           status: 'Online'
         };
 
-        if (this.callbacks.onMatchFound) {
-          this.callbacks.onMatchFound(matchInfo);
-        }
+        this.callbacks.onMatchFound?.(matchInfo);
+      } else if (event.type === 'MATCH_CANCELLED' || event.type === 'MATCH_EXPIRED') {
+        // The server discarded our ticket: leave the searching state instead of
+        // spinning the radar forever.
+        this.cancelMatchmaking();
+        this.callbacks.onMatchCancelled?.(event.payload);
       }
     } catch (e) {
-      console.warn('[SocketService] Failed to parse match event:', e, frame.body);
+      console.warn('[SocketService] Failed to parse match event:', e);
     }
   }
 
-  cancelMatchmaking() {
+  /**
+   * Stops searching. `notifyServer` publishes /app/chat.random.cancel so the
+   * server drops the waiting ticket instead of matching the next searcher to a ghost.
+   */
+  cancelMatchmaking({ notifyServer = false } = {}) {
+    const wasSearching = this._isSearching || Boolean(this._pendingMatchmaking);
+    this._isSearching = false;
     this._pendingMatchmaking = null;
-    if (this.matchQueueSubscription) {
-      try {
-        this.matchQueueSubscription.unsubscribe();
-      } catch (e) {}
-      this.matchQueueSubscription = null;
+
+    if (this._searchRefresh) {
+      clearInterval(this._searchRefresh);
+      this._searchRefresh = null;
     }
-    if (this.matchTopicSubscription) {
-      try {
-        this.matchTopicSubscription.unsubscribe();
-      } catch (e) {}
-      this.matchTopicSubscription = null;
+
+    if (notifyServer && wasSearching) {
+      this._publish('/app/chat.random.cancel', {});
     }
+
+    this._removeSubscription(MATCH_QUEUE);
   }
 
   // ==========================================
   // Client Action Emitters
   // ==========================================
 
+  /** Publishes to an /app destination. Returns false when nothing was sent. */
+  _publish(destination, body) {
+    if (!this.client || !this.client.connected) return false;
+    try {
+      this.client.publish({ destination, body: JSON.stringify(body) });
+      return true;
+    } catch (e) {
+      console.warn('[SocketService] Failed to publish to', destination, e);
+      return false;
+    }
+  }
+
   /**
    * Send chat message via STOMP in normal conversation: /app/chat.send
    */
   sendMessage(conversationId, text, type = 'TEXT', objectUri = null, referredMessageId = null) {
-    if (!this.client || !this.client.connected || !conversationId) return;
-
-    const payload = {
-      conversationId: conversationId,
+    if (!conversationId) return false;
+    return this._publish('/app/chat.send', {
+      conversationId,
       message: text,
-      type: type,
-      objectUri: objectUri,
-      referredMessageId: referredMessageId
-    };
-
-    console.log('[SocketService] Publishing message to /app/chat.send:', payload);
-    this.client.publish({
-      destination: '/app/chat.send',
-      body: JSON.stringify(payload)
+      type,
+      objectUri,
+      referredMessageId
     });
   }
 
   /**
    * Send random chat message via STOMP: /app/chat.random.send
    */
-  sendRandomChatMessage(conversationId, text, type = 'TEXT') {
-    if (!this.client || !this.client.connected || !conversationId) return;
-
-    const payload = {
-      conversationId: conversationId,
+  sendRandomChatMessage(conversationId, text, type = 'TEXT', objectUri = null) {
+    if (!conversationId) return false;
+    return this._publish('/app/chat.random.send', {
+      conversationId,
       message: text,
-      type: type
-    };
-
-    console.log('[SocketService] Publishing random message to /app/chat.random.send:', payload);
-    this.client.publish({
-      destination: '/app/chat.random.send',
-      body: JSON.stringify(payload)
+      type,
+      objectUri
     });
   }
 
   /**
-   * Send random chat seen receipt: /app/chat.random.seen
-   */
-  sendRandomChatSeen(conversationId, messageId) {
-    if (!this.client || !this.client.connected || !conversationId || !messageId) return;
-
-    this.client.publish({
-      destination: '/app/chat.random.seen',
-      body: JSON.stringify({
-        conversationId: conversationId,
-        messageId: messageId
-      })
-    });
-  }
-
-  /**
-   * Send typing status in normal or random conversation
+   * Send typing status. Edge triggered: once on start, then at most every few
+   * seconds while typing continues, and once on stop.
    */
   sendTyping(conversationId, isTyping) {
-    if (!this.client || !this.client.connected || !conversationId) return;
+    if (!conversationId) return false;
 
-    // 1. Direct topic broadcast (works in all rooms: random chat and persistent chat)
-    try {
-      this.client.publish({
-        destination: `/topic/conversations/${conversationId}`,
-        body: JSON.stringify({
-          type: 'TYPING',
-          payload: {
-            conversationId: conversationId,
-            senderId: this.activeUserId,
-            typing: Boolean(isTyping)
-          }
-        })
-      });
-    } catch (e) {}
+    const state = this._typingState.get(conversationId) || { active: false, lastSent: 0 };
+    const now = Date.now();
 
-    // 2. Also send to /app/chat.typing (for DB tracking in persistent friend chats)
-    try {
-      this.client.publish({
-        destination: '/app/chat.typing',
-        body: JSON.stringify({
-          conversationId: conversationId,
-          typing: Boolean(isTyping)
-        })
-      });
-    } catch (e) {}
+    if (isTyping) {
+      if (state.active && now - state.lastSent < TYPING_REPEAT_MS) return false;
+    } else if (!state.active) {
+      return false;
+    }
+
+    state.active = Boolean(isTyping);
+    state.lastSent = now;
+    this._typingState.set(conversationId, state);
+
+    return this._publish('/app/chat.typing', {
+      conversationId,
+      typing: Boolean(isTyping)
+    });
   }
 
   /**
    * Send seen receipt in normal conversation: /app/chat.seen
    */
   sendSeen(conversationId, messageId) {
-    if (!this.client || !this.client.connected || !conversationId || !messageId) return;
-
-    this.client.publish({
-      destination: '/app/chat.seen',
-      body: JSON.stringify({
-        conversationId: conversationId,
-        messageId: messageId
-      })
-    });
+    if (!conversationId || !messageId) return false;
+    return this._publish('/app/chat.seen', { conversationId, messageId });
   }
 
   /**
    * Send online status in room / globally: /app/chat.online
    */
   sendOnline(conversationId = null, isOnline = true) {
-    if (!this.client || !this.client.connected) return;
-
-    // 1. Broadcast to /app/chat.online (updates userPresenceService in backend)
-    const payload = {
+    return this._publish('/app/chat.online', {
       conversationId: conversationId || null,
       online: Boolean(isOnline)
-    };
-
-    try {
-      this.client.publish({
-        destination: '/app/chat.online',
-        body: JSON.stringify(payload)
-      });
-    } catch (e) {}
-
-    // 2. If inside a conversation room, also broadcast directly to the room topic
-    if (conversationId) {
-      try {
-        this.client.publish({
-          destination: `/topic/conversations/${conversationId}`,
-          body: JSON.stringify({
-            type: 'ONLINE_STATUS',
-            payload: {
-              senderId: this.activeUserId,
-              conversationId: conversationId,
-              online: Boolean(isOnline)
-            }
-          })
-        });
-      } catch (e) {}
-    }
+    });
   }
 
   /**
-   * Broadcast peer updated event after upgrade: /app/chat.peer.update
+   * Broadcast peer updated event after a real profile change: /app/chat.peer.update
    */
   sendPeerUpdated(conversationId, peerData) {
-    if (!this.client || !this.client.connected || !conversationId) return;
-
-    const payload = {
-      conversationId: conversationId,
+    if (!conversationId) return false;
+    return this._publish('/app/chat.peer.update', {
+      conversationId,
       previousUsername: peerData.previousUsername || '',
       username: peerData.username,
       name: peerData.name,
       photoUrl: peerData.photoUrl || ''
-    };
-
-    console.log('[SocketService] Publishing peer update to /app/chat.peer.update:', payload);
-    try {
-      this.client.publish({
-        destination: '/app/chat.peer.update',
-        body: JSON.stringify(payload)
-      });
-    } catch (e) {
-      console.warn('[SocketService] Failed to send peer update:', e);
-    }
+    });
   }
 
   /**
    * Notify partner of leaving / disconnect: /app/chat.disconnect
    */
   sendDisconnect(conversationId) {
-    if (!this.client || !this.client.connected || !conversationId) return;
-
-    this.client.publish({
-      destination: '/app/chat.disconnect',
-      body: JSON.stringify({
-        conversationId: conversationId
-      })
-    });
-  }
-
-  // Alias helpers
-  subscribeChatTopic(peerId, conversationId) {
-    this.subscribeRoom(conversationId);
-  }
-
-  unsubscribeChatTopic() {
-    this.unsubscribeRoom();
-  }
-
-  sendOnlineStatus(conversationId, isOnline = true) {
-    this.sendOnline(conversationId, isOnline);
-  }
-
-  findMatch(userProfile) {
-    this.startMatchmaking(userProfile);
-  }
-
-  skipPeer(peerId, conversationId) {
-    this.sendDisconnect(conversationId);
-    this.unsubscribeRoom();
+    if (!conversationId) return false;
+    return this._publish('/app/chat.disconnect', { conversationId });
   }
 }
 

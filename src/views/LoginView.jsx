@@ -1,140 +1,160 @@
 import React, { useState } from 'react';
-import { useAuth, INTEREST_TAGS } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import { GuestEntryModal } from '../components/GuestEntryModal';
+import { GoogleUsernameClaimForm } from '../components/GoogleUsernameClaimForm';
 import './LoginView.css';
 
-export function LoginView() {
-  const { login, signUp, loginAsGuest, authError, clearAuthError, profilePictures } = useAuth();
+const GOOGLE_SVG = (
+  <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+  </svg>
+);
 
-  const [mode, setMode] = useState('login'); // 'login' | 'signup'
+function GoogleButton({ onClick, disabled, loading, configured }) {
+  return (
+    <div>
+      <button
+        type="button"
+        id="google-signin-btn"
+        onClick={onClick}
+        disabled={disabled}
+        title={configured
+          ? 'Sign in with your Google account'
+          : 'Google sign-in is not configured yet — use Continue as Guest'}
+        style={{
+          width: '100%',
+          padding: '13px 18px',
+          borderRadius: '12px',
+          background: configured ? '#ffffff' : 'rgba(255, 255, 255, 0.08)',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          color: configured ? '#1f2937' : '#71717a',
+          fontWeight: 700,
+          fontSize: '0.98rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '10px',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          transition: 'all 0.2s',
+          boxShadow: configured ? '0 4px 14px rgba(0, 0, 0, 0.3)' : 'none'
+        }}
+      >
+        {loading ? <span className="btn-spinner"></span> : GOOGLE_SVG}
+        <span>Sign in with Google</span>
+      </button>
+      {!configured && (
+        <p id="google-not-configured-note" style={{
+          fontSize: '0.78rem', color: '#fbbf24', marginTop: '8px', marginBottom: 0, textAlign: 'center'
+        }}>
+          Google sign-in &amp; media are not configured yet — Continue as Guest works fully.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function GuestButton({ onClick }) {
+  return (
+    <div>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '12px',
+        margin: '20px 0', color: '#71717a', fontSize: '0.78rem'
+      }}>
+        <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.1)' }} />
+        <span>or</span>
+        <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.1)' }} />
+      </div>
+      <button
+        type="button"
+        id="continue-as-guest-btn"
+        onClick={onClick}
+        style={{
+          width: '100%',
+          padding: '13px 18px',
+          borderRadius: '12px',
+          background: 'rgba(99, 102, 241, 0.15)',
+          border: '1px solid rgba(99, 102, 241, 0.4)',
+          color: '#a5b4fc',
+          fontWeight: 700,
+          fontSize: '0.98rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '10px',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+          boxShadow: '0 4px 14px rgba(99, 102, 241, 0.15)'
+        }}
+      >
+        <span style={{ fontSize: '1.2rem' }}>⚡</span>
+        Continue as Guest
+      </button>
+      <p style={{ fontSize: '0.78rem', color: '#71717a', marginTop: '8px', marginBottom: 0, textAlign: 'center' }}>
+        Enter with just your name &amp; gender • Instant matching
+      </p>
+      <p style={{ fontSize: '0.72rem', color: '#52525b', marginTop: '16px', marginBottom: 0, textAlign: 'center' }}>
+        You can link a Google account mid-chat later without losing anything.
+      </p>
+    </div>
+  );
+}
+
+export function LoginView() {
+  const {
+    loginAsGuest, authError, clearAuthError,
+    signInWithGoogle, completeGoogleSignup, firebaseConfigured
+  } = useAuth();
+
   const [loading, setLoading] = useState(false);
   const [guestModalOpen, setGuestModalOpen] = useState(false);
   const [localError, setLocalError] = useState('');
 
-  // Login form state
-  const [loginUsername, setLoginUsername] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
+  // Username-claim step for brand-new Google users (CONTRACT 3)
+  const [googleClaim, setGoogleClaim] = useState(null); // { registrationToken, suggestedUsername, name, email, photoUrl }
+  const [claimLoading, setClaimLoading] = useState(false);
+  const [claimError, setClaimError] = useState('');
 
-  // Sign up form state
-  const [signUpUsername, setSignUpUsername] = useState('');
-  const [signUpPassword, setSignUpPassword] = useState('');
-  const [signUpName, setSignUpName] = useState('');
-  const [signUpEmail, setSignUpEmail] = useState('');
-  const [signUpGender, setSignUpGender] = useState('boy');
-  const [signUpBio, setSignUpBio] = useState('');
-  const [selectedPhotoUrl, setSelectedPhotoUrl] = useState('/userImages/boy1.png');
-  const [signUpAvatar, setSignUpAvatar] = useState(null);
-  const [selectedInterests, setSelectedInterests] = useState(['Tech', 'Gaming']);
-
-  const handleTabChange = (newMode) => {
-    setMode(newMode);
+  const clearErrors = () => {
     setLocalError('');
     clearAuthError();
   };
 
-  const toggleInterest = (tag) => {
-    setSelectedInterests(prev => 
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-    );
-  };
-
-  const handleLoginSubmit = async (e) => {
-    e.preventDefault();
-    setLocalError('');
-    if (!loginUsername.trim() || !loginPassword.trim()) {
-      setLocalError('Please enter both username and password.');
-      return;
-    }
+  // ---- Google sign-in (CONTRACT: login screen has exactly two actions) ----
+  const handleGoogleSignIn = async () => {
+    clearErrors();
     setLoading(true);
     try {
-      await login(loginUsername.trim(), loginPassword.trim());
+      const res = await signInWithGoogle();
+      if (res && res.status === 'NEEDS_USERNAME') {
+        // Brand-new Google user: show the username-claim step before creating the account.
+        setGoogleClaim(res);
+      }
+      // Otherwise the session was applied inside AuthContext and the app navigates away.
     } catch (err) {
-      setLocalError(err.message || 'Failed to sign in.');
+      setLocalError(err.message || 'Google sign-in failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSignUpSubmit = async (e) => {
-    e.preventDefault();
-    setLocalError('');
-
-    const photoUrl = selectedPhotoUrl || signUpAvatar?.icon || '';
-
-    if (!signUpUsername.trim() || !signUpPassword.trim()) {
-      setLocalError('Username and password are required.');
-      return;
-    }
-    if (!signUpName.trim()) {
-      setLocalError('Display name is required.');
-      return;
-    }
-    if (!signUpEmail.trim()) {
-      setLocalError('Valid email address is required.');
-      return;
-    }
-    if (!signUpGender || !['boy', 'girl'].includes(signUpGender.toLowerCase())) {
-      setLocalError('Gender must be "boy" or "girl".');
-      return;
-    }
-    if (signUpPassword.length < 6) {
-      setLocalError('Password must be at least 6 characters long.');
-      return;
-    }
-    if (!photoUrl) {
-      setLocalError('Profile picture is required. Please select an avatar.');
-      return;
-    }
-
-    setLoading(true);
+  const handleClaimSubmit = async ({ username, name, gender }) => {
+    setClaimError('');
+    setClaimLoading(true);
     try {
-      await signUp({
-        username: signUpUsername.trim(),
-        password: signUpPassword.trim(),
-        name: signUpName.trim(),
-        email: signUpEmail.trim(),
-        gender: signUpGender.toLowerCase(),
-        bio: signUpBio.trim(),
-        photoUrl: photoUrl.trim(),
-        interests: selectedInterests
+      await completeGoogleSignup({
+        registrationToken: googleClaim.registrationToken,
+        username,
+        name,
+        gender
       });
+      setGoogleClaim(null);
     } catch (err) {
-      setLocalError(err.message || 'Failed to create account.');
+      setClaimError(err.message || 'Could not create the account. Please try again.');
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const boyAvatars = [
-    '/userImages/boy1.png',
-    '/userImages/boy2.png',
-    '/userImages/boy3.png',
-    '/userImages/boy4.png',
-    '/userImages/boy5.png',
-    '/userImages/boy6.png',
-    '/userImages/boy7.png',
-    '/userImages/boy8.png'
-  ];
-
-  const girlAvatars = [
-    '/userImages/girl1.png',
-    '/userImages/girl2.png',
-    '/userImages/girl3.png',
-    '/userImages/girl4.png',
-    '/userImages/girl5.png',
-    '/userImages/girl6.png',
-    '/userImages/girl7.png',
-    '/userImages/girl8.png'
-  ];
-
-  const availablePictures = signUpGender === 'girl' ? girlAvatars : boyAvatars;
-
-  const handleGenderChange = (newGender) => {
-    setSignUpGender(newGender);
-    if (newGender === 'girl') {
-      setSelectedPhotoUrl('/userImages/girl1.png');
-    } else {
-      setSelectedPhotoUrl('/userImages/boy1.png');
+      setClaimLoading(false);
     }
   };
 
@@ -144,7 +164,6 @@ export function LoginView() {
       <div className="login-bg-glow glow-2"></div>
 
       <div className="login-card glass-panel animate-fade-in">
-        {/* Brand Header */}
         <div className="login-header">
           <div className="login-logo animate-glow">
             <span className="logo-icon">⚡</span>
@@ -153,284 +172,33 @@ export function LoginView() {
           <p className="login-subtitle">Connect instantly with people worldwide</p>
         </div>
 
-        {/* Mode Switcher */}
-        <div className="auth-tab-bar">
-          <button 
-            type="button"
-            className={`auth-tab-btn ${mode === 'login' ? 'active' : ''}`}
-            onClick={() => handleTabChange('login')}
-          >
-            Sign In
-          </button>
-          <button 
-            type="button"
-            className={`auth-tab-btn ${mode === 'signup' ? 'active' : ''}`}
-            onClick={() => handleTabChange('signup')}
-          >
-            Create Account
-          </button>
-        </div>
-
-        {/* Error Alert */}
-        {(localError || authError) && (
-          <div className="auth-error-alert">
-            <span className="error-icon">⚠️</span>
-            <span>{localError || authError}</span>
+        {localError && (
+          <div id="login-error-alert" className="auth-error-alert">
+            <span>⚠️ {localError}</span>
+            <button type="button" className="auth-error-dismiss" onClick={clearErrors}>✕</button>
           </div>
         )}
 
-        {/* Login Form */}
-        {mode === 'login' ? (
-          <form className="auth-form" onSubmit={handleLoginSubmit}>
-            <div className="form-group">
-              <label htmlFor="login-username">Username</label>
-              <div className="input-wrapper">
-                <span className="input-icon">👤</span>
-                <input
-                  id="login-username"
-                  type="text"
-                  placeholder="e.g. alice"
-                  value={loginUsername}
-                  onChange={(e) => setLoginUsername(e.target.value)}
-                  disabled={loading}
-                  autoComplete="username"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="login-password">Password</label>
-              <div className="input-wrapper">
-                <span className="input-icon">🔒</span>
-                <input
-                  id="login-password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  disabled={loading}
-                  autoComplete="current-password"
-                  required
-                />
-              </div>
-            </div>
-
-            <button 
-              type="submit" 
-              className="btn-primary auth-submit-btn" 
-              disabled={loading}
-            >
-              {loading ? (
-                <span className="btn-spinner"></span>
-              ) : (
-                <>Sign In to RandoMeet 🚀</>
-              )}
-            </button>
-          </form>
+        {googleClaim ? (
+          <GoogleUsernameClaimForm
+            suggestion={googleClaim}
+            loading={claimLoading}
+            error={claimError}
+            onSubmit={handleClaimSubmit}
+            onCancel={() => { setGoogleClaim(null); setClaimError(''); }}
+          />
         ) : (
-          /* Sign Up Form */
-          <form className="auth-form" onSubmit={handleSignUpSubmit}>
-            {/* Avatar / Profile Picture Selector */}
-            <div className="form-group">
-              <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>Profile Picture *</span>
-                {!(selectedPhotoUrl || signUpAvatar) ? (
-                  <span style={{ fontSize: '0.75rem', color: '#f87171', textTransform: 'none', fontWeight: '500' }}>
-                    Required
-                  </span>
-                ) : (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--cyan-accent)', textTransform: 'none', fontWeight: '500' }}>
-                    ✓ Selected
-                  </span>
-                )}
-              </label>
-              <div className="avatar-picker-grid">
-                {availablePictures.map((picUrl, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    className={`avatar-pick-item api-pic ${selectedPhotoUrl === picUrl ? 'selected' : ''}`}
-                    onClick={() => { setSelectedPhotoUrl(picUrl); setSignUpAvatar(null); }}
-                    title={`Avatar ${idx + 1}`}
-                    style={{ padding: 0, overflow: 'hidden' }}
-                  >
-                    <img 
-                      src={picUrl} 
-                      alt={`Avatar ${idx + 1}`} 
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="signup-username">Username *</label>
-                <div className="input-wrapper">
-                  <span className="input-icon">@</span>
-                  <input
-                    id="signup-username"
-                    type="text"
-                    placeholder="alice"
-                    value={signUpUsername}
-                    onChange={(e) => setSignUpUsername(e.target.value)}
-                    disabled={loading}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="signup-name">Display Name *</label>
-                <div className="input-wrapper">
-                  <span className="input-icon">✨</span>
-                  <input
-                    id="signup-name"
-                    type="text"
-                    placeholder="Alice Wonderland"
-                    value={signUpName}
-                    onChange={(e) => setSignUpName(e.target.value)}
-                    disabled={loading}
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="signup-email">Email *</label>
-              <div className="input-wrapper">
-                <span className="input-icon">✉️</span>
-                <input
-                  id="signup-email"
-                  type="email"
-                  placeholder="alice@example.com"
-                  value={signUpEmail}
-                  onChange={(e) => setSignUpEmail(e.target.value)}
-                  disabled={loading}
-                  autoComplete="email"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="signup-password">Password *</label>
-                <div className="input-wrapper">
-                  <span className="input-icon">🔒</span>
-                  <input
-                    id="signup-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={signUpPassword}
-                    onChange={(e) => setSignUpPassword(e.target.value)}
-                    disabled={loading}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="signup-gender">Gender *</label>
-                <select
-                  id="signup-gender"
-                  className="input-select"
-                  value={signUpGender}
-                  onChange={(e) => handleGenderChange(e.target.value)}
-                  disabled={loading}
-                  required
-                >
-                  <option value="boy">Boy</option>
-                  <option value="girl">Girl</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="signup-bio">Bio / About You</label>
-              <textarea
-                id="signup-bio"
-                className="input-textarea"
-                rows="2"
-                placeholder="Tell others what you love to chat about..."
-                value={signUpBio}
-                onChange={(e) => setSignUpBio(e.target.value)}
-                disabled={loading}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Select Interests</label>
-              <div className="interest-picker-tags">
-                {INTEREST_TAGS.map(tag => (
-                  <button
-                    key={tag}
-                    type="button"
-                    className={`tag-pill ${selectedInterests.includes(tag) ? 'active' : ''}`}
-                    onClick={() => toggleInterest(tag)}
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <button 
-              type="submit" 
-              className="btn-cyan auth-submit-btn" 
-              disabled={loading}
-            >
-              {loading ? (
-                <span className="btn-spinner"></span>
-              ) : (
-                <>Create Account & Enter 🚀</>
-              )}
-            </button>
-          </form>
+          <>
+            <GoogleButton
+              onClick={handleGoogleSignIn}
+              disabled={loading || !firebaseConfigured}
+              loading={loading}
+              configured={firebaseConfigured}
+            />
+            <GuestButton onClick={() => { clearErrors(); setGuestModalOpen(true); }} />
+          </>
         )}
 
-        {/* Guest Mode Entry Section */}
-        <div style={{
-          marginTop: '20px',
-          paddingTop: '20px',
-          borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-          textAlign: 'center'
-        }}>
-          <button
-            type="button"
-            id="continue-as-guest-btn"
-            onClick={() => setGuestModalOpen(true)}
-            style={{
-              width: '100%',
-              padding: '13px 18px',
-              borderRadius: '12px',
-              background: 'rgba(99, 102, 241, 0.15)',
-              border: '1px solid rgba(99, 102, 241, 0.4)',
-              color: '#a5b4fc',
-              fontWeight: 700,
-              fontSize: '0.98rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '10px',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              boxShadow: '0 4px 14px rgba(99, 102, 241, 0.15)'
-            }}
-          >
-            <span style={{ fontSize: '1.2rem' }}>⚡</span>
-            Continue as Guest
-          </button>
-          <p style={{ fontSize: '0.78rem', color: '#71717a', marginTop: '8px', marginBottom: 0 }}>
-            Enter with just your name & gender • Instant matching
-          </p>
-        </div>
-
-        {/* Footer info */}
         <div className="login-footer">
           <p>Protected by JWT Token Authentication • Chat Monolith Engine</p>
         </div>

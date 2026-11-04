@@ -96,7 +96,8 @@ export function FriendRequestDialog({
             gap: '12px'
           }}>
             {friendRequests.map((request) => {
-              const reqId = request.username || request.id;
+              // Identity for accept/reject is the stable user id.
+              const reqId = request.id || request.friendUserId;
               return (
                 <div
                   key={reqId}

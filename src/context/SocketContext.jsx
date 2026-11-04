@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { socketService, extractPeerName } from '../services/socketService';
 
@@ -44,8 +44,25 @@ const playChime = (type = 'match') => {
   } catch (e) {}
 };
 
+const systemMessage = (text) => ({
+  id: 'sys_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+  senderId: 'system',
+  text,
+  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+});
+
 export function SocketProvider({ children }) {
-  const { user, jwtToken, soundEnabled, setLiveFriendRequest, loadFriendRequests, loadFriendsFromApi } = useAuth();
+  const {
+    user,
+    jwtToken,
+    sessionEpoch,
+    soundEnabled,
+    setLiveFriendRequest,
+    loadFriendRequests,
+    loadFriendsFromApi,
+    applyFriendPresence,
+    performLogout
+  } = useAuth();
 
   // matchState: 'idle' | 'searching' | 'matched'
   const [matchState, setMatchState] = useState('idle');
@@ -53,43 +70,44 @@ export function SocketProvider({ children }) {
   const [messages, setMessages] = useState([]);
   const [isPeerTyping, setIsPeerTyping] = useState(false);
   const [isPeerOnline, setIsPeerOnline] = useState(true);
+  const [peerLeft, setPeerLeft] = useState(false);
   const [floatingReactions, setFloatingReactions] = useState([]);
 
   // Connection status: 'connecting' | 'connected' | 'disconnected'
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
 
-  const [filters, setFilters] = useState({
-    gender: 'All',
-    interests: []
-  });
-
   const typingTimerRef = useRef(null);
+  const skipTimerRef = useRef(null);
   const soundEnabledRef = useRef(soundEnabled);
   const userRef = useRef(user);
   const currentPeerRef = useRef(currentPeer);
-  const previousUsernameRef = useRef(user?.username || user?.id);
+  const previousUsernameRef = useRef(user?.username);
   const isPeerOnlineRef = useRef(true);
+  const messagesRef = useRef(messages);
+  const logoutRef = useRef(performLogout);
+  const lastProfileSentRef = useRef({ conversationId: null, signature: null });
 
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
-  useEffect(() => {
-    if (user?.username) {
-      previousUsernameRef.current = user.username;
-    }
-    userRef.current = user;
-  }, [user]);
+  useEffect(() => { userRef.current = user; }, [user]);
   useEffect(() => { currentPeerRef.current = currentPeer; }, [currentPeer]);
   useEffect(() => { isPeerOnlineRef.current = isPeerOnline; }, [isPeerOnline]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { logoutRef.current = performLogout; }, [performLogout]);
+
+  const activeConversationId = currentPeer?.conversationId || currentPeer?.id || null;
 
   /**
    * Called when a match is found from server CONVERSATION_DTO
    */
   const handleMatchFound = useCallback((peer) => {
     const resolvedName = extractPeerName(peer);
-    const peerUsername = peer.friendUserId || peer.username || peer.peerId || '';
+    // IDENTITY = stable user id. username/name are display only.
+    const peerId = peer.friendUserId || peer.peerId || '';
     const peerObj = {
       ...peer,
-      username: peerUsername,
-      friendUserId: peerUsername,
+      id: peerId,
+      friendUserId: peerId,
+      username: peer.username || '',
       name: resolvedName,
       friendUserName: resolvedName,
       userName: resolvedName
@@ -98,6 +116,7 @@ export function SocketProvider({ children }) {
     setCurrentPeer(peerObj);
     setIsPeerOnline(true);
     setIsPeerTyping(false);
+    setPeerLeft(false);
     setMatchState('matched');
 
     // Subscribe to unified room channel
@@ -106,35 +125,26 @@ export function SocketProvider({ children }) {
       socketService.subscribeRoom(conversationId);
     }
 
-    setMessages([
-      {
-        id: 'sys_' + Date.now(),
-        senderId: 'system',
-        text: `You are now connected with ${resolvedName}! Say hi!`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      }
-    ]);
+    setMessages([systemMessage(`You are now connected with ${resolvedName}! Say hi!`)]);
 
     if (soundEnabledRef.current) playChime('match');
   }, []);
 
   const handleMessageReceived = useCallback((msg) => {
-    const myUsername = userRef.current?.username || userRef.current?.id;
+    // Only random-chat room traffic belongs in this state; DM rooms have their own view.
+    const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+    if (!activeConvId || msg.conversationId !== activeConvId) return;
+
+    const myId = userRef.current?.id;
 
     setMessages(prev => {
-      // Prevent duplicate messages if already in list
       if (prev.some(m => m.id === msg.id)) {
         return prev;
       }
       return [...prev, msg];
     });
 
-    // Mark as seen immediately in random chat
-    if (msg.id && msg.conversationId && msg.senderId !== myUsername) {
-      socketService.sendRandomChatSeen(msg.conversationId, msg.id);
-    }
-
-    if (soundEnabledRef.current && msg.senderId !== myUsername) {
+    if (soundEnabledRef.current && msg.senderId !== myId) {
       playChime('message');
     }
   }, []);
@@ -146,7 +156,8 @@ export function SocketProvider({ children }) {
 
   // Connect STOMP socket when authenticated
   useEffect(() => {
-    const userId = user?.username || user?.id;
+    // The STOMP principal is the stable user id; activeUserId must match it exactly.
+    const userId = user?.id;
     if (!jwtToken || !userId) {
       setConnectionStatus('disconnected');
       socketService.disconnect();
@@ -161,42 +172,45 @@ export function SocketProvider({ children }) {
       userId,
       {
         onConnect: () => {
-          console.log('[SocketContext] STOMP connected successfully');
           setConnectionStatus('connected');
 
-          // If there is an active peer/conversation (e.g. user upgraded mid-chat):
+          // The socket service replays every room subscription by itself; all that is
+          // left here is telling the peer about a username that really changed.
           const activePeer = currentPeerRef.current;
           const convId = activePeer?.conversationId || activePeer?.id;
-          if (convId) {
-            console.log('[SocketContext] Resubscribing to active conversation after reconnect:', convId);
-            socketService.subscribeRoom(convId);
-            socketService.sendOnline(convId, true);
+          const currentUser = userRef.current;
+          const previousUsername = previousUsernameRef.current;
 
-            const currentUser = userRef.current;
-            if (currentUser) {
-              socketService.sendPeerUpdated(convId, {
-                conversationId: convId,
-                previousUsername: previousUsernameRef.current || currentUser.username,
-                username: currentUser.username,
-                name: currentUser.name || currentUser.username,
-                photoUrl: currentUser.photoUrl || ''
-              });
-            }
+          if (convId && currentUser?.username && previousUsername && previousUsername !== currentUser.username) {
+            socketService.sendPeerUpdated(convId, {
+              previousUsername,
+              username: currentUser.username,
+              name: currentUser.name || currentUser.username,
+              photoUrl: currentUser.photoUrl || ''
+            });
+            previousUsernameRef.current = currentUser.username;
           }
         },
         onDisconnect: () => {
-          console.log('[SocketContext] STOMP disconnected');
           setConnectionStatus('disconnected');
+        },
+        onAuthExpired: () => {
+          setConnectionStatus('disconnected');
+          logoutRef.current?.();
         },
         onMatchFound: (conversation) => {
           handleMatchFoundRef.current(conversation);
+        },
+        onMatchCancelled: () => {
+          setMatchState(prev => (prev === 'searching' ? 'idle' : prev));
         },
         onMessageReceived: (msg) => {
           handleMessageReceivedRef.current(msg);
         },
         onTypingStatus: (typing, payload) => {
-          const myId = userRef.current?.username || userRef.current?.id;
-          if (payload?.senderId && payload.senderId === myId) return;
+          const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+          if (!activeConvId || payload?.conversationId !== activeConvId) return;
+
           setIsPeerTyping(Boolean(typing));
           if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
           if (typing) {
@@ -206,8 +220,13 @@ export function SocketProvider({ children }) {
           }
         },
         onOnlineStatus: (isOnline, payload) => {
-          const myId = userRef.current?.username || userRef.current?.id;
-          if (payload?.senderId && payload.senderId === myId) return;
+          // Friends list presence is pushed from the room the friend shares with us
+          if (payload?.senderId) {
+            applyFriendPresence?.(payload.senderId, Boolean(isOnline));
+          }
+
+          const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+          if (!activeConvId || payload?.conversationId !== activeConvId) return;
 
           const wasOffline = !isPeerOnlineRef.current;
           const nowOnline = Boolean(isOnline);
@@ -217,99 +236,85 @@ export function SocketProvider({ children }) {
           if (wasOffline && nowOnline) {
             setMessages(prev => [
               ...prev,
-              {
-                id: 'sys_' + Date.now(),
-                senderId: 'system',
-                text: `${currentPeerRef.current?.name || 'Partner'} is back online! You can now send messages.`,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              }
+              systemMessage(`${currentPeerRef.current?.name || 'Your chat partner'} is back online! You can now send messages.`)
             ]);
           }
         },
         onPeerUpdated: (payload) => {
-          console.log('[SocketContext] Peer updated event:', payload);
-          const myId = userRef.current?.username || userRef.current?.id;
-          if (payload?.username && payload.username !== myId) {
-            setCurrentPeer(prev => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                username: payload.username,
-                friendUserId: payload.username,
-                name: payload.name || payload.username,
-                friendUserName: payload.name || payload.username,
-                photoUrl: payload.photoUrl || prev.photoUrl
-              };
-            });
-            setIsPeerOnline(true);
+          const myId = userRef.current?.id;
+          const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+          if (!activeConvId || payload?.conversationId !== activeConvId) return;
+          // Identity comparison is on userId; the display fields just get refreshed.
+          if (!payload?.userId || payload.userId === myId) return;
 
-            // Acknowledge back that we are online in this room
-            const activeConv = payload.conversationId || currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
-            if (activeConv) {
-              socketService.sendOnline(activeConv, true);
-            }
-
-            setMessages(prev => [
+          setCurrentPeer(prev => {
+            if (!prev) return prev;
+            return {
               ...prev,
-              {
-                id: 'sys_' + Date.now(),
-                senderId: 'system',
-                text: `${payload.name || payload.username} upgraded their account and is online!`,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              }
-            ]);
-          }
-        },
-        onPeerDisconnected: (disconnectedUser) => {
-          setIsPeerOnline(false);
-          setIsPeerTyping(false);
-          const peerName = typeof disconnectedUser === 'string' && disconnectedUser.trim() ? disconnectedUser : (currentPeerRef.current?.name || 'Stranger');
+              username: payload.username || prev.username,
+              name: payload.name || payload.username || prev.name,
+              friendUserName: payload.name || payload.username || prev.friendUserName,
+              photoUrl: payload.photoUrl || prev.photoUrl
+            };
+          });
+          setIsPeerOnline(true);
+
           setMessages(prev => [
             ...prev,
-            {
-              id: 'sys_' + Date.now(),
-              senderId: 'system',
-              text: `${peerName} is currently offline. Chat remains open.`,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            }
+            systemMessage(`${payload.name || payload.username} updated their profile.`)
+          ]);
+        },
+        onPeerDisconnected: (_disconnectedUser, conversationId) => {
+          const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+          if (!activeConvId || conversationId !== activeConvId) return;
+
+          setIsPeerOnline(false);
+          setIsPeerTyping(false);
+          setPeerLeft(true);
+          setMessages(prev => [
+            ...prev,
+            systemMessage('Your chat partner left the chat.')
           ]);
         },
         onFriendRequestReceived: (sender) => {
-          console.log('[SocketContext] Live friend request received from:', sender);
-          if (setLiveFriendRequest) {
-            setLiveFriendRequest(sender);
-          }
-          if (loadFriendRequests) {
-            loadFriendRequests();
-          }
+          setLiveFriendRequest?.(sender);
+          loadFriendRequests?.();
           if (soundEnabledRef.current) playChime('match');
         },
-        onFriendRequestAccepted: (friend) => {
-          console.log('[SocketContext] Friend request accepted by:', friend);
-          if (loadFriendsFromApi) {
-            loadFriendsFromApi();
-          }
-          if (loadFriendRequests) {
-            loadFriendRequests();
-          }
+        onFriendRequestAccepted: () => {
+          loadFriendsFromApi?.();
+          loadFriendRequests?.();
           if (soundEnabledRef.current) playChime('match');
         },
         onFriendRequestCancelled: (payload) => {
-          console.log('[SocketContext] Friend request cancelled by:', payload);
-          const cancelledBy = payload?.username || payload?.senderUsername;
-          if (setLiveFriendRequest) {
-            setLiveFriendRequest(prev => {
-              if (!prev) return null;
-              const prevUser = prev.username || prev.friendUserId || prev.senderUsername || prev.id;
-              return prevUser === cancelledBy ? null : prev;
-            });
-          }
-          if (loadFriendRequests) {
-            loadFriendRequests();
-          }
-          if (loadFriendsFromApi) {
-            loadFriendsFromApi();
-          }
+          const cancelledById = payload?.id;
+          setLiveFriendRequest?.(prev => {
+            if (!prev) return null;
+            const prevUserId = prev.id || prev.friendUserId;
+            return prevUserId === cancelledById ? null : prev;
+          });
+          loadFriendRequests?.();
+          loadFriendsFromApi?.();
+        },
+        onChatError: (payload) => {
+          // The server refused this message (too long, or it could not be saved). Random
+          // chat has no local echo, so without this the text would vanish silently.
+          const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+          if (!activeConvId) return;
+          if (payload?.conversationId && payload.conversationId !== activeConvId) return;
+
+          setMessages(prev => [...prev, {
+            id: 'error_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+            conversationId: activeConvId,
+            senderId: userRef.current?.id,
+            text: payload?.reason || 'Message could not be delivered',
+            message: payload?.reason || 'Message could not be delivered',
+            status: 'FAILED',
+            // The server rejected the content itself, so re-sending it would fail again:
+            // this entry carries the reason, not the original text, and offers no retry.
+            serverRefused: true,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }]);
         },
         onError: (err) => {
           console.warn('[SocketContext] STOMP error:', err);
@@ -320,105 +325,217 @@ export function SocketProvider({ children }) {
 
     return () => {
       socketService.disconnect();
+      // disconnect() cancels any waiting ticket, so the radar must stop spinning too.
+      setMatchState(prev => (prev === 'searching' ? 'idle' : prev));
     };
-  }, [jwtToken, user?.username, user?.id]);
+  }, [jwtToken, user?.id, applyFriendPresence, loadFriendRequests, loadFriendsFromApi, setLiveFriendRequest]);
 
-  const isLiveConnected = connectionStatus === 'connected' && socketService.isConnected;
+  // Tell the current random peer about a REAL profile change (name / photo / upgrade)
+  useEffect(() => {
+    if (matchState !== 'matched' || !activeConversationId || !user?.username) return;
 
-  const startSearching = useCallback(() => {
-    setMatchState('searching');
+    const signature = `${user.username}|${user.name || ''}|${user.photoUrl || ''}`;
+    const last = lastProfileSentRef.current;
+
+    if (last.conversationId !== activeConversationId) {
+      // New room: record the baseline, there is nothing to announce yet.
+      lastProfileSentRef.current = { conversationId: activeConversationId, signature };
+      return;
+    }
+    if (last.signature === signature) return;
+
+    socketService.sendPeerUpdated(activeConversationId, {
+      previousUsername: previousUsernameRef.current || user.username,
+      username: user.username,
+      name: user.name || user.username,
+      photoUrl: user.photoUrl || ''
+    });
+    lastProfileSentRef.current = { conversationId: activeConversationId, signature };
+    previousUsernameRef.current = user.username;
+  }, [matchState, activeConversationId, user?.username, user?.name, user?.photoUrl]);
+
+  // Logout must not leave the previous user's chat on screen for the next one
+  useEffect(() => {
+    if (!sessionEpoch) return;
+    setMatchState('idle');
     setCurrentPeer(null);
     setMessages([]);
-    socketService.startMatchmaking(user);
-  }, [user]);
+    setIsPeerTyping(false);
+    setIsPeerOnline(true);
+    setPeerLeft(false);
+    setFloatingReactions([]);
+    previousUsernameRef.current = null;
+    lastProfileSentRef.current = { conversationId: null, signature: null };
+  }, [sessionEpoch]);
+
+  const isLiveConnected = connectionStatus === 'connected';
+
+  const startSearching = useCallback(() => {
+    if (skipTimerRef.current) {
+      clearTimeout(skipTimerRef.current);
+      skipTimerRef.current = null;
+    }
+    const previousConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+    if (previousConvId) {
+      socketService.sendDisconnect(previousConvId);
+      socketService.unsubscribeRoom(previousConvId);
+    }
+    setMatchState('searching');
+    setCurrentPeer(null);
+    setPeerLeft(false);
+    setMessages([]);
+    socketService.startMatchmaking(userRef.current);
+  }, []);
 
   const cancelSearch = useCallback(() => {
+    if (skipTimerRef.current) {
+      clearTimeout(skipTimerRef.current);
+      skipTimerRef.current = null;
+    }
     setMatchState('idle');
-    socketService.cancelMatchmaking();
+    socketService.cancelMatchmaking({ notifyServer: true });
   }, []);
 
   const skipStranger = useCallback(() => {
     setIsPeerTyping(false);
     setIsPeerOnline(true);
-    if (currentPeer) {
-      const convId = currentPeer.conversationId || currentPeer.id;
+    setPeerLeft(false);
+
+    const convId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+    if (convId) {
       socketService.sendDisconnect(convId);
-      socketService.unsubscribeRoom();
+      socketService.unsubscribeRoom(convId);
     }
+
     setCurrentPeer(null);
     setMessages([]);
     setMatchState('searching');
 
-    setTimeout(() => {
-      socketService.startMatchmaking(user);
+    if (skipTimerRef.current) clearTimeout(skipTimerRef.current);
+    skipTimerRef.current = setTimeout(() => {
+      skipTimerRef.current = null;
+      socketService.startMatchmaking(userRef.current);
     }, 150);
-  }, [currentPeer, user]);
+  }, []);
 
   const disconnectChat = useCallback(() => {
+    if (skipTimerRef.current) {
+      clearTimeout(skipTimerRef.current);
+      skipTimerRef.current = null;
+    }
     setIsPeerTyping(false);
     setIsPeerOnline(true);
-    if (currentPeer) {
-      const convId = currentPeer.conversationId || currentPeer.id;
+    setPeerLeft(false);
+
+    const convId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+    if (convId) {
       socketService.sendDisconnect(convId);
-      socketService.unsubscribeRoom();
+      socketService.unsubscribeRoom(convId);
     }
+
     setCurrentPeer(null);
     setMatchState('idle');
     setMessages([]);
-  }, [currentPeer]);
+    socketService.cancelMatchmaking({ notifyServer: true });
+  }, []);
 
+  useEffect(() => {
+    return () => {
+      if (skipTimerRef.current) clearTimeout(skipTimerRef.current);
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    };
+  }, []);
+
+  /**
+   * Sends a random-chat message. Random chat is never persisted, so anything we
+   * cannot put on the wire right now is kept locally as FAILED with a retry.
+   */
   const sendMessage = useCallback((text) => {
-    if (!text || !text.trim() || !currentPeer) return;
+    if (!text || !text.trim() || !currentPeer) return false;
 
     const messageText = text.trim();
     const conversationId = currentPeer.conversationId || currentPeer.id;
+    if (!conversationId) return false;
 
-    if (!isPeerOnline) {
-      // Peer is offline: Random chat messages are NOT stored in the database.
-      // Append message locally as UNDELIVERED with retry capability.
-      const undeliveredMsg = {
-        id: 'undelivered_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+    const canDeliver = isPeerOnline && !peerLeft;
+    const delivered = canDeliver && socketService.sendRandomChatMessage(conversationId, messageText, 'TEXT');
+
+    if (!delivered) {
+      setMessages(prev => [...prev, {
+        id: 'failed_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
         conversationId,
-        senderId: userRef.current?.username || userRef.current?.id,
+        senderId: userRef.current?.id,
         text: messageText,
         message: messageText,
-        status: 'UNDELIVERED',
+        status: 'FAILED',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages(prev => [...prev, undeliveredMsg]);
-      return;
+      }]);
     }
 
-    if (conversationId) {
-      // Use /app/chat.random.send for random matchmaking chat
-      socketService.sendRandomChatMessage(conversationId, messageText, 'TEXT');
-    }
-  }, [currentPeer, isPeerOnline]);
+    return delivered;
+  }, [currentPeer, isPeerOnline, peerLeft]);
 
+  /**
+   * Retries a FAILED message. On success the local copy is dropped so the server
+   * echo is the only rendered copy and retry cannot duplicate the message.
+   */
   const retryMessage = useCallback((msgId) => {
-    const msg = messages.find(m => m.id === msgId);
-    if (!msg || !currentPeer) return false;
-
-    if (!isPeerOnline) {
-      return false; // Still offline
-    }
+    if (!currentPeer || peerLeft || !isPeerOnline) return false;
 
     const conversationId = currentPeer.conversationId || currentPeer.id;
-    if (conversationId) {
-      socketService.sendRandomChatMessage(conversationId, msg.text || msg.message, 'TEXT');
-      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, status: 'SENT' } : m));
-      return true;
+    if (!conversationId) return false;
+
+    const msg = messagesRef.current.find(m => m.id === msgId);
+    if (!msg || msg.serverRefused) return false;
+
+    const sent = socketService.sendRandomChatMessage(conversationId, msg.text || msg.message, 'TEXT');
+    if (sent) {
+      setMessages(prev => prev.filter(m => m.id !== msgId));
     }
-    return false;
-  }, [messages, currentPeer, isPeerOnline]);
+    return sent;
+  }, [currentPeer, isPeerOnline, peerLeft]);
 
   const notifyTyping = useCallback((isCurrentlyTyping) => {
-    if (!currentPeer) return;
+    if (!currentPeer || peerLeft) return;
     const conversationId = currentPeer.conversationId || currentPeer.id;
     if (conversationId) {
       socketService.sendTyping(conversationId, isCurrentlyTyping);
     }
-  }, [currentPeer]);
+  }, [currentPeer, peerLeft]);
+
+  /**
+   * Sends an uploaded media message (image or voice note) into the random chat.
+   * MediaComposer uploads first and calls this with { type, objectUri, localPreviewUrl }.
+   * Failure becomes a visible FAILED bubble with no retry (retrying would need the file,
+   * not the text) — matching the "never look sent when it is not" rule.
+   */
+  const sendMedia = useCallback(({ type, objectUri, localPreviewUrl }) => {
+    if (!currentPeer || peerLeft || !isPeerOnline) return false;
+
+    const conversationId = currentPeer.conversationId || currentPeer.id;
+    if (!conversationId || !objectUri) return false;
+
+    const caption = type === 'IMAGE' ? '📷 Photo' : '🎤 Voice note';
+    const delivered = socketService.sendRandomChatMessage(conversationId, caption, type, objectUri);
+
+    if (!delivered) {
+      setMessages(prev => [...prev, {
+        id: 'failed_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+        conversationId,
+        senderId: userRef.current?.id,
+        text: caption,
+        message: caption,
+        type,
+        objectUri,
+        localPreviewUrl,
+        status: 'FAILED',
+        // No retry affordance for media: a text re-send would lose the file.
+        serverRefused: true,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }]);
+    }
+    return delivered;
+  }, [currentPeer, isPeerOnline, peerLeft]);
 
   const sendReaction = useCallback((emoji) => {
     const reactionObj = {
@@ -440,39 +557,35 @@ export function SocketProvider({ children }) {
     sendMessage(`🧊 Icebreaker: ${randomQ}`);
   }, [sendMessage]);
 
-  const toggleInterestFilter = useCallback((tag) => {
-    setFilters(prev => {
-      const exists = prev.interests.includes(tag);
-      const updated = exists
-        ? prev.interests.filter(t => t !== tag)
-        : [...prev.interests, tag];
-      return { ...prev, interests: updated };
-    });
-  }, []);
+  const value = useMemo(() => ({
+    matchState,
+    currentPeer,
+    messages,
+    isPeerTyping,
+    isPeerOnline,
+    peerLeft,
+    startSearching,
+    cancelSearch,
+    skipStranger,
+    disconnectChat,
+    sendMessage,
+    sendMedia,
+    retryMessage,
+    sendReaction,
+    sendIcebreaker,
+    notifyTyping,
+    floatingReactions,
+    connectionStatus,
+    isLiveConnected
+  }), [
+    matchState, currentPeer, messages, isPeerTyping, isPeerOnline, peerLeft,
+    startSearching, cancelSearch, skipStranger, disconnectChat, sendMessage,
+    retryMessage, sendMedia, sendReaction, sendIcebreaker, notifyTyping, floatingReactions,
+    connectionStatus, isLiveConnected
+  ]);
 
   return (
-    <SocketContext.Provider value={{
-      matchState,
-      currentPeer,
-      messages,
-      isPeerTyping,
-      isPeerOnline,
-      filters,
-      setFilters,
-      toggleInterestFilter,
-      startSearching,
-      cancelSearch,
-      skipStranger,
-      disconnectChat,
-      sendMessage,
-      retryMessage,
-      sendReaction,
-      sendIcebreaker,
-      notifyTyping,
-      floatingReactions,
-      connectionStatus,
-      isLiveConnected
-    }}>
+    <SocketContext.Provider value={value}>
       {children}
     </SocketContext.Provider>
   );

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSocket } from '../context/SocketContext';
-import { useAuth, INTEREST_TAGS } from '../context/AuthContext';
-import { Sparkles, Sliders, XCircle, Zap } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { XCircle, Zap } from 'lucide-react';
 
 const DOT_COUNT = 8;
 
@@ -9,16 +9,13 @@ const DOT_COUNT = 8;
  * MatchRadar — Home screen + searching animation
  *
  * States:
- *  idle      → Show "Find a Match" CTA with user avatar and filters
+ *  idle      → Show "Find a Match" CTA with user avatar
  *  searching → Full animated radar with orbiting dots (matches Android's HomeScreenV2 canvas animation)
  */
 export function MatchRadar() {
   const { user } = useAuth();
   const {
     matchState,
-    filters,
-    setFilters,
-    toggleInterestFilter,
     startSearching,
     cancelSearch
   } = useSocket();
@@ -118,7 +115,7 @@ export function MatchRadar() {
               Finding Your Match...
             </h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '8px' }}>
-              Scanning users worldwide based on your preferences
+              Looking for someone who is online right now
             </p>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)', padding: '6px 16px', borderRadius: 'var(--radius-full)', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--green-accent)', boxShadow: 'var(--green-glow)', animation: 'glowPulse 1s infinite', display: 'inline-block' }} />
@@ -136,21 +133,6 @@ export function MatchRadar() {
             <span>Cancel</span>
           </button>
 
-          {/* Active filter chips */}
-          {(filters.interests.length > 0 || filters.gender !== 'All') && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
-              {filters.gender !== 'All' && (
-                <span style={{ background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.3)', color: '#a78bfa', padding: '4px 12px', borderRadius: 'var(--radius-full)', fontSize: '0.8rem' }}>
-                  👤 {filters.gender}
-                </span>
-              )}
-              {filters.interests.map(t => (
-                <span key={t} style={{ background: 'rgba(6,182,212,0.12)', border: '1px solid rgba(6,182,212,0.3)', color: 'var(--cyan-accent)', padding: '4px 12px', borderRadius: 'var(--radius-full)', fontSize: '0.8rem' }}>
-                  #{t}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
 
       ) : (
@@ -222,68 +204,6 @@ export function MatchRadar() {
             <span>Find a Match</span>
           </button>
 
-          {/* Filters panel */}
-          <div className="glass-panel" style={{ width: '100%', padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-              <Sliders size={18} color="var(--primary-purple)" />
-              <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>Match Filters</h3>
-            </div>
-
-            {/* Gender */}
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '10px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Gender Preference
-              </label>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                {['All', 'Male', 'Female'].map(g => (
-                  <button
-                    key={g}
-                    onClick={() => setFilters(prev => ({ ...prev, gender: g }))}
-                    className={filters.gender === g ? 'btn-cyan' : 'btn-secondary'}
-                    style={{ padding: '8px 0', fontSize: '0.85rem', flex: 1 }}
-                  >
-                    {g === 'All' ? '👥' : g === 'Male' ? '♂️' : '♀️'} {g}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Interests */}
-            <div>
-              <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '10px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Topics of Interest
-              </label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {INTEREST_TAGS.map(tag => {
-                  const isSelected = filters.interests.includes(tag);
-                  return (
-                    <button
-                      key={tag}
-                      onClick={() => toggleInterestFilter(tag)}
-                      style={{
-                        padding: '6px 14px',
-                        borderRadius: 'var(--radius-full)',
-                        border: isSelected ? '1px solid var(--primary-purple)' : '1px solid var(--border-color)',
-                        background: isSelected ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255,255,255,0.04)',
-                        color: isSelected ? '#c4b5fd' : 'var(--text-secondary)',
-                        fontSize: '0.85rem',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontFamily: 'var(--font-main)',
-                        fontWeight: isSelected ? 600 : 400
-                      }}
-                    >
-                      {isSelected && <Sparkles size={11} color="var(--primary-purple)" />}
-                      {tag}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
         </>
       )}
 

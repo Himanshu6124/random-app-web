@@ -264,7 +264,7 @@ export function ProfileView() {
             </div>
             <input
               type="text"
-              value={user.username || user.id || ''}
+              value={user.username || ''}
               disabled
               style={{
                 width: '100%',
@@ -445,8 +445,8 @@ export function ProfileView() {
                 <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                   JWT Authenticated Session
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '2px' }}>
-                  {jwtToken ? `${jwtToken.substring(0, 35)}...` : 'Valid local session token'}
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  {jwtToken ? 'Your session is active on this device' : 'Valid local session token'}
                 </div>
               </div>
             </div>

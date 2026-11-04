@@ -1,9 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
-import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Sparkles, Hand, Lock, RefreshCw, X } from 'lucide-react';
-import { extractPeerName } from '../services/socketService';
+import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Sparkles, Hand, Lock, RefreshCw, X, Zap } from 'lucide-react';
+import { extractPeerName, MAX_MESSAGE_LENGTH } from '../services/socketService';
 import { authService } from '../services/authService';
+import { MediaComposer } from './MediaComposer';
+import { ChatMediaMessage } from './ChatMediaMessage';
 
 export function ChatBox() {
   const {
@@ -23,11 +25,15 @@ export function ChatBox() {
     messages,
     isPeerTyping,
     isPeerOnline,
+    peerLeft,
+    isLiveConnected,
     sendMessage,
+    sendMedia,
     retryMessage,
     sendReaction,
     sendIcebreaker,
     skipStranger,
+    startSearching,
     disconnectChat,
     floatingReactions,
     notifyTyping
@@ -36,39 +42,48 @@ export function ChatBox() {
   const [inputMsg, setInputMsg] = useState('');
   const [friendStatus, setFriendStatus] = useState('NONE'); // 'NONE' | 'PENDING_SENT' | 'PENDING_RECEIVED' | 'ACCEPTED'
   const [actionLoading, setActionLoading] = useState(false);
+  const [mediaError, setMediaError] = useState('');
   const messagesEndRef = useRef(null);
   const typingTimerRef = useRef(null);
 
   const peerName = extractPeerName(currentPeer);
-  const peerUsername = currentPeer ? (currentPeer.friendUserId || currentPeer.username || currentPeer.peerId || currentPeer.id) : '';
+  // Peer IDENTITY is the stable user id. currentPeer.username/name are display only.
+  const peerId = currentPeer ? (currentPeer.friendUserId || currentPeer.peerId || currentPeer.id || '') : '';
+
+  // Derive membership from stable booleans, so a refreshed list identity does not
+  // re-query the friendship status endpoint.
+  const isFriend = useMemo(
+    () => friends.some(f => (f.id === peerId || f.friendUserId === peerId)),
+    [friends, peerId]
+  );
+  const isIncomingRequest = useMemo(
+    () => Boolean(
+      (liveFriendRequest && (liveFriendRequest.id === peerId || liveFriendRequest.friendUserId === peerId)) ||
+      friendRequests.some(r => (r.id === peerId || r.friendUserId === peerId))
+    ),
+    [friendRequests, liveFriendRequest, peerId]
+  );
 
   // Synchronize status with friends list, incoming friendRequests, and backend status API
   useEffect(() => {
-    if (!peerUsername) {
+    if (!peerId) {
       setFriendStatus('NONE');
       return;
     }
-
-    // 1. If in accepted friends list
-    const isFriend = friends.some(f => (f.username === peerUsername || f.friendUserId === peerUsername || f.id === peerUsername));
     if (isFriend) {
       setFriendStatus('ACCEPTED');
       return;
     }
-
-    // 2. If in incoming pending requests or liveFriendRequest
-    const isIncoming = (liveFriendRequest && (liveFriendRequest.username === peerUsername || liveFriendRequest.senderUsername === peerUsername || liveFriendRequest.friendUserId === peerUsername)) ||
-      friendRequests.some(r => (r.username === peerUsername || r.id === peerUsername || r.friendUserId === peerUsername));
-    if (isIncoming) {
+    if (isIncomingRequest) {
       setFriendStatus('PENDING_RECEIVED');
       return;
     }
 
-    // 3. Query backend friendship status if token available
+    // Query backend friendship status once per peer
     let isCancelled = false;
     const token = jwtToken || authService.getToken();
     if (token) {
-      authService.getFriendshipStatus(peerUsername, token)
+      authService.getFriendshipStatus(peerId, token)
         .then(res => {
           if (!isCancelled && res?.status) {
             setFriendStatus(res.status);
@@ -80,10 +95,10 @@ export function ChatBox() {
     return () => {
       isCancelled = true;
     };
-  }, [peerUsername, friends, friendRequests, liveFriendRequest, jwtToken]);
+  }, [peerId, isFriend, isIncomingRequest, jwtToken]);
 
   const handleFriendActionClick = async () => {
-    if (actionLoading || !peerUsername) return;
+    if (actionLoading || !peerId) return;
 
     if (friendStatus === 'ACCEPTED') {
       return;
@@ -92,7 +107,7 @@ export function ChatBox() {
     if (friendStatus === 'PENDING_SENT') {
       setActionLoading(true);
       try {
-        await cancelFriendRequest(peerUsername);
+        await cancelFriendRequest(peerId);
         setFriendStatus('NONE');
       } catch (err) {
         console.warn('Failed to cancel friend request:', err);
@@ -106,13 +121,13 @@ export function ChatBox() {
       if (isGuest) {
         openUpgradeModal(`create an account to accept friend request from ${peerName}`, {
           action: 'ACCEPT_FRIEND',
-          targetUsername: peerUsername
+          targetUserId: peerId
         });
         return;
       }
       setActionLoading(true);
       try {
-        await acceptFriendRequest(peerUsername);
+        await acceptFriendRequest(peerId);
         setFriendStatus('ACCEPTED');
       } catch (err) {
         console.warn('Failed to accept friend request:', err);
@@ -126,14 +141,14 @@ export function ChatBox() {
     if (isGuest) {
       openUpgradeModal(`create an account to add ${peerName} as a friend`, {
         action: 'SEND_FRIEND',
-        targetUsername: peerUsername
+        targetUserId: peerId
       });
       return;
     }
 
     setActionLoading(true);
     try {
-      await sendFriendRequest(peerUsername);
+      await sendFriendRequest(peerId);
       setFriendStatus('PENDING_SENT');
     } catch (err) {
       if (err?.status === 409 || (err?.message && err.message.toLowerCase().includes('already exists'))) {
@@ -150,9 +165,14 @@ export function ChatBox() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isPeerTyping]);
 
+  const composerDisabled = peerLeft || !isLiveConnected;
+  const composerPlaceholder = peerLeft
+    ? 'Your chat partner left the chat'
+    : (!isLiveConnected ? 'Reconnecting…' : `Type a message to ${peerName}...`);
+
   const handleSend = (e) => {
     e.preventDefault();
-    if (!inputMsg.trim()) return;
+    if (!inputMsg.trim() || composerDisabled) return;
     sendMessage(inputMsg);
     setInputMsg('');
     notifyTyping(false);
@@ -420,9 +440,9 @@ export function ChatBox() {
             );
           }
 
-          const myUsername = user?.username || user?.id;
-          const isMe = msg.senderId === myUsername;
-          const isUndelivered = msg.status === 'UNDELIVERED';
+          const myId = user?.id;
+          const isMe = msg.senderId === myId;
+          const isFailed = msg.status === 'FAILED';
 
           return (
             <div
@@ -438,23 +458,29 @@ export function ChatBox() {
                 maxWidth: '75%',
                 padding: '12px 18px',
                 borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                background: isUndelivered
+                background: isFailed
                   ? 'rgba(239, 68, 68, 0.18)'
                   : isMe 
                     ? 'linear-gradient(135deg, var(--primary-purple) 0%, #6366f1 100%)' 
                     : 'rgba(255, 255, 255, 0.08)',
-                border: isUndelivered
+                border: isFailed
                   ? '1px dashed #ef4444'
                   : isMe ? 'none' : '1px solid var(--border-color)',
                 color: '#ffffff',
                 fontSize: '0.95rem',
                 lineHeight: '1.4',
-                boxShadow: isMe && !isUndelivered ? 'var(--shadow-glow)' : 'none'
+                overflowWrap: 'anywhere',
+                wordBreak: 'break-word',
+                boxShadow: isMe && !isFailed ? 'var(--shadow-glow)' : 'none'
               }}>
-                {msg.text || msg.message}
+                {msg.type === 'IMAGE' || msg.type === 'AUDIO' ? (
+                  <ChatMediaMessage msg={msg} />
+                ) : (
+                  msg.text || msg.message
+                )}
               </div>
 
-              {isUndelivered ? (
+              {isFailed ? (
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -463,16 +489,13 @@ export function ChatBox() {
                   fontSize: '0.78rem',
                   color: '#f87171'
                 }}>
-                  <span>⚠️ User will not receive this message. Wait to come online and then retry.</span>
+                  <span>⚠️ Not delivered.</span>
+                  {msg.serverRefused ? null : (
                   <button
                     id="retry-message-btn"
                     type="button"
-                    onClick={() => {
-                      const success = retryMessage(msg.id);
-                      if (!success) {
-                        alert(`${peerName} is still offline. Please wait until they return online.`);
-                      }
-                    }}
+                    disabled={peerLeft || !isPeerOnline || !isLiveConnected}
+                    onClick={() => retryMessage(msg.id)}
                     style={{
                       background: 'rgba(239, 68, 68, 0.25)',
                       border: '1px solid rgba(239, 68, 68, 0.5)',
@@ -490,6 +513,7 @@ export function ChatBox() {
                     <RefreshCw size={12} />
                     <span>Retry</span>
                   </button>
+                  )}
                 </div>
               ) : (
                 <span style={{
@@ -576,6 +600,77 @@ export function ChatBox() {
         </div>
       </div>
 
+      {/* Peer left the chat — a retry can never work, so offer a new match instead */}
+      {peerLeft && (
+        <div style={{
+          padding: '14px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          flexWrap: 'wrap',
+          background: 'rgba(239, 68, 68, 0.12)',
+          borderTop: '1px solid rgba(239, 68, 68, 0.35)',
+          position: 'relative',
+          zIndex: 20
+        }}>
+          <span style={{ fontSize: '0.88rem', color: '#fca5a5' }}>
+            Your chat partner left the chat.
+          </span>
+          <button
+            id="find-new-match-btn"
+            type="button"
+            onClick={startSearching}
+            className="btn-primary"
+            style={{ padding: '8px 16px', fontSize: '0.85rem', cursor: 'pointer' }}
+          >
+            <Zap size={16} />
+            <span>Find a new match</span>
+          </button>
+        </div>
+      )}
+
+      {/* Connection is down — say so instead of silently swallowing messages */}
+      {!isLiveConnected && !peerLeft && (
+        <div style={{
+          padding: '10px 20px',
+          background: 'rgba(234, 179, 8, 0.12)',
+          borderTop: '1px solid rgba(234, 179, 8, 0.35)',
+          color: '#fde68a',
+          fontSize: '0.85rem',
+          position: 'relative',
+          zIndex: 20
+        }}>
+          Reconnecting… messages cannot be delivered right now.
+        </div>
+      )}
+
+      {/* Media error is always visible, never silent (CONTRACT B2-3) */}
+      {mediaError && (
+        <div id="chat-media-error" style={{
+          padding: '8px 20px',
+          background: 'rgba(239, 68, 68, 0.12)',
+          borderTop: '1px solid rgba(239, 68, 68, 0.3)',
+          color: '#fca5a5',
+          fontSize: '0.8rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          position: 'relative',
+          zIndex: 20
+        }}>
+          <span>⚠️ {mediaError}</span>
+          <button
+            type="button"
+            onClick={() => setMediaError('')}
+            style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer', fontWeight: 700 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Text Message Input */}
       <form onSubmit={handleSend} style={{
         padding: '16px 20px',
@@ -586,12 +681,20 @@ export function ChatBox() {
         position: 'relative',
         zIndex: 20
       }}>
+        <MediaComposer
+          conversationId={currentPeer?.conversationId || currentPeer?.id}
+          disabled={composerDisabled}
+          onSend={sendMedia}
+          onError={setMediaError}
+        />
         <input
           type="text"
           value={inputMsg}
           onChange={handleInputChange}
           onBlur={() => notifyTyping(false)}
-          placeholder={`Type a message to ${peerName}...`}
+          disabled={composerDisabled}
+          placeholder={composerPlaceholder}
+          maxLength={MAX_MESSAGE_LENGTH}
           style={{
             flex: 1,
             padding: '14px 20px',
@@ -600,12 +703,14 @@ export function ChatBox() {
             border: '1px solid var(--border-color)',
             color: 'white',
             fontSize: '0.95rem',
-            outline: 'none'
+            outline: 'none',
+            opacity: composerDisabled ? 0.6 : 1
           }}
         />
         <button
           type="submit"
           className="btn-primary"
+          disabled={composerDisabled}
           style={{
             width: '48px',
             height: '48px',
@@ -614,7 +719,7 @@ export function ChatBox() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            cursor: 'pointer'
+            cursor: composerDisabled ? 'not-allowed' : 'pointer'
           }}
         >
           <Send size={20} />

@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+
+# Resolve script directory and project root dynamically
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+LOG_FILE="$SCRIPT_DIR/service.log"
+PID_FILE="$SCRIPT_DIR/service.pid"
+PORT=5173
+
+# Parse port argument if provided
+for arg in "$@"; do
+    if [[ "$arg" =~ ^[0-9]+$ ]]; then
+        PORT="$arg"
+    fi
+done
+
+echo "========================================================"
+echo "⏹️  Stopping chat-frontend (Port: $PORT)"
+echo "========================================================"
+
+get_descendants() {
+    local parent=$1
+    local children
+    children=$(pgrep -P "$parent" 2>/dev/null)
+    for c in $children; do
+        echo "$c"
+        get_descendants "$c"
+    done
+}
+
+TARGET_PIDS=""
+
+# 1. Check PID from PID file
+if [ -f "$PID_FILE" ]; then
+    SAVED_PID=$(cat "$PID_FILE" 2>/dev/null)
+    if [ -n "$SAVED_PID" ] && kill -0 "$SAVED_PID" 2>/dev/null && [ "$SAVED_PID" != "$$" ]; then
+        TARGET_PIDS="$TARGET_PIDS $SAVED_PID $(get_descendants "$SAVED_PID")"
+    else
+        rm -f "$PID_FILE"
+    fi
+fi
+
+# 2. Check process listening on port
+if command -v lsof >/dev/null 2>&1; then
+    PORT_PIDS=$(lsof -ti tcp:"$PORT" 2>/dev/null)
+    for p in $PORT_PIDS; do
+        if [ -n "$p" ] && [ "$p" != "$$" ]; then
+            TARGET_PIDS="$TARGET_PIDS $p $(get_descendants "$p")"
+        fi
+    done
+fi
+
+# 3. Check for vite processes rooted in this directory
+VITE_PIDS=$(pgrep -f "vite.*$PORT" 2>/dev/null)
+for p in $VITE_PIDS; do
+    if [ -n "$p" ] && [ "$p" != "$$" ]; then
+        TARGET_PIDS="$TARGET_PIDS $p $(get_descendants "$p")"
+    fi
+done
+
+UNIQUE_PIDS=$(echo "$TARGET_PIDS" | tr ' ' '\n' | grep -v '^$' | sort -u)
+
+if [ -z "$UNIQUE_PIDS" ]; then
+    echo "ℹ️  Frontend is NOT currently running on port $PORT."
+    rm -f "$PID_FILE"
+    echo "========================================================"
+    exit 0
+fi
+
+echo "Stopping process(es): $(echo $UNIQUE_PIDS | tr '\n' ' ')..."
+
+for pid in $UNIQUE_PIDS; do
+    kill -15 "$pid" 2>/dev/null || true
+done
+
+WAIT_SECONDS=5
+while [ $WAIT_SECONDS -gt 0 ]; do
+    STILL_ALIVE=false
+    for pid in $UNIQUE_PIDS; do
+        if kill -0 "$pid" 2>/dev/null; then
+            STILL_ALIVE=true
+            break
+        fi
+    done
+    if [ "$STILL_ALIVE" = false ]; then
+        break
+    fi
+    sleep 1
+    WAIT_SECONDS=$((WAIT_SECONDS - 1))
+    echo -n "."
+done
+echo ""
+
+# Force kill any lingering processes
+for pid in $UNIQUE_PIDS; do
+    if kill -0 "$pid" 2>/dev/null; then
+        kill -9 "$pid" 2>/dev/null || true
+    fi
+done
+
+# Ensure port is clean
+if command -v lsof >/dev/null 2>&1; then
+    for p in $(lsof -ti tcp:"$PORT" 2>/dev/null); do
+        kill -9 "$p" 2>/dev/null || true
+    done
+fi
+
+rm -f "$PID_FILE"
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+echo "[$TIMESTAMP] Frontend stopped." >> "$LOG_FILE"
+
+echo "✅ Frontend stopped successfully (Port $PORT freed)."
+echo "========================================================"
