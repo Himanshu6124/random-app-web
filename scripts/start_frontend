@@ -87,9 +87,21 @@ is_running() {
 if is_running; then
     ACTIVE_PID=$(cat "$PID_FILE" 2>/dev/null || lsof -ti tcp:"$PORT" 2>/dev/null | head -n 1)
     echo "⚠️  Frontend is ALREADY running on port $PORT (PID: $ACTIVE_PID)."
-    echo "   Logs: $LOG_FILE"
-    echo "   Stop command: $SCRIPT_DIR/stop_script"
-    exit 1
+    echo "🛑 Stopping existing frontend instance before restarting..."
+    if [ -x "$SCRIPT_DIR/stop_frontend" ]; then
+        "$SCRIPT_DIR/stop_frontend" "$PORT"
+    elif [ -x "$SCRIPT_DIR/stop" ]; then
+        "$SCRIPT_DIR/stop" "$PORT"
+    elif [ -x "$SCRIPT_DIR/stop_script" ]; then
+        "$SCRIPT_DIR/stop_script" "$PORT"
+    fi
+    sleep 1
+fi
+
+# Delete previous logs for a clean session run
+if [ -f "$LOG_FILE" ]; then
+    rm -f "$LOG_FILE"
+    echo "🧹 Cleared previous log file."
 fi
 
 echo "========================================================"
@@ -134,7 +146,7 @@ if [ "$DETACHED" = true ]; then
         done
         echo "========================================================"
         echo "🔍 View logs: tail -f $LOG_FILE"
-        echo "⏹️  Stop:      $SCRIPT_DIR/stop_script"
+        echo "⏹️  Stop:      $SCRIPT_DIR/stop"
         echo "========================================================"
         exit 0
     else
