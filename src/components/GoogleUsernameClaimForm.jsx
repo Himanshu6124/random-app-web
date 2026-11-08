@@ -19,12 +19,24 @@ const girlAvatars = Array.from({ length: 8 }, (_, i) => `/userImages/girl${i + 1
 export function GoogleUsernameClaimForm({ suggestion, loading, error, onSubmit, onCancel }) {
   const [username, setUsername] = useState(suggestion?.suggestedUsername || '');
   const [name, setName] = useState(suggestion?.name || suggestion?.suggestedUsername || '');
-  const [gender, setGender] = useState('boy');
+  const [gender, setGender] = useState(suggestion?.gender || 'boy');
+  const [photoUrl, setPhotoUrl] = useState(
+    suggestion?.photoUrl || (suggestion?.gender === 'girl' ? '/userImages/girl1.png' : '/userImages/boy1.png')
+  );
+
+  const handleGenderChange = (newGender) => {
+    setGender(newGender);
+    if (newGender === 'girl' && !photoUrl.includes('/girl')) {
+      setPhotoUrl('/userImages/girl1.png');
+    } else if (newGender === 'boy' && !photoUrl.includes('/boy')) {
+      setPhotoUrl('/userImages/boy1.png');
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!username.trim() || !name.trim()) return;
-    onSubmit({ username: username.trim(), name: name.trim(), gender });
+    onSubmit({ username: username.trim(), name: name.trim(), gender, photoUrl });
   };
 
   return (
@@ -89,7 +101,7 @@ export function GoogleUsernameClaimForm({ suggestion, loading, error, onSubmit, 
           <select
             id="google-claim-gender"
             value={gender}
-            onChange={(e) => setGender(e.target.value)}
+            onChange={(e) => handleGenderChange(e.target.value)}
             disabled={loading}
             style={{ background: 'transparent', color: 'white', border: 'none', outline: 'none', flex: 1 }}
           >
@@ -99,29 +111,43 @@ export function GoogleUsernameClaimForm({ suggestion, loading, error, onSubmit, 
         </div>
       </div>
 
-      {/* Avatar preview of what the backend will assign per gender */}
+      {/* Avatar selector */}
       <div className="form-group">
-        <label>Avatar preview</label>
+        <label>Choose Avatar *</label>
         <div className="avatar-picker-grid">
-          {(gender === 'girl' ? girlAvatars : boyAvatars).map((picUrl, idx) => (
-            <div
-              key={idx}
-              className="avatar-pick-item api-pic"
-              title="Assigned randomly at account creation"
-              style={{ padding: 0, overflow: 'hidden', cursor: 'default', opacity: 0.85 }}
-            >
-              <img
-                src={picUrl}
-                alt={`Avatar ${idx + 1}`}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
-            </div>
-          ))}
+          {(gender === 'girl' ? girlAvatars : boyAvatars).map((picUrl, idx) => {
+            const isSelected = photoUrl === picUrl;
+            return (
+              <button
+                key={idx}
+                type="button"
+                className={`avatar-pick-item api-pic ${isSelected ? 'selected' : ''}`}
+                onClick={() => setPhotoUrl(picUrl)}
+                title={`Select Avatar ${idx + 1}`}
+                style={{
+                  padding: 0,
+                  overflow: 'hidden',
+                  cursor: 'pointer',
+                  border: isSelected ? '3px solid #10b981' : '2px solid rgba(255, 255, 255, 0.1)',
+                  boxShadow: isSelected ? '0 0 15px rgba(16, 185, 129, 0.6)' : 'none',
+                  transform: isSelected ? 'scale(1.08)' : 'scale(1)',
+                  transition: 'all 0.2s ease',
+                  background: 'transparent'
+                }}
+              >
+                <img
+                  src={picUrl}
+                  alt={`Avatar ${idx + 1}`}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              </button>
+            );
+          })}
         </div>
 
         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-          One of these is picked for you at random.
+          Click to choose your profile picture
         </span>
       </div>
 

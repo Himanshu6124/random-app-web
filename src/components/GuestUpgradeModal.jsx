@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { signInWithGooglePopup } from '../services/firebaseClient';
+import { GoogleUsernameClaimForm } from './GoogleUsernameClaimForm';
 import { Sparkles, X } from 'lucide-react';
 
 export function GuestUpgradeModal() {
   const {
+    user,
     upgradeModalOpen,
     upgradeModalReason,
     closeUpgradeModal,
@@ -16,13 +18,25 @@ export function GuestUpgradeModal() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [conflictChoice, setConflictChoice] = useState(false);
+  const [pendingIdToken, setPendingIdToken] = useState(null);
+  const [googleClaim, setGoogleClaim] = useState(null);
+  const [claimLoading, setClaimLoading] = useState(false);
+  const [claimError, setClaimError] = useState('');
 
   if (!upgradeModalOpen) return null;
 
+  const handleClose = () => {
+    setGoogleClaim(null);
+    setPendingIdToken(null);
+    setError('');
+    setClaimError('');
+    setConflictChoice(false);
+    closeUpgradeModal();
+  };
+
   /**
-   * CONTRACT B1-4: upgrading is "Sign in with Google" — no password/email fields.
-   * The backend updates the guest's row IN PLACE (same stable id), so the active chat,
-   * its history, room membership and subscriptions survive the JWT swap untouched.
+   * Prompts the Google popup. Once authenticated, prompt the user with the same
+   * username, name, gender, and avatar selection dialog as the main login page.
    */
   const handleGoogleLink = async () => {
     setError('');
@@ -30,8 +44,19 @@ export function GuestUpgradeModal() {
     try {
       const fbUser = await signInWithGooglePopup();
       const idToken = await fbUser.getIdToken();
-      await linkGoogleAccount(idToken);
-      closeUpgradeModal();
+      setPendingIdToken(idToken);
+
+      const baseUsername = user?.name
+        ? user.name.toLowerCase().replace(/[^a-z0-9_]/g, '_').substring(0, 30)
+        : (fbUser.email ? fbUser.email.split('@')[0].replace(/[^a-z0-9_]/g, '_').substring(0, 30) : '');
+
+      setGoogleClaim({
+        email: fbUser.email,
+        name: user?.name || fbUser.displayName || '',
+        suggestedUsername: baseUsername || 'user_' + Math.random().toString(36).substring(2, 7),
+        gender: user?.gender || 'boy',
+        photoUrl: user?.photoUrl || ''
+      });
     } catch (err) {
       const message = err.message || 'Google account linking failed.';
       if (message.toLowerCase().includes('already has a profile')) {
@@ -44,11 +69,29 @@ export function GuestUpgradeModal() {
     }
   };
 
+  const handleClaimSubmit = async ({ username, name, gender, photoUrl }) => {
+    setClaimError('');
+    setClaimLoading(true);
+    try {
+      await linkGoogleAccount(pendingIdToken, { username, name, gender, photoUrl });
+      handleClose();
+    } catch (err) {
+      const message = err.message || 'Google account linking failed.';
+      if (message.toLowerCase().includes('already has a profile')) {
+        setConflictChoice(true);
+      } else {
+        setClaimError(message);
+      }
+    } finally {
+      setClaimLoading(false);
+    }
+  };
+
   return (
     <div
       id="guest-upgrade-modal-backdrop"
       onClick={(e) => {
-        if (e.target.id === 'guest-upgrade-modal-backdrop') closeUpgradeModal();
+        if (e.target.id === 'guest-upgrade-modal-backdrop') handleClose();
       }}
       style={{
         position: 'fixed',
@@ -82,7 +125,7 @@ export function GuestUpgradeModal() {
         {/* Close Button */}
         <button
           type="button"
-          onClick={closeUpgradeModal}
+          onClick={handleClose}
           id="upgrade-modal-close-btn"
           style={{
             position: 'absolute',
@@ -98,7 +141,8 @@ export function GuestUpgradeModal() {
             justifyContent: 'center',
             color: '#a1a1aa',
             cursor: 'pointer',
-            transition: 'all 0.2s'
+            transition: 'all 0.2s',
+            zIndex: 10
           }}
         >
           <X size={18} />
@@ -156,7 +200,7 @@ export function GuestUpgradeModal() {
               type="button"
               id="upgrade-conflict-leave-btn"
               onClick={() => {
-                closeUpgradeModal();
+                handleClose();
                 performLogout();
               }}
               style={{
@@ -180,11 +224,18 @@ export function GuestUpgradeModal() {
               Stay in this chat
             </button>
           </div>
+        ) : googleClaim ? (
+          <GoogleUsernameClaimForm
+            suggestion={googleClaim}
+            loading={claimLoading}
+            error={claimError}
+            onSubmit={handleClaimSubmit}
+            onCancel={() => { setGoogleClaim(null); setPendingIdToken(null); setClaimError(''); }}
+          />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <p style={{ fontSize: '0.88rem', color: '#a1a1aa', margin: 0 }}>
-              Sign in with Google to keep your <strong style={{ color: '#e4e4e7' }}>current
-              username</strong> — your active chat, messages and friends stay exactly as they are.
+              Sign in with Google to create your account — your active chat, messages and friends stay exactly as they are.
             </p>
 
             <button
@@ -222,7 +273,7 @@ export function GuestUpgradeModal() {
                 </svg>
               )}
               <span>
-                {!firebaseConfigured ? 'Google sign-in not configured' : (loading ? 'Linking…' : 'Sign in with Google')}
+                {!firebaseConfigured ? 'Google sign-in not configured' : (loading ? 'Signing in with Google…' : 'Sign in with Google')}
               </span>
             </button>
 

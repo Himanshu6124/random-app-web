@@ -29,19 +29,19 @@ export function extractPeerName(payload) {
   const candidates = [
     payload.friendUserName,
     payload.friendName,
-    payload.friendUsername,
-    payload.userName,
     payload.name,
+    payload.userName,
+    payload.user?.name,
+    payload.friend?.name,
+    payload.matchedUser?.name,
     payload.nickname,
     payload.partnerName,
     payload.strangerName,
     payload.peerName,
+    payload.friendUsername,
     payload.username,
-    payload.user?.name,
     payload.user?.username,
-    payload.friend?.name,
     payload.friend?.username,
-    payload.matchedUser?.name,
     payload.matchedUser?.username
   ];
 

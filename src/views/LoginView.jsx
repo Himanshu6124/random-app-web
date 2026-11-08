@@ -140,7 +140,7 @@ export function LoginView() {
     }
   };
 
-  const handleClaimSubmit = async ({ username, name, gender }) => {
+  const handleClaimSubmit = async ({ username, name, gender, photoUrl }) => {
     setClaimError('');
     setClaimLoading(true);
     try {
@@ -148,7 +148,8 @@ export function LoginView() {
         registrationToken: googleClaim.registrationToken,
         username,
         name,
-        gender
+        gender,
+        photoUrl
       });
       setGoogleClaim(null);
     } catch (err) {

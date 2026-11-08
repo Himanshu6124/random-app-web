@@ -415,6 +415,8 @@ export function AuthProvider({ children }) {
       id: res.userId,
       username: res.username,
       name: res.name || res.username,
+      photoUrl: res.photoUrl || (res.gender === 'girl' ? '/userImages/girl1.png' : '/userImages/boy1.png'),
+      gender: res.gender || 'boy',
       isGuest: Boolean(res.isGuest)
     };
     authService.setSession(authResponse, nextUser);
@@ -452,10 +454,10 @@ export function AuthProvider({ children }) {
   }, [applyFirebaseSession]);
 
   /** Step 2 for brand-new Google users: create the account with the claimed username. */
-  const completeGoogleSignup = useCallback(async ({ registrationToken, username, name, gender }) => {
+  const completeGoogleSignup = useCallback(async ({ registrationToken, username, name, gender, photoUrl }) => {
     setAuthError('');
     try {
-      const res = await authService.firebaseCompleteSignup(registrationToken, { username, name, gender });
+      const res = await authService.firebaseCompleteSignup(registrationToken, { username, name, gender, photoUrl });
       return applyFirebaseSession(res);
     } catch (err) {
       setAuthError(err.message || 'Account creation failed.');
@@ -479,19 +481,23 @@ export function AuthProvider({ children }) {
       const nextUser = {
         ...(user || {}),
         id: res.userId,
-        username: res.username || user?.username,
-        name: (user && user.name) || res.username,
+        username: res.username || profile.username || user?.username,
+        name: res.name || profile.name || user?.name || res.username,
+        gender: profile.gender || user?.gender || 'boy',
+        photoUrl: res.photoUrl || profile.photoUrl || user?.photoUrl,
         isGuest: false
       };
       authService.setSession({ jwt: res.jwt, userId: res.userId }, nextUser);
       setUser(nextUser);
       setJwtToken(res.jwt);
+      loadFriendsFromApi(res.jwt);
+      loadFriendRequests(res.jwt);
       return res;
     } catch (err) {
       setAuthError(err.message || 'Google account linking failed.');
       throw err;
     }
-  }, [jwtToken, user]);
+  }, [jwtToken, user, loadFriendsFromApi, loadFriendRequests]);
 
   const performLogout = useCallback(() => {
     setShowLogoutModal(false);

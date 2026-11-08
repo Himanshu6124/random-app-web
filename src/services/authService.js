@@ -124,11 +124,11 @@ export const authService = {
    * Step 2 for brand-new Google users: claim a username and create the account.
    * Returns the same shape as firebaseSignIn with jwt/userId populated.
    */
-  async firebaseCompleteSignup(registrationToken, { username, name, gender }) {
+  async firebaseCompleteSignup(registrationToken, { username, name, gender, photoUrl }) {
     const response = await fetch(`${BASE_URL}/auth/firebase/complete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ registrationToken, username, name, gender })
+      body: JSON.stringify({ registrationToken, username, name, gender, photoUrl })
     });
     return await handleApiResponse(response);
   },
@@ -138,11 +138,11 @@ export const authService = {
    * Guest upgrades to Google mid-chat. Same stable user id — the active chat survives.
    * Requires the caller's current JWT.
    */
-  async firebaseLinkAccount(idToken, { username, name, gender } = {}, token) {
+  async firebaseLinkAccount(idToken, { username, name, gender, photoUrl } = {}, token) {
     const response = await fetch(`${BASE_URL}/auth/firebase/link`, {
       method: 'POST',
       headers: getAuthHeaders(token),
-      body: JSON.stringify({ idToken, username, name, gender })
+      body: JSON.stringify({ idToken, username, name, gender, photoUrl })
     });
     return await handleApiResponse(response);
   },

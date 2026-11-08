@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth, INTEREST_TAGS } from '../context/AuthContext';
 import { User, Sparkles, Check, Save, Key, Lock, AlertCircle } from 'lucide-react';
 
 export function ProfileView() {
   const { user, isGuest, updateUserProfile, jwtToken, logout, profilePictures, openUpgradeModal } = useAuth();
 
+  const [username, setUsername] = useState(user?.username || '');
   const [name, setName] = useState(user?.name || user?.username || '');
   const [avatar, setAvatar] = useState(user?.photoUrl || '/userImages/boy1.png');
   const [gender, setGender] = useState(user?.gender || 'boy');
@@ -13,6 +14,14 @@ export function ProfileView() {
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveError, setSaveError] = useState('');
+
+  useEffect(() => {
+    if (user?.username) setUsername(user.username);
+    if (user?.name) setName(user.name);
+    if (user?.photoUrl) setAvatar(user.photoUrl);
+    if (user?.gender) setGender(user.gender);
+    if (user?.bio) setBio(user.bio);
+  }, [user]);
 
   if (!user) return null;
 
@@ -60,6 +69,7 @@ export function ProfileView() {
         name: name.trim(),
         gender: gender.toLowerCase()
       } : {
+        username: username.trim(),
         name: name.trim(),
         gender: gender.toLowerCase(),
         bio: bio.trim(),
@@ -247,7 +257,7 @@ export function ProfileView() {
             )}
           </div>
 
-          {/* Username (Read Only / Locked for Guests) */}
+          {/* Username (Editable for full accounts, locked for guests) */}
           <div
             style={{ marginBottom: '20px' }}
             onClick={() => { if (isGuest) openUpgradeModal('customize your username'); }}
@@ -263,19 +273,25 @@ export function ProfileView() {
               )}
             </div>
             <input
+              id="profile-username-input"
               type="text"
-              value={user.username || ''}
-              disabled
+              value={isGuest ? (user.username || '') : username}
+              onChange={(e) => !isGuest && setUsername(e.target.value)}
+              disabled={isGuest}
+              placeholder="Your handle..."
+              minLength={3}
+              maxLength={30}
+              pattern="[a-zA-Z0-9_]+"
               style={{
                 width: '100%',
                 padding: '12px 18px',
                 borderRadius: 'var(--radius-md)',
-                background: 'rgba(255, 255, 255, 0.05)',
+                background: isGuest ? 'rgba(255, 255, 255, 0.05)' : 'var(--bg-input)',
                 border: '1px solid var(--border-color)',
-                color: 'var(--text-muted)',
+                color: isGuest ? 'var(--text-muted)' : 'white',
                 fontSize: '0.95rem',
                 outline: 'none',
-                cursor: isGuest ? 'pointer' : 'not-allowed'
+                cursor: isGuest ? 'pointer' : 'text'
               }}
             />
           </div>
