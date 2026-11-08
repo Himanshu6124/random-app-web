@@ -212,6 +212,9 @@ export function FriendsView({ onStartMatch }) {
             sender: isMe ? 'me' : msg.senderId,
             senderId: msg.senderId,
             text: msg.text || msg.message || '',
+            message: msg.message || msg.text || '',
+            type: msg.type || (msg.objectUri ? 'IMAGE' : 'TEXT'),
+            objectUri: msg.objectUri || null,
             status: 'SENT',
             time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             timestamp: rawTime
@@ -219,12 +222,20 @@ export function FriendsView({ onStartMatch }) {
 
           // Reconcile the optimistic copy of our own message if there is one
           const pendingIdx = currentList.findIndex(
-            m => m.status === 'SENDING' && m.text === (msg.text || msg.message) && m.senderId === msg.senderId
+            m => m.status === 'SENDING' && (
+              (m.id && msg.id && m.id === msg.id) ||
+              (m.text === (msg.text || msg.message) && m.senderId === msg.senderId)
+            )
           );
 
           if (pendingIdx !== -1) {
             const updated = [...currentList];
-            updated[pendingIdx] = serverMsg;
+            updated[pendingIdx] = {
+              ...currentList[pendingIdx],
+              ...serverMsg,
+              type: serverMsg.type || currentList[pendingIdx].type,
+              objectUri: serverMsg.objectUri || currentList[pendingIdx].objectUri
+            };
             return { ...prev, [conversationId]: updated };
           }
 
@@ -874,7 +885,7 @@ export function FriendsView({ onStartMatch }) {
                       wordBreak: 'break-word',
                       opacity: m.status === 'FAILED' ? 0.7 : 1
                     }}>
-                      {m.type === 'IMAGE' || m.type === 'AUDIO' ? (
+                      {(m.type === 'IMAGE' || m.type === 'AUDIO' || m.objectUri) ? (
                         <ChatMediaMessage msg={m} />
                       ) : (
                         m.text
