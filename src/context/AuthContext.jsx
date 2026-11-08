@@ -110,26 +110,6 @@ export function AuthProvider({ children }) {
         };
       });
 
-      // Add any conversations with users not in friends list
-      conversations.forEach(c => {
-        if (!mergedFriends.some(f => f.id === c.friendUserId)) {
-          mergedFriends.push({
-            id: c.friendUserId,
-            username: c.username || '',
-            friendUserId: c.friendUserId,
-            name: c.friendUserName || c.username || 'Unknown',
-            friendUserName: c.friendUserName || c.username || 'Unknown',
-            photoUrl: c.photoUrl || '',
-            conversationId: c.conversationId,
-            lastMessage: c.lastMessage || 'Say hi!',
-            lastMessageTime: c.lastMessageTime || '',
-            unseenCount: c.unseenCount || 0,
-            isOnline: false,
-            status: 'Offline'
-          });
-        }
-      });
-
       replaceIfChanged(setFriends, mergedFriends);
     } catch (e) {
       console.warn('[AuthContext] loadFriendsFromApi error:', e);
@@ -294,7 +274,7 @@ export function AuthProvider({ children }) {
 
   const removeFriend = useCallback(async (friendId) => {
     const token = jwtToken || authService.getToken();
-    setFriends(prev => prev.filter(f => f.id !== friendId));
+    setFriends(prev => prev.filter(f => f.id !== friendId && f.friendUserId !== friendId));
 
     if (token && friendId) {
       try {
