@@ -244,6 +244,18 @@ export class SocketService {
     this.activeConversationId = null;
   }
 
+  /**
+   * Updates the auth token on an active connection without dropping the WebSocket.
+   * Also updates brokerURL so reconnects use the refreshed token.
+   */
+  updateToken(token) {
+    if (!token) return;
+    this.authToken = token;
+    if (this.client) {
+      this.client.brokerURL = this._buildBrokerUrl(token);
+    }
+  }
+
   _buildBrokerUrl(token) {
     const envBackend = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '');
     let wsBase;

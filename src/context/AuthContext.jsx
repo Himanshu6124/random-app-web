@@ -52,12 +52,14 @@ export function AuthProvider({ children }) {
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeModalReason, setUpgradeModalReason] = useState('');
   const [pendingUpgradeAction, setPendingUpgradeAction] = useState(null);
+  const pendingUpgradeActionRef = useRef(null);
 
   const isGuest = Boolean(user?.isGuest);
 
   const openUpgradeModal = useCallback((reason = '', pendingAction = null) => {
     setUpgradeModalReason(reason);
     setPendingUpgradeAction(pendingAction);
+    pendingUpgradeActionRef.current = pendingAction;
     setUpgradeModalOpen(true);
   }, []);
 
@@ -65,6 +67,7 @@ export function AuthProvider({ children }) {
     setUpgradeModalOpen(false);
     setUpgradeModalReason('');
     setPendingUpgradeAction(null);
+    pendingUpgradeActionRef.current = null;
   }, []);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   // Bumped on logout so socket-owned state can drop the previous user's session
@@ -369,30 +372,35 @@ export function AuthProvider({ children }) {
     setAuthError('');
     try {
       const res = await authService.upgradeGuest(data, jwtToken);
+      const actionToExecute = pendingUpgradeActionRef.current || pendingUpgradeAction;
+      closeUpgradeModal();
       setUser(res.user);
       setJwtToken(res.authResponse.jwt);
-      const actionToExecute = pendingUpgradeAction;
-      closeUpgradeModal();
-      loadFriendsFromApi(res.authResponse.jwt);
-      loadFriendRequests(res.authResponse.jwt);
 
       if (actionToExecute) {
         if (actionToExecute.action === 'ACCEPT_FRIEND' && actionToExecute.targetUserId) {
           try {
             await authService.acceptFriendRequest(actionToExecute.targetUserId, res.authResponse.jwt);
-            loadFriendsFromApi(res.authResponse.jwt);
+            setFriendRequests(prev => prev.filter(r => (r.id !== actionToExecute.targetUserId && r.friendUserId !== actionToExecute.targetUserId)));
+            setLiveFriendRequest(prev => {
+              if (!prev) return null;
+              const prevId = prev.id || prev.friendUserId;
+              return prevId === actionToExecute.targetUserId ? null : prev;
+            });
           } catch (err) {
             console.warn('[AuthContext] Error auto-accepting friend after upgrade:', err);
           }
         } else if (actionToExecute.action === 'SEND_FRIEND' && actionToExecute.targetUserId) {
           try {
             await authService.sendFriendRequest(actionToExecute.targetUserId, res.authResponse.jwt);
-            loadFriendRequests(res.authResponse.jwt);
           } catch (err) {
             console.warn('[AuthContext] Error auto-sending friend request after upgrade:', err);
           }
         }
       }
+
+      await loadFriendsFromApi(res.authResponse.jwt);
+      await loadFriendRequests(res.authResponse.jwt);
 
       return res;
     } catch (err) {
@@ -476,8 +484,11 @@ export function AuthProvider({ children }) {
       const token = jwtToken || authService.getToken();
       const res = await authService.firebaseLinkAccount(idToken, profile, token);
 
-      // Same user id, new JWT: persist the swap. The socket effect reconnects with the
-      // same principal, so room membership still resolves and messages keep flowing.
+      const actionToExecute = pendingUpgradeActionRef.current || pendingUpgradeAction;
+      closeUpgradeModal();
+
+      // Same user id, new JWT: persist the swap. The socket effect keeps the live
+      // WebSocket connection intact, updating the token in place without disconnecting.
       const nextUser = {
         ...(user || {}),
         id: res.userId,
@@ -490,14 +501,37 @@ export function AuthProvider({ children }) {
       authService.setSession({ jwt: res.jwt, userId: res.userId }, nextUser);
       setUser(nextUser);
       setJwtToken(res.jwt);
-      loadFriendsFromApi(res.jwt);
-      loadFriendRequests(res.jwt);
+
+      if (actionToExecute) {
+        if (actionToExecute.action === 'ACCEPT_FRIEND' && actionToExecute.targetUserId) {
+          try {
+            await authService.acceptFriendRequest(actionToExecute.targetUserId, res.jwt);
+            setFriendRequests(prev => prev.filter(r => (r.id !== actionToExecute.targetUserId && r.friendUserId !== actionToExecute.targetUserId)));
+            setLiveFriendRequest(prev => {
+              if (!prev) return null;
+              const prevId = prev.id || prev.friendUserId;
+              return prevId === actionToExecute.targetUserId ? null : prev;
+            });
+          } catch (err) {
+            console.warn('[AuthContext] Error auto-accepting friend after link:', err);
+          }
+        } else if (actionToExecute.action === 'SEND_FRIEND' && actionToExecute.targetUserId) {
+          try {
+            await authService.sendFriendRequest(actionToExecute.targetUserId, res.jwt);
+          } catch (err) {
+            console.warn('[AuthContext] Error auto-sending friend request after link:', err);
+          }
+        }
+      }
+
+      await loadFriendsFromApi(res.jwt);
+      await loadFriendRequests(res.jwt);
       return res;
     } catch (err) {
       setAuthError(err.message || 'Google account linking failed.');
       throw err;
     }
-  }, [jwtToken, user, loadFriendsFromApi, loadFriendRequests]);
+  }, [jwtToken, user, pendingUpgradeAction, closeUpgradeModal, loadFriendsFromApi, loadFriendRequests]);
 
   const performLogout = useCallback(() => {
     setShowLogoutModal(false);

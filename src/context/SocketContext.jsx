@@ -151,16 +151,40 @@ export function SocketProvider({ children }) {
 
   const handleMatchFoundRef = useRef(handleMatchFound);
   const handleMessageReceivedRef = useRef(handleMessageReceived);
+  const loadFriendsRef = useRef(loadFriendsFromApi);
+  const loadRequestsRef = useRef(loadFriendRequests);
+  const applyFriendPresenceRef = useRef(applyFriendPresence);
+  const setLiveFriendRequestRef = useRef(setLiveFriendRequest);
+
   useEffect(() => { handleMatchFoundRef.current = handleMatchFound; }, [handleMatchFound]);
   useEffect(() => { handleMessageReceivedRef.current = handleMessageReceived; }, [handleMessageReceived]);
+  useEffect(() => { loadFriendsRef.current = loadFriendsFromApi; }, [loadFriendsFromApi]);
+  useEffect(() => { loadRequestsRef.current = loadFriendRequests; }, [loadFriendRequests]);
+  useEffect(() => { applyFriendPresenceRef.current = applyFriendPresence; }, [applyFriendPresence]);
+  useEffect(() => { setLiveFriendRequestRef.current = setLiveFriendRequest; }, [setLiveFriendRequest]);
+
+  // Seamlessly update socket token when jwtToken updates (e.g. guest upgrade)
+  // without dropping the active WebSocket connection.
+  useEffect(() => {
+    if (jwtToken && socketService.isConnected) {
+      socketService.updateToken(jwtToken);
+    }
+  }, [jwtToken]);
 
   // Connect STOMP socket when authenticated
   useEffect(() => {
     // The STOMP principal is the stable user id; activeUserId must match it exactly.
     const userId = user?.id;
-    if (!jwtToken || !userId) {
+    const activeToken = jwtToken || (typeof window !== 'undefined' ? localStorage.getItem('chat_jwt') : null);
+    if (!userId || !activeToken) {
       setConnectionStatus('disconnected');
       socketService.disconnect();
+      return;
+    }
+
+    // If already connected for this exact user, keep the live connection intact
+    if (socketService.isConnected && socketService.activeUserId === userId) {
+      socketService.updateToken(activeToken);
       return;
     }
 
@@ -168,7 +192,7 @@ export function SocketProvider({ children }) {
 
     socketService.connect(
       '/ws-chat',
-      jwtToken,
+      activeToken,
       userId,
       {
         onConnect: () => {
@@ -222,7 +246,7 @@ export function SocketProvider({ children }) {
         onOnlineStatus: (isOnline, payload) => {
           // Friends list presence is pushed from the room the friend shares with us
           if (payload?.senderId) {
-            applyFriendPresence?.(payload.senderId, Boolean(isOnline));
+            applyFriendPresenceRef.current?.(payload.senderId, Boolean(isOnline));
           }
 
           const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
@@ -277,24 +301,24 @@ export function SocketProvider({ children }) {
           ]);
         },
         onFriendRequestReceived: (sender) => {
-          setLiveFriendRequest?.(sender);
-          loadFriendRequests?.();
+          setLiveFriendRequestRef.current?.(sender);
+          loadRequestsRef.current?.();
           if (soundEnabledRef.current) playChime('match');
         },
         onFriendRequestAccepted: () => {
-          loadFriendsFromApi?.();
-          loadFriendRequests?.();
+          loadFriendsRef.current?.();
+          loadRequestsRef.current?.();
           if (soundEnabledRef.current) playChime('match');
         },
         onFriendRequestCancelled: (payload) => {
           const cancelledById = payload?.id;
-          setLiveFriendRequest?.(prev => {
+          setLiveFriendRequestRef.current?.(prev => {
             if (!prev) return null;
             const prevUserId = prev.id || prev.friendUserId;
             return prevUserId === cancelledById ? null : prev;
           });
-          loadFriendRequests?.();
-          loadFriendsFromApi?.();
+          loadRequestsRef.current?.();
+          loadFriendsRef.current?.();
         },
         onChatError: (payload) => {
           // The server refused this message (too long, or it could not be saved). Random
@@ -328,7 +352,7 @@ export function SocketProvider({ children }) {
       // disconnect() cancels any waiting ticket, so the radar must stop spinning too.
       setMatchState(prev => (prev === 'searching' ? 'idle' : prev));
     };
-  }, [jwtToken, user?.id, applyFriendPresence, loadFriendRequests, loadFriendsFromApi, setLiveFriendRequest]);
+  }, [user?.id, sessionEpoch]);
 
   // Tell the current random peer about a REAL profile change (name / photo / upgrade)
   useEffect(() => {
