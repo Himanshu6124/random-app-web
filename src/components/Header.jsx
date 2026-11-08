@@ -4,8 +4,8 @@ import { useSocket } from '../context/SocketContext';
 import { Sparkles, Users, MessageSquare, Volume2, VolumeX, LogOut, Lock } from 'lucide-react';
 
 export function Header({ activeTab, setActiveTab }) {
-  const { user, isGuest, soundEnabled, setSoundEnabled, logout, openUpgradeModal } = useAuth();
-  const { connectionStatus } = useSocket();
+  const { user, isGuest, soundEnabled, setSoundEnabled, logout, openUpgradeModal, totalUnreadFriendsCount } = useAuth();
+  const { connectionStatus, unreadRandomCount } = useSocket();
 
   const statusConfig = {
     connected: { color: 'var(--green-accent)', label: 'Online' },
@@ -46,10 +46,28 @@ export function Header({ activeTab, setActiveTab }) {
         <button
           className={activeTab === 'match' ? 'btn-primary' : 'btn-secondary'}
           onClick={() => setActiveTab('match')}
-          style={{ padding: '8px 16px', borderRadius: 'var(--radius-full)' }}
+          style={{ padding: '8px 16px', borderRadius: 'var(--radius-full)', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
         >
           <MessageSquare size={18} />
           <span>Random Match</span>
+          {unreadRandomCount > 0 && (
+            <span style={{
+              backgroundColor: '#ef4444',
+              color: '#ffffff',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              minWidth: '18px',
+              height: '18px',
+              borderRadius: '9px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 5px',
+              boxShadow: '0 2px 6px rgba(239, 68, 68, 0.4)'
+            }}>
+              {unreadRandomCount}
+            </span>
+          )}
         </button>
 
         <button
@@ -61,11 +79,29 @@ export function Header({ activeTab, setActiveTab }) {
               setActiveTab('friends');
             }
           }}
-          style={{ padding: '8px 16px', borderRadius: 'var(--radius-full)', display: 'flex', alignItems: 'center', gap: '6px' }}
+          style={{ padding: '8px 16px', borderRadius: 'var(--radius-full)', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
           title={isGuest ? "Sign up to unlock friends" : "View Friends"}
         >
           <Users size={18} />
           <span>Friends</span>
+          {!isGuest && totalUnreadFriendsCount > 0 && (
+            <span style={{
+              backgroundColor: '#ef4444',
+              color: '#ffffff',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              minWidth: '18px',
+              height: '18px',
+              borderRadius: '9px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 5px',
+              boxShadow: '0 2px 6px rgba(239, 68, 68, 0.4)'
+            }}>
+              {totalUnreadFriendsCount}
+            </span>
+          )}
           {isGuest && <Lock size={13} style={{ opacity: 0.8 }} />}
         </button>
       </nav>

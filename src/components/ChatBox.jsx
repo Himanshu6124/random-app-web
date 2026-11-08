@@ -520,9 +520,24 @@ export function ChatBox() {
                   fontSize: '0.7rem',
                   color: 'var(--text-muted)',
                   marginTop: '4px',
-                  padding: '0 4px'
+                  padding: '0 4px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
                 }}>
-                  {msg.time || msg.timestamp}
+                  <span>{msg.time || msg.timestamp}</span>
+                  {isMe && (
+                    <>
+                      <span>•</span>
+                      {msg.status === 'SEEN' ? (
+                        <span style={{ color: 'var(--cyan-accent)', fontWeight: 600 }}>✓✓ Seen</span>
+                      ) : msg.status === 'SENDING' ? (
+                        <span>Sending...</span>
+                      ) : (
+                        <span>✓ Sent</span>
+                      )}
+                    </>
+                  )}
                 </span>
               )}
             </div>

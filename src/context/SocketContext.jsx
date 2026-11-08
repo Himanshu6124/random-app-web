@@ -61,8 +61,18 @@ export function SocketProvider({ children }) {
     loadFriendRequests,
     loadFriendsFromApi,
     applyFriendPresence,
+    handleIncomingDirectMessage,
     performLogout
   } = useAuth();
+
+  // Tab management owned here so notifications and seen tracking work across tabs
+  const [activeTab, setActiveTab] = useState('match');
+  const activeTabRef = useRef(activeTab);
+  useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
+
+  // Unread random match badge and notification alert
+  const [unreadRandomCount, setUnreadRandomCount] = useState(0);
+  const [liveRandomMessage, setLiveRandomMessage] = useState(null);
 
   // matchState: 'idle' | 'searching' | 'matched'
   const [matchState, setMatchState] = useState('idle');
@@ -86,6 +96,7 @@ export function SocketProvider({ children }) {
   const messagesRef = useRef(messages);
   const logoutRef = useRef(performLogout);
   const lastProfileSentRef = useRef({ conversationId: null, signature: null });
+  const handleIncomingDirectMessageRef = useRef(handleIncomingDirectMessage);
 
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
   useEffect(() => { userRef.current = user; }, [user]);
@@ -93,8 +104,25 @@ export function SocketProvider({ children }) {
   useEffect(() => { isPeerOnlineRef.current = isPeerOnline; }, [isPeerOnline]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { logoutRef.current = performLogout; }, [performLogout]);
+  useEffect(() => { handleIncomingDirectMessageRef.current = handleIncomingDirectMessage; }, [handleIncomingDirectMessage]);
 
   const activeConversationId = currentPeer?.conversationId || currentPeer?.id || null;
+
+  // When returning to Random Match tab, clear unread notifications and send seen receipt
+  useEffect(() => {
+    if (activeTab === 'match') {
+      setUnreadRandomCount(0);
+      setLiveRandomMessage(null);
+
+      const convId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+      if (convId) {
+        const lastPeerMsg = [...messagesRef.current].reverse().find(m => m.senderId && m.senderId !== userRef.current?.id);
+        if (lastPeerMsg?.id) {
+          socketService.sendRandomChatSeen(convId, lastPeerMsg.id);
+        }
+      }
+    }
+  }, [activeTab]);
 
   /**
    * Called when a match is found from server CONVERSATION_DTO
@@ -136,6 +164,7 @@ export function SocketProvider({ children }) {
     if (!activeConvId || msg.conversationId !== activeConvId) return;
 
     const myId = userRef.current?.id;
+    const isPeerMsg = msg.senderId !== myId;
 
     setMessages(prev => {
       if (prev.some(m => m.id === msg.id)) {
@@ -144,8 +173,28 @@ export function SocketProvider({ children }) {
       return [...prev, msg];
     });
 
-    if (soundEnabledRef.current && msg.senderId !== myId) {
-      playChime('message');
+    if (isPeerMsg) {
+      if (activeTabRef.current !== 'match') {
+        // User is currently in Friends or Profile tab: inform them with red dot & notification card
+        setUnreadRandomCount(c => c + 1);
+        const peer = currentPeerRef.current;
+        setLiveRandomMessage({
+          id: msg.id || 'rand_' + Date.now(),
+          peerName: peer?.name || 'Random Stranger',
+          photoUrl: peer?.photoUrl || '',
+          text: msg.type === 'IMAGE' ? '📷 Photo' : (msg.text || msg.message || ''),
+          conversationId: msg.conversationId
+        });
+      } else {
+        // User is looking directly at Random Match: mark message seen immediately
+        if (msg.id) {
+          socketService.sendRandomChatSeen(activeConvId, msg.id);
+        }
+      }
+
+      if (soundEnabledRef.current) {
+        playChime('message');
+      }
     }
   }, []);
 
@@ -230,6 +279,22 @@ export function SocketProvider({ children }) {
         },
         onMessageReceived: (msg) => {
           handleMessageReceivedRef.current(msg);
+        },
+        onDirectMessageReceived: (payload) => {
+          handleIncomingDirectMessageRef.current?.(payload);
+          if (soundEnabledRef.current) playChime('message');
+        },
+        onMessageSeen: (payload) => {
+          const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+          if (!activeConvId || payload?.conversationId !== activeConvId) return;
+
+          const myId = userRef.current?.id;
+          setMessages(prev => prev.map(m => {
+            if (m.senderId === myId) {
+              return { ...m, status: 'SEEN' };
+            }
+            return m;
+          }));
         },
         onTypingStatus: (typing, payload) => {
           const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
@@ -404,6 +469,8 @@ export function SocketProvider({ children }) {
       socketService.sendDisconnect(previousConvId);
       socketService.unsubscribeRoom(previousConvId);
     }
+    setUnreadRandomCount(0);
+    setLiveRandomMessage(null);
     setMatchState('searching');
     setCurrentPeer(null);
     setPeerLeft(false);
@@ -416,6 +483,8 @@ export function SocketProvider({ children }) {
       clearTimeout(skipTimerRef.current);
       skipTimerRef.current = null;
     }
+    setUnreadRandomCount(0);
+    setLiveRandomMessage(null);
     setMatchState('idle');
     socketService.cancelMatchmaking({ notifyServer: true });
   }, []);
@@ -424,6 +493,8 @@ export function SocketProvider({ children }) {
     setIsPeerTyping(false);
     setIsPeerOnline(true);
     setPeerLeft(false);
+    setUnreadRandomCount(0);
+    setLiveRandomMessage(null);
 
     const convId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
     if (convId) {
@@ -450,6 +521,8 @@ export function SocketProvider({ children }) {
     setIsPeerTyping(false);
     setIsPeerOnline(true);
     setPeerLeft(false);
+    setUnreadRandomCount(0);
+    setLiveRandomMessage(null);
 
     const convId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
     if (convId) {
@@ -581,7 +654,16 @@ export function SocketProvider({ children }) {
     sendMessage(`🧊 Icebreaker: ${randomQ}`);
   }, [sendMessage]);
 
+  const clearUnreadRandomCount = useCallback(() => setUnreadRandomCount(0), []);
+  const dismissLiveRandomMessage = useCallback(() => setLiveRandomMessage(null), []);
+
   const value = useMemo(() => ({
+    activeTab,
+    setActiveTab,
+    unreadRandomCount,
+    clearUnreadRandomCount,
+    liveRandomMessage,
+    dismissLiveRandomMessage,
     matchState,
     currentPeer,
     messages,
@@ -602,7 +684,8 @@ export function SocketProvider({ children }) {
     connectionStatus,
     isLiveConnected
   }), [
-    matchState, currentPeer, messages, isPeerTyping, isPeerOnline, peerLeft,
+    activeTab, setActiveTab, unreadRandomCount, clearUnreadRandomCount, liveRandomMessage,
+    dismissLiveRandomMessage, matchState, currentPeer, messages, isPeerTyping, isPeerOnline, peerLeft,
     startSearching, cancelSearch, skipStranger, disconnectChat, sendMessage,
     retryMessage, sendMedia, sendReaction, sendIcebreaker, notifyTyping, floatingReactions,
     connectionStatus, isLiveConnected

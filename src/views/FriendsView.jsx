@@ -38,7 +38,9 @@ export function FriendsView({ onStartMatch }) {
     acceptFriendRequest,
     rejectFriendRequest,
     loadFriendsFromApi,
-    openUpgradeModal
+    openUpgradeModal,
+    markFriendMessagesSeen,
+    setActiveDmFriendId
   } = useAuth();
 
   const { isLiveConnected } = useSocket();
@@ -62,6 +64,18 @@ export function FriendsView({ onStartMatch }) {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Sync active DM friend with AuthContext to prevent unread increment while viewing
+  useEffect(() => {
+    const friendId = selectedFriend?.id || selectedFriend?.friendUserId;
+    setActiveDmFriendId?.(friendId || null);
+    if (friendId) {
+      markFriendMessagesSeen?.(friendId);
+    }
+    return () => {
+      setActiveDmFriendId?.(null);
+    };
+  }, [selectedFriend?.id, selectedFriend?.friendUserId, setActiveDmFriendId, markFriendMessagesSeen]);
+
   // Handle selecting a friend
   const handleSelectFriend = async (friend) => {
     if (!friend) return;
@@ -69,6 +83,10 @@ export function FriendsView({ onStartMatch }) {
 
     let activeFriend = { ...friend };
     const targetUserId = friend.id || friend.friendUserId;
+    if (targetUserId) {
+      markFriendMessagesSeen?.(targetUserId);
+      setActiveDmFriendId?.(targetUserId);
+    }
 
     // If conversationId is missing, create or open it via POST /conversations
     if (!activeFriend.conversationId && targetUserId) {
@@ -155,6 +173,11 @@ export function FriendsView({ onStartMatch }) {
       .then(apiMessages => {
         if (!isSubscribed) return;
         if (Array.isArray(apiMessages) && apiMessages.length > 0) {
+          const lastPeerMsg = [...apiMessages].reverse().find(m => m.senderId !== user?.id);
+          if (lastPeerMsg?.id) {
+            socketService.sendSeen(conversationId, lastPeerMsg.id);
+          }
+
           setDmMessages(prev => {
             const existingLocal = prev[conversationId] || prev[friendId] || [];
             const mergedMap = new Map();
@@ -215,7 +238,7 @@ export function FriendsView({ onStartMatch }) {
             message: msg.message || msg.text || '',
             type: msg.type || (msg.objectUri ? 'IMAGE' : 'TEXT'),
             objectUri: msg.objectUri || null,
-            status: 'SENT',
+            status: msg.status || 'SENT',
             time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             timestamp: rawTime
           };
@@ -245,6 +268,18 @@ export function FriendsView({ onStartMatch }) {
         if (msg.id && msg.senderId !== myId) {
           socketService.sendSeen(conversationId, msg.id);
         }
+      },
+      onSeen: (_payload) => {
+        setDmMessages(prev => {
+          const currentList = prev[conversationId] || [];
+          const updated = currentList.map(m => {
+            if (m.sender === 'me' || m.senderId === myId) {
+              return { ...m, status: 'SEEN' };
+            }
+            return m;
+          });
+          return { ...prev, [conversationId]: updated };
+        });
       },
       onTyping: (typing, payload) => {
         if (payload?.senderId === myId) return;
@@ -658,8 +693,36 @@ export function FriendsView({ onStartMatch }) {
                           {friend.isOnline ? 'Online' : 'Offline'}
                         </span>
                       </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', marginTop: '2px' }}>
-                        {friend.lastMessage || 'Say hi!'}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '2px' }}>
+                        <span style={{
+                          fontSize: '0.75rem',
+                          color: (friend.unseenCount || 0) > 0 ? '#ffffff' : 'var(--text-muted)',
+                          fontWeight: (friend.unseenCount || 0) > 0 ? 600 : 400,
+                          whiteSpace: 'nowrap',
+                          textOverflow: 'ellipsis',
+                          overflow: 'hidden'
+                        }}>
+                          {friend.lastMessage || 'Say hi!'}
+                        </span>
+                        {(friend.unseenCount || 0) > 0 && (
+                          <span style={{
+                            backgroundColor: '#ef4444',
+                            color: '#ffffff',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            minWidth: '18px',
+                            height: '18px',
+                            borderRadius: '9px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '0 5px',
+                            flexShrink: 0,
+                            boxShadow: '0 2px 6px rgba(239, 68, 68, 0.4)'
+                          }}>
+                            {friend.unseenCount}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -891,8 +954,34 @@ export function FriendsView({ onStartMatch }) {
                         m.text
                       )}
                     </div>
-                    <span style={{ fontSize: '0.7rem', color: m.status === 'FAILED' ? '#f87171' : 'var(--text-muted)', marginTop: '4px', padding: '0 4px' }}>
-                      {m.status === 'FAILED' ? 'Not delivered' : (m.status === 'SENDING' ? 'Sending...' : m.time)}
+                    <span style={{
+                      fontSize: '0.7rem',
+                      color: m.status === 'FAILED' ? '#f87171' : 'var(--text-muted)',
+                      marginTop: '4px',
+                      padding: '0 4px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      {m.status === 'FAILED' ? (
+                        'Not delivered'
+                      ) : m.status === 'SENDING' ? (
+                        'Sending...'
+                      ) : (
+                        <>
+                          <span>{m.time}</span>
+                          {isMe && (
+                            <>
+                              <span>•</span>
+                              {m.status === 'SEEN' ? (
+                                <span style={{ color: 'var(--cyan-accent)', fontWeight: 600 }}>✓✓ Seen</span>
+                              ) : (
+                                <span>✓ Sent</span>
+                              )}
+                            </>
+                          )}
+                        </>
+                      )}
                     </span>
                   </div>
                 );

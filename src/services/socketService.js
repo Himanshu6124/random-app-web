@@ -411,6 +411,8 @@ export class SocketService {
           this.callbacks.onFriendRequestAccepted?.(event.payload);
         } else if (event.type === 'FRIEND_REQUEST_CANCELLED') {
           this.callbacks.onFriendRequestCancelled?.(event.payload);
+        } else if (event.type === 'MESSAGE') {
+          this.callbacks.onDirectMessageReceived?.(event.payload);
         }
       } catch (e) {
         console.warn('[SocketService] Failed to parse notification frame:', e);
@@ -779,6 +781,14 @@ export class SocketService {
   sendSeen(conversationId, messageId) {
     if (!conversationId || !messageId) return false;
     return this._publish('/app/chat.seen', { conversationId, messageId });
+  }
+
+  /**
+   * Send seen receipt in random conversation: /app/chat.random.seen
+   */
+  sendRandomChatSeen(conversationId, messageId) {
+    if (!conversationId || !messageId) return false;
+    return this._publish('/app/chat.random.seen', { conversationId, messageId });
   }
 
   /**

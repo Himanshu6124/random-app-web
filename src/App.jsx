@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { SocketProvider } from './context/SocketContext';
+import { SocketProvider, useSocket } from './context/SocketContext';
 import { Header } from './components/Header';
 import { MatchView } from './views/MatchView';
 import { FriendsView } from './views/FriendsView';
@@ -9,10 +9,11 @@ import { LoginView } from './views/LoginView';
 import { LogoutConfirmationDialog } from './components/LogoutConfirmationDialog';
 import { GuestUpgradeModal } from './components/GuestUpgradeModal';
 import { LiveFriendRequestAlert } from './components/LiveFriendRequestAlert';
+import { LiveRandomMessageAlert } from './components/LiveRandomMessageAlert';
 
 function AppContent() {
   const { isAuthenticated, authLoading, showLogoutModal, cancelLogout, performLogout } = useAuth();
-  const [activeTab, setActiveTab] = useState('match');
+  const { activeTab, setActiveTab } = useSocket();
 
   // 1. Initial Auth check loading state on landing
   if (authLoading) {
@@ -50,6 +51,7 @@ function AppContent() {
       />
       <GuestUpgradeModal />
       <LiveFriendRequestAlert />
+      <LiveRandomMessageAlert />
     </div>
   );
 }

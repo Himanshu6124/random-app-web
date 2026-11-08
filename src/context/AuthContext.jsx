@@ -73,6 +73,11 @@ export function AuthProvider({ children }) {
   // Bumped on logout so socket-owned state can drop the previous user's session
   const [sessionEpoch, setSessionEpoch] = useState(0);
 
+  // Tracks currently open friend direct message conversation to avoid unread counting while viewing
+  const [activeDmFriendId, setActiveDmFriendId] = useState(null);
+  const activeDmFriendIdRef = useRef(activeDmFriendId);
+  useEffect(() => { activeDmFriendIdRef.current = activeDmFriendId; }, [activeDmFriendId]);
+
   const pollTimerRef = useRef(null);
 
   /**
@@ -152,6 +157,62 @@ export function AuthProvider({ children }) {
       return changed ? next : prev;
     });
   }, []);
+
+  /**
+   * Resets unread messages badge for a specific friend upon opening their conversation.
+   */
+  const markFriendMessagesSeen = useCallback((friendUserId) => {
+    if (!friendUserId) return;
+    setFriends(prev => prev.map(f => {
+      const key = f.id || f.friendUserId;
+      if (key === friendUserId && (f.unseenCount || 0) > 0) {
+        return { ...f, unseenCount: 0 };
+      }
+      return f;
+    }));
+  }, []);
+
+  /**
+   * Handles incoming direct message from notifications queue or active room.
+   */
+  const handleIncomingDirectMessage = useCallback((msg) => {
+    if (!msg) return;
+    const senderId = msg.senderId;
+    if (!senderId || senderId === user?.id) return;
+
+    const isViewingThisFriend = activeDmFriendIdRef.current === senderId;
+    const preview = msg.type === 'IMAGE' ? '📷 Photo' : (msg.text || msg.message || 'Say hi!');
+    const rawTime = msg.timestamp || msg.timeStamp || new Date().toISOString();
+
+    setFriends(prev => {
+      let matched = false;
+      const next = prev.map(f => {
+        const key = f.id || f.friendUserId;
+        if (key === senderId) {
+          matched = true;
+          const currentUnseen = f.unseenCount || 0;
+          return {
+            ...f,
+            conversationId: f.conversationId || msg.conversationId,
+            lastMessage: preview,
+            lastMessageTime: rawTime,
+            unseenCount: isViewingThisFriend ? 0 : currentUnseen + 1
+          };
+        }
+        return f;
+      });
+
+      if (!matched) {
+        loadFriendsFromApi();
+        return prev;
+      }
+      return next;
+    });
+  }, [user?.id, loadFriendsFromApi]);
+
+  const totalUnreadFriendsCount = useMemo(() => {
+    return friends.reduce((sum, f) => sum + (f.unseenCount || 0), 0);
+  }, [friends]);
 
   // Safety-net social sync. Live updates come over the socket; this only covers
   // what a missed frame would lose, so it is slow, jittered and visible-tab only.
@@ -605,6 +666,11 @@ export function AuthProvider({ children }) {
     soundEnabled,
     setSoundEnabled,
     friends,
+    totalUnreadFriendsCount,
+    markFriendMessagesSeen,
+    handleIncomingDirectMessage,
+    activeDmFriendId,
+    setActiveDmFriendId,
     friendRequests,
     friendRequestsLoading,
     liveFriendRequest,
@@ -626,7 +692,8 @@ export function AuthProvider({ children }) {
     login, signUp, loginAsGuest, upgradeGuestAccount, signInWithGoogle, completeGoogleSignup,
     linkGoogleAccount, upgradeModalOpen, upgradeModalReason,
     pendingUpgradeAction, openUpgradeModal, closeUpgradeModal, logout, updateUserProfile,
-    soundEnabled, friends, friendRequests, friendRequestsLoading, liveFriendRequest,
+    soundEnabled, friends, totalUnreadFriendsCount, markFriendMessagesSeen, handleIncomingDirectMessage,
+    activeDmFriendId, setActiveDmFriendId, friendRequests, friendRequestsLoading, liveFriendRequest,
     dismissLiveFriendRequest, acceptLiveFriendRequest, applyFriendPresence, addFriend,
     sendFriendRequest, cancelFriendRequest, loadFriendRequests, acceptFriendRequest,
     rejectFriendRequest, removeFriend, loadFriendsFromApi
