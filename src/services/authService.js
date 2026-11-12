@@ -55,6 +55,9 @@ function getAuthHeaders(token) {
   return headers;
 }
 
+// Shared with discoverService so every REST client parses errors and auth the same way.
+export { BASE_URL, handleApiResponse, getAuthHeaders };
+
 export const authService = {
   getToken() {
     return localStorage.getItem(TOKEN_KEY);
@@ -751,6 +754,43 @@ export const authService = {
 
   async cancelFriendRequest(friendId, token) {
     return this.removeFriendApi(friendId, token);
+  },
+
+  /**
+   * POST /friendships/{userId}/block -> FriendshipStatusDto
+   * Works for friends, pending requests and the stranger in a live random chat.
+   */
+  async blockUser(userId, token) {
+    const response = await fetch(`${BASE_URL}/friendships/${encodeURIComponent(userId)}/block`, {
+      method: 'POST',
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
+   * DELETE /friendships/{userId}/block
+   */
+  async unblockUser(userId, token) {
+    const response = await fetch(`${BASE_URL}/friendships/${encodeURIComponent(userId)}/block`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
+   * GET /friendships/blocked -> List<FriendDto> (users the caller blocked)
+   */
+  async getBlockedUsers(token) {
+    const response = await fetch(`${BASE_URL}/friendships/blocked`, {
+      headers: getAuthHeaders(token)
+    });
+    const data = await handleApiResponse(response);
+    return (Array.isArray(data) ? data : []).map(u => ({
+      ...u,
+      name: u.name || u.username
+    }));
   },
 
   /**

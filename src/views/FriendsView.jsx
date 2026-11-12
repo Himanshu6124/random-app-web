@@ -17,21 +17,27 @@ import {
   Smile,
   Hand,
   MoreVertical,
-  Loader2
+  Loader2,
+  Ban,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
+import { DiscoverConfirmDialog } from '../components/discover/DiscoverConfirmDialog';
 import { FriendRequestDialog } from '../components/FriendRequestDialog';
 import { MediaComposer } from '../components/MediaComposer';
 import { ChatMediaMessage } from '../components/ChatMediaMessage';
 
 const MAX_CACHED_MESSAGES = 200;
 
-export function FriendsView({ onStartMatch }) {
+export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHandled }) {
   const {
     user,
     isGuest,
     jwtToken,
     friends,
     removeFriend,
+    blockUser,
+    unblockUser,
     friendRequests,
     friendRequestsLoading,
     loadFriendRequests,
@@ -54,6 +60,14 @@ export function FriendsView({ onStartMatch }) {
   const [showMenu, setShowMenu] = useState(false);
   const [fetchingMessages, setFetchingMessages] = useState(false);
   const [mediaError, setMediaError] = useState('');
+  // { kind: 'remove' | 'block', friend } awaiting confirmation
+  const [pendingAction, setPendingAction] = useState(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  const [showBlocked, setShowBlocked] = useState(false);
+  const [unblockingId, setUnblockingId] = useState(null);
+  const menuRef = useRef(null);
   const messagesEndRef = useRef(null);
   const typingTimerRef = useRef(null);
 
@@ -106,12 +120,23 @@ export function FriendsView({ onStartMatch }) {
     setShowMenu(false);
   };
 
+  // Another view (Discover, a wave alert) asked to open a chat with this friend
+  useEffect(() => {
+    if (!initialFriendId) return;
+    const target = friends.find(f => f.id === initialFriendId || f.friendUserId === initialFriendId);
+    if (target) {
+      handleSelectFriend(target);
+      onInitialFriendHandled?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFriendId, friends]);
+
   // Auto-select first friend on desktop if none selected
   useEffect(() => {
-    if (!selectedFriend && friends.length > 0 && !isMobile) {
+    if (!selectedFriend && friends.length > 0 && !isMobile && !initialFriendId) {
       handleSelectFriend(friends[0]);
     }
-  }, [friends, isMobile, selectedFriend]);
+  }, [friends, isMobile, selectedFriend, initialFriendId]);
 
   // Keep selectedFriend in sync with friends list changes (e.g. online presence)
   useEffect(() => {
@@ -129,6 +154,83 @@ export function FriendsView({ onStartMatch }) {
     loadFriendsFromApi();
     loadFriendRequests();
   }, [isGuest, loadFriendsFromApi, loadFriendRequests]);
+
+  const loadBlockedUsers = async () => {
+    const token = jwtToken || authService.getToken();
+    if (!token) return;
+    try {
+      setBlockedUsers(await authService.getBlockedUsers(token));
+    } catch (err) {
+      console.warn('[FriendsView] Failed to load blocked users:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (isGuest) return;
+    loadBlockedUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGuest, jwtToken]);
+
+  // Close the chat options menu on any click outside it
+  useEffect(() => {
+    if (!showMenu) return undefined;
+    const onDown = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [showMenu]);
+
+  const friendKey = (f) => f?.id || f?.friendUserId;
+  const friendLabel = (f) => f?.name || f?.friendUserName || f?.username || 'this user';
+
+  const askConfirm = (kind, friend) => {
+    setShowMenu(false);
+    setActionError('');
+    setPendingAction({ kind, friend });
+  };
+
+  const clearSelectionIf = (targetId) => {
+    if (selectedFriend && friendKey(selectedFriend) === targetId) {
+      setSelectedFriend(null);
+      setMobileShowChat(false);
+    }
+  };
+
+  const handleConfirmAction = async () => {
+    if (!pendingAction || actionBusy) return;
+    const { kind, friend } = pendingAction;
+    const targetId = friendKey(friend);
+    setActionBusy(true);
+    setActionError('');
+    try {
+      if (kind === 'block') {
+        await blockUser(targetId);
+        await loadBlockedUsers();
+      } else {
+        await removeFriend(targetId);
+      }
+      clearSelectionIf(targetId);
+      setPendingAction(null);
+    } catch (err) {
+      setActionError(err?.message || 'Something went wrong. Please try again.');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleUnblock = async (blocked) => {
+    if (unblockingId) return;
+    setUnblockingId(blocked.id);
+    try {
+      await unblockUser(blocked.id);
+      setBlockedUsers(prev => prev.filter(b => b.id !== blocked.id));
+    } catch (err) {
+      console.warn('[FriendsView] Failed to unblock user:', err);
+    } finally {
+      setUnblockingId(null);
+    }
+  };
 
   // In-memory / local storage message cache
   const [dmMessages, setDmMessages] = useState(() => {
@@ -730,12 +832,9 @@ export function FriendsView({ onStartMatch }) {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      removeFriend(friendId);
-                      if (selectedFriend && (selectedFriend.id === friendId || selectedFriend.friendUserId === friendId)) {
-                        setSelectedFriend(null);
-                        setMobileShowChat(false);
-                      }
+                      askConfirm('remove', friend);
                     }}
+                    aria-label={`Remove ${friendLabel(friend)} from friends`}
                     style={{
                       background: 'none',
                       border: 'none',
@@ -750,6 +849,81 @@ export function FriendsView({ onStartMatch }) {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Blocked users (only ones *I* blocked; blocks placed by others are never shown) */}
+        {blockedUsers.length > 0 && (
+          <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+            <button
+              type="button"
+              onClick={() => setShowBlocked(prev => !prev)}
+              aria-expanded={showBlocked}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-secondary)',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                padding: '4px 0'
+              }}
+            >
+              {showBlocked ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              <Ban size={15} />
+              Blocked users ({blockedUsers.length})
+            </button>
+
+            {showBlocked && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px', maxHeight: '200px', overflowY: 'auto' }}>
+                {blockedUsers.map(blocked => (
+                  <div
+                    key={blocked.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '8px',
+                      padding: '8px 10px',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'rgba(255, 255, 255, 0.04)'
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {blocked.name}
+                      </div>
+                      {blocked.username && (
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>@{blocked.username}</div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleUnblock(blocked)}
+                      disabled={unblockingId === blocked.id}
+                      aria-label={`Unblock ${blocked.name}`}
+                      style={{
+                        flexShrink: 0,
+                        padding: '6px 12px',
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        borderRadius: 'var(--radius-full)',
+                        border: '1px solid var(--border-color)',
+                        background: 'transparent',
+                        color: 'var(--text-primary)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {unblockingId === blocked.id ? 'Unblocking…' : 'Unblock'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -783,7 +957,10 @@ export function FriendsView({ onStartMatch }) {
               alignItems: 'center',
               justifyContent: 'space-between',
               background: 'rgba(15, 17, 35, 0.4)',
-              zIndex: 10
+              // Must be positioned, or zIndex is ignored and the options menu renders
+              // underneath the messages log (which made "Remove Friend" unclickable).
+              position: 'relative',
+              zIndex: 20
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <button
@@ -835,9 +1012,12 @@ export function FriendsView({ onStartMatch }) {
               </div>
 
               {/* Options Menu */}
-              <div style={{ position: 'relative' }}>
+              <div ref={menuRef} style={{ position: 'relative' }}>
                 <button
                   onClick={() => setShowMenu(prev => !prev)}
+                  aria-label="Chat options"
+                  aria-haspopup="menu"
+                  aria-expanded={showMenu}
                   style={{
                     background: 'none',
                     border: 'none',
@@ -859,17 +1039,13 @@ export function FriendsView({ onStartMatch }) {
                     borderRadius: 'var(--radius-md)',
                     boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
                     padding: '6px 0',
-                    width: '160px',
+                    width: '170px',
                     zIndex: 50
                   }}>
                     <button
-                      onClick={() => {
-                        const targetUser = selectedFriend.id || selectedFriend.friendUserId;
-                        removeFriend(targetUser);
-                        setSelectedFriend(null);
-                        setMobileShowChat(false);
-                        setShowMenu(false);
-                      }}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => askConfirm('remove', selectedFriend)}
                       style={{
                         width: '100%',
                         textAlign: 'left',
@@ -886,6 +1062,27 @@ export function FriendsView({ onStartMatch }) {
                     >
                       <UserMinus size={15} />
                       Remove Friend
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => askConfirm('block', selectedFriend)}
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '10px 16px',
+                        background: 'none',
+                        border: 'none',
+                        color: '#ef4444',
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      <Ban size={15} />
+                      Block
                     </button>
                   </div>
                 )}
@@ -1160,6 +1357,24 @@ export function FriendsView({ onStartMatch }) {
       </div>
 
       {/* Friend Requests Modal Dialog */}
+      <DiscoverConfirmDialog
+        open={Boolean(pendingAction)}
+        title={pendingAction?.kind === 'block'
+          ? `Block ${friendLabel(pendingAction?.friend)}?`
+          : `Remove ${friendLabel(pendingAction?.friend)}?`}
+        body={pendingAction?.kind === 'block'
+          ? 'They will be removed from your friends and your chat history with them is deleted. They cannot message you, send you friend requests, find you in search, or be matched with you in Random Match. You can unblock them later.'
+          : 'They will be removed from your friends and your chat history with them is deleted. You can send them a new friend request later.'}
+        confirmLabel={actionBusy
+          ? (pendingAction?.kind === 'block' ? 'Blocking…' : 'Removing…')
+          : (pendingAction?.kind === 'block' ? 'Block' : 'Remove')}
+        danger
+        busy={actionBusy}
+        error={actionError}
+        onConfirm={handleConfirmAction}
+        onCancel={() => setPendingAction(null)}
+      />
+
       {showRequestDialog && (
         <FriendRequestDialog
           friendRequests={friendRequests}

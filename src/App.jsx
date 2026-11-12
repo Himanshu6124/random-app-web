@@ -1,19 +1,38 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider, useSocket } from './context/SocketContext';
 import { Header } from './components/Header';
 import { MatchView } from './views/MatchView';
 import { FriendsView } from './views/FriendsView';
+import { DiscoverView } from './views/DiscoverView';
 import { ProfileView } from './views/ProfileView';
 import { LoginView } from './views/LoginView';
 import { LogoutConfirmationDialog } from './components/LogoutConfirmationDialog';
 import { GuestUpgradeModal } from './components/GuestUpgradeModal';
 import { LiveFriendRequestAlert } from './components/LiveFriendRequestAlert';
 import { LiveRandomMessageAlert } from './components/LiveRandomMessageAlert';
+import { LiveWaveAlert } from './components/LiveWaveAlert';
 
 function AppContent() {
-  const { isAuthenticated, authLoading, showLogoutModal, cancelLogout, performLogout } = useAuth();
+  const { isAuthenticated, isGuest, authLoading, showLogoutModal, cancelLogout, performLogout } = useAuth();
   const { activeTab, setActiveTab } = useSocket();
+  // Friend to open in the Friends tab when another view (Discover, wave alert) asks for a DM
+  const [dmTargetId, setDmTargetId] = useState(null);
+
+  const openFriendChat = (friendId) => {
+    setDmTargetId(friendId);
+    setActiveTab('friends');
+  };
+
+  // A pending DM hand-off only applies to the Friends tab it was made for
+  useEffect(() => {
+    if (activeTab !== 'friends') setDmTargetId(null);
+  }, [activeTab]);
+
+  // Discover is registered-users only; a guest session (or a downgrade) falls back to Match.
+  useEffect(() => {
+    if (isGuest && activeTab === 'discover') setActiveTab('match');
+  }, [isGuest, activeTab, setActiveTab]);
 
   // 1. Initial Auth check loading state on landing
   if (authLoading) {
@@ -40,7 +59,14 @@ function AppContent() {
       
       <main className="main-content">
         {activeTab === 'match' && <MatchView />}
-        {activeTab === 'friends' && <FriendsView onStartMatch={() => setActiveTab('match')} />}
+        {activeTab === 'discover' && !isGuest && <DiscoverView onOpenChat={openFriendChat} />}
+        {activeTab === 'friends' && (
+          <FriendsView
+            onStartMatch={() => setActiveTab('match')}
+            initialFriendId={dmTargetId}
+            onInitialFriendHandled={() => setDmTargetId(null)}
+          />
+        )}
         {activeTab === 'profile' && <ProfileView />}
       </main>
 
@@ -52,6 +78,7 @@ function AppContent() {
       <GuestUpgradeModal />
       <LiveFriendRequestAlert />
       <LiveRandomMessageAlert />
+      <LiveWaveAlert onOpenChat={openFriendChat} />
     </div>
   );
 }

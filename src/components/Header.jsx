@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import { Sparkles, Users, MessageSquare, Volume2, VolumeX, LogOut, Lock } from 'lucide-react';
+import { Sparkles, Users, MessageSquare, Volume2, VolumeX, LogOut, Lock, Compass } from 'lucide-react';
 
 export function Header({ activeTab, setActiveTab }) {
   const { user, isGuest, soundEnabled, setSoundEnabled, logout, openUpgradeModal, totalUnreadFriendsCount } = useAuth();
@@ -68,6 +68,24 @@ export function Header({ activeTab, setActiveTab }) {
               {unreadRandomCount}
             </span>
           )}
+        </button>
+
+        <button
+          className={activeTab === 'discover' ? 'btn-primary' : 'btn-secondary'}
+          onClick={() => {
+            if (isGuest) {
+              openUpgradeModal('find friends, see who is nearby and keep your match history');
+            } else {
+              setActiveTab('discover');
+            }
+          }}
+          aria-current={activeTab === 'discover' ? 'page' : undefined}
+          style={{ padding: '8px 16px', borderRadius: 'var(--radius-full)', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
+          title={isGuest ? "Sign up to unlock Discover" : "Find friends, nearby friends and match history"}
+        >
+          <Compass size={18} />
+          <span>Discover</span>
+          {isGuest && <Lock size={13} style={{ opacity: 0.8 }} />}
         </button>
 
         <button

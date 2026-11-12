@@ -67,6 +67,8 @@ export function SocketProvider({ children }) {
 
   // Tab management owned here so notifications and seen tracking work across tabs
   const [activeTab, setActiveTab] = useState('match');
+  // A friend tapped "Wave" on the Nearby map (FRIEND_WAVE on /user/queue/notifications)
+  const [liveWave, setLiveWave] = useState(null);
   const activeTabRef = useRef(activeTab);
   useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
 
@@ -246,6 +248,8 @@ export function SocketProvider({ children }) {
       {
         onConnect: () => {
           setConnectionStatus('connected');
+          // Presence changes while we were disconnected were missed: resync from the server.
+          if (!userRef.current?.isGuest) loadFriendsRef.current?.();
 
           // The socket service replays every room subscription by itself; all that is
           // left here is telling the peer about a username that really changed.
@@ -308,6 +312,9 @@ export function SocketProvider({ children }) {
             }, 3000);
           }
         },
+        onFriendPresence: (friendId, online) => {
+          applyFriendPresenceRef.current?.(friendId, online);
+        },
         onOnlineStatus: (isOnline, payload) => {
           // Friends list presence is pushed from the room the friend shares with us
           if (payload?.senderId) {
@@ -369,6 +376,11 @@ export function SocketProvider({ children }) {
           setLiveFriendRequestRef.current?.(sender);
           loadRequestsRef.current?.();
           if (soundEnabledRef.current) playChime('match');
+        },
+        onFriendWave: (sender) => {
+          if (!sender) return;
+          setLiveWave({ ...sender, receivedAt: Date.now() });
+          if (soundEnabledRef.current) playChime('message');
         },
         onFriendRequestAccepted: () => {
           loadFriendsRef.current?.();
@@ -655,6 +667,7 @@ export function SocketProvider({ children }) {
   }, [sendMessage]);
 
   const clearUnreadRandomCount = useCallback(() => setUnreadRandomCount(0), []);
+  const dismissLiveWave = useCallback(() => setLiveWave(null), []);
   const dismissLiveRandomMessage = useCallback(() => setLiveRandomMessage(null), []);
 
   const value = useMemo(() => ({
@@ -664,6 +677,8 @@ export function SocketProvider({ children }) {
     clearUnreadRandomCount,
     liveRandomMessage,
     dismissLiveRandomMessage,
+    liveWave,
+    dismissLiveWave,
     matchState,
     currentPeer,
     messages,
@@ -685,7 +700,7 @@ export function SocketProvider({ children }) {
     isLiveConnected
   }), [
     activeTab, setActiveTab, unreadRandomCount, clearUnreadRandomCount, liveRandomMessage,
-    dismissLiveRandomMessage, matchState, currentPeer, messages, isPeerTyping, isPeerOnline, peerLeft,
+    dismissLiveRandomMessage, liveWave, dismissLiveWave, matchState, currentPeer, messages, isPeerTyping, isPeerOnline, peerLeft,
     startSearching, cancelSearch, skipStranger, disconnectChat, sendMessage,
     retryMessage, sendMedia, sendReaction, sendIcebreaker, notifyTyping, floatingReactions,
     connectionStatus, isLiveConnected

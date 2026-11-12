@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
-import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Sparkles, Hand, Lock, RefreshCw, X, Zap } from 'lucide-react';
+import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Sparkles, Hand, Lock, RefreshCw, X, Zap, Ban } from 'lucide-react';
 import { extractPeerName, MAX_MESSAGE_LENGTH } from '../services/socketService';
 import { authService } from '../services/authService';
 import { MediaComposer } from './MediaComposer';
 import { ChatMediaMessage } from './ChatMediaMessage';
+import { DiscoverConfirmDialog } from './discover/DiscoverConfirmDialog';
 
 export function ChatBox() {
   const {
@@ -18,7 +19,8 @@ export function ChatBox() {
     friends,
     friendRequests,
     liveFriendRequest,
-    openUpgradeModal
+    openUpgradeModal,
+    blockUser
   } = useAuth();
   const {
     currentPeer,
@@ -43,6 +45,9 @@ export function ChatBox() {
   const [friendStatus, setFriendStatus] = useState('NONE'); // 'NONE' | 'PENDING_SENT' | 'PENDING_RECEIVED' | 'ACCEPTED'
   const [actionLoading, setActionLoading] = useState(false);
   const [mediaError, setMediaError] = useState('');
+  const [blockConfirmOpen, setBlockConfirmOpen] = useState(false);
+  const [blocking, setBlocking] = useState(false);
+  const [blockError, setBlockError] = useState('');
   const messagesEndRef = useRef(null);
   const typingTimerRef = useRef(null);
 
@@ -158,6 +163,28 @@ export function ChatBox() {
       }
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const openBlockConfirm = () => {
+    setBlockError('');
+    setBlockConfirmOpen(true);
+  };
+
+  // Block ends this room server-side (the stranger just sees "left the chat"), and the
+  // matchmaker never pairs the two again. Then move straight on to the next stranger.
+  const handleConfirmBlock = async () => {
+    if (!peerId || blocking) return;
+    setBlocking(true);
+    setBlockError('');
+    try {
+      await blockUser(peerId);
+      setBlockConfirmOpen(false);
+      skipStranger();
+    } catch (err) {
+      setBlockError(err?.message || 'Could not block this user. Please try again.');
+    } finally {
+      setBlocking(false);
     }
   };
 
@@ -399,6 +426,19 @@ export function ChatBox() {
           >
             <SkipForward size={16} />
             <span>Next Stranger</span>
+          </button>
+
+          <button
+            id="block-stranger-btn"
+            type="button"
+            onClick={openBlockConfirm}
+            disabled={!peerId || blocking}
+            className="btn-danger"
+            style={{ padding: '8px 12px', cursor: 'pointer' }}
+            title={`Block ${peerName}`}
+            aria-label={`Block ${peerName}`}
+          >
+            <Ban size={16} />
           </button>
 
           <button
@@ -740,6 +780,18 @@ export function ChatBox() {
           <Send size={20} />
         </button>
       </form>
+
+      <DiscoverConfirmDialog
+        open={blockConfirmOpen}
+        title={`Block ${peerName}?`}
+        body="This ends the chat now. You will never be matched with them again, they cannot find you or send you friend requests, and any friendship and chat history with them is removed. You can unblock them later from the Friends tab."
+        confirmLabel={blocking ? 'Blocking…' : 'Block & skip'}
+        danger
+        busy={blocking}
+        error={blockError}
+        onConfirm={handleConfirmBlock}
+        onCancel={() => setBlockConfirmOpen(false)}
+      />
     </div>
   );
 }

@@ -347,6 +347,26 @@ export function AuthProvider({ children }) {
     }
   }, [jwtToken, loadFriendsFromApi]);
 
+  // Blocking drops any friendship/request server-side; mirror that locally right away.
+  // Throws on failure so callers can show it.
+  const blockUser = useCallback(async (targetUserId) => {
+    const token = jwtToken || authService.getToken();
+    if (!token || !targetUserId) return;
+    await authService.blockUser(targetUserId, token);
+    const notTarget = (u) => u.id !== targetUserId && u.friendUserId !== targetUserId;
+    setFriends(prev => prev.filter(notTarget));
+    setFriendRequests(prev => prev.filter(notTarget));
+    setLiveFriendRequest(prev => (prev && !notTarget(prev) ? null : prev));
+    loadFriendsFromApi(token);
+    loadFriendRequests(token);
+  }, [jwtToken, loadFriendsFromApi, loadFriendRequests]);
+
+  const unblockUser = useCallback(async (targetUserId) => {
+    const token = jwtToken || authService.getToken();
+    if (!token || !targetUserId) return;
+    await authService.unblockUser(targetUserId, token);
+  }, [jwtToken]);
+
   const addFriend = useCallback(async (newFriend) => {
     const targetUserId = newFriend.id || newFriend.friendUserId;
     if (targetUserId) {
@@ -685,6 +705,8 @@ export function AuthProvider({ children }) {
     acceptFriendRequest,
     rejectFriendRequest,
     removeFriend,
+    blockUser,
+    unblockUser,
     loadFriendsFromApi
   }), [
     isAuthenticated, isGuest, jwtToken, user, sessionEpoch, profilePictures, authLoading,
@@ -696,7 +718,7 @@ export function AuthProvider({ children }) {
     activeDmFriendId, setActiveDmFriendId, friendRequests, friendRequestsLoading, liveFriendRequest,
     dismissLiveFriendRequest, acceptLiveFriendRequest, applyFriendPresence, addFriend,
     sendFriendRequest, cancelFriendRequest, loadFriendRequests, acceptFriendRequest,
-    rejectFriendRequest, removeFriend, loadFriendsFromApi
+    rejectFriendRequest, removeFriend, blockUser, unblockUser, loadFriendsFromApi
   ]);
 
   return (

@@ -8,7 +8,6 @@ const log = (...args) => {
   if (DEV) console.log(...args);
 };
 
-const PRESENCE_HEARTBEAT_MS = 20000;
 const TYPING_REPEAT_MS = 2500;
 const SEARCH_REFRESH_MS = 30000;
 const ROOM_PREFIX = '/topic/conversations/';
@@ -84,7 +83,6 @@ export class SocketService {
     this._isSearching = false;
     this._searchRefresh = null;
 
-    this._presenceHeartbeat = null;
     this._typingState = new Map();         // conversationId -> { active, lastSent }
     this._authExpired = false;
     this._firstConnect = true;
@@ -159,18 +157,8 @@ export class SocketService {
         }
         this._replayDesiredSubscriptions();
 
-        // Advertise global presence, then presence in every room we hold open
-        this.sendOnline(null, true);
-        for (const conversationId of this._roomIds()) {
-          this.sendOnline(conversationId, true);
-        }
-
-        if (this._presenceHeartbeat) clearInterval(this._presenceHeartbeat);
-        this._presenceHeartbeat = setInterval(() => {
-          if (this.isConnected) {
-            this.sendOnline(null, true);
-          }
-        }, PRESENCE_HEARTBEAT_MS);
+        // Presence needs nothing from the client: the server marks us online as soon as
+        // this socket subscribes, and offline only when the socket closes.
 
         // Resume (or start) a search that is still owned by the UI
         if (this._pendingMatchmaking || this._isSearching) {
@@ -213,15 +201,10 @@ export class SocketService {
   }
 
   disconnect() {
-    if (this._presenceHeartbeat) {
-      clearInterval(this._presenceHeartbeat);
-      this._presenceHeartbeat = null;
-    }
-
     // Rooms are left by the server's own disconnect cleanup once the socket drops,
-    // so we only drop the waiting matchmaking ticket and our presence here.
+    // so we only drop the waiting matchmaking ticket here (closing the socket is what
+    // takes us offline).
     this.cancelMatchmaking({ notifyServer: true });
-    this.sendOnline(null, false);
 
     this.desiredSubscriptions.clear();
     this.liveSubscriptions.clear();
@@ -296,10 +279,6 @@ export class SocketService {
 
   _markDisconnected() {
     this.isConnected = false;
-    if (this._presenceHeartbeat) {
-      clearInterval(this._presenceHeartbeat);
-      this._presenceHeartbeat = null;
-    }
     // Keep the desired registry, throw away the dead handles.
     this.liveSubscriptions.clear();
     this._typingState.clear();
@@ -411,8 +390,14 @@ export class SocketService {
           this.callbacks.onFriendRequestAccepted?.(event.payload);
         } else if (event.type === 'FRIEND_REQUEST_CANCELLED') {
           this.callbacks.onFriendRequestCancelled?.(event.payload);
+        } else if (event.type === 'FRIEND_WAVE') {
+          this.callbacks.onFriendWave?.(event.payload);
         } else if (event.type === 'MESSAGE') {
           this.callbacks.onDirectMessageReceived?.(event.payload);
+        } else if (event.type === 'ONLINE_STATUS') {
+          // A friend came online / went offline (pushed to every friend, chat open or not)
+          const p = event.payload || {};
+          if (p.senderId) this.callbacks.onFriendPresence?.(p.senderId, Boolean(p.online));
         }
       } catch (e) {
         console.warn('[SocketService] Failed to parse notification frame:', e);
@@ -469,16 +454,15 @@ export class SocketService {
         console.warn('[SocketService] Failed to parse room event body:', e);
       }
     });
-
-    // Notify presence
-    this.sendOnline(conversationId, true);
+    // No presence message: the server answers this SUBSCRIBE with the current
+    // online status of both participants.
   }
 
   /** Unsubscribes exactly one room, leaving every other open room alone. */
   unsubscribeRoom(conversationId) {
     if (!conversationId) return;
 
-    this.sendOnline(conversationId, false);
+    // Leaving a room does not make us offline, so nothing is announced.
     this._removeSubscription(`${ROOM_PREFIX}${conversationId}`);
     this._typingState.delete(conversationId);
     if (this.activeConversationId === conversationId) {
@@ -789,16 +773,6 @@ export class SocketService {
   sendRandomChatSeen(conversationId, messageId) {
     if (!conversationId || !messageId) return false;
     return this._publish('/app/chat.random.seen', { conversationId, messageId });
-  }
-
-  /**
-   * Send online status in room / globally: /app/chat.online
-   */
-  sendOnline(conversationId = null, isOnline = true) {
-    return this._publish('/app/chat.online', {
-      conversationId: conversationId || null,
-      online: Boolean(isOnline)
-    });
   }
 
   /**
