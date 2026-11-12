@@ -25,6 +25,8 @@ import {
 import { DiscoverConfirmDialog } from '../components/discover/DiscoverConfirmDialog';
 import { FriendRequestDialog } from '../components/FriendRequestDialog';
 import { MediaComposer } from '../components/MediaComposer';
+import { useBackHandler } from '../mobile/useBackHandler';
+import { useEdgeSwipeBack } from '../mobile/useEdgeSwipeBack';
 import { ChatMediaMessage } from '../components/ChatMediaMessage';
 
 const MAX_CACHED_MESSAGES = 200;
@@ -68,6 +70,10 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   const [showBlocked, setShowBlocked] = useState(false);
   const [unblockingId, setUnblockingId] = useState(null);
   const menuRef = useRef(null);
+  const chatAreaRef = useRef(null);
+  // Phone: the DM screen is a pushed screen — Back button and edge-swipe pop it.
+  useBackHandler(isMobile && mobileShowChat, () => setMobileShowChat(false));
+  useEdgeSwipeBack(chatAreaRef, isMobile && mobileShowChat, () => setMobileShowChat(false));
   const messagesEndRef = useRef(null);
   const typingTimerRef = useRef(null);
 
@@ -665,7 +671,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   }
 
   return (
-    <div style={{
+    <div className="friends-view" style={{
       display: 'flex',
       flex: 1,
       height: '100%',
@@ -738,7 +744,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             </button>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
+          <div className="friends-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
             {friends.map(friend => {
               const friendId = friend.id || friend.friendUserId;
               const isSelected = selectedFriend && (
@@ -929,7 +935,10 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       </div>
 
       {/* Main Area: Direct Chat Screen */}
-      <div className="glass-panel friends-chat-area" style={{
+      <div
+        ref={chatAreaRef}
+        className={`glass-panel friends-chat-area chat-screen${isMobile && mobileShowChat ? ' chat-active' : ''}`}
+        style={{
         flex: 1,
         display: (isMobile && !mobileShowChat) ? 'none' : 'flex',
         flexDirection: 'column',
@@ -950,7 +959,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
         {selectedFriend ? (
           <>
             {/* Top Bar Header */}
-            <div style={{
+            <div className="chat-topbar" style={{
               padding: '16px 20px',
               borderBottom: '1px solid var(--border-color)',
               display: 'flex',
@@ -964,7 +973,9 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <button
+                  className="chat-back-btn"
                   onClick={() => setMobileShowChat(false)}
+                  aria-label="Back to Friends List"
                   style={{
                     background: 'none',
                     border: 'none',
@@ -1090,7 +1101,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             </div>
 
             {/* Direct Messages Log */}
-            <div style={{
+            <div className="chat-feed" style={{
               flex: 1,
               padding: '20px',
               overflowY: 'auto',
@@ -1194,7 +1205,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             </div>
 
             {/* Quick Actions Sub-bar */}
-            <div style={{
+            <div className="chat-subbar" style={{
               padding: '8px 20px',
               borderTop: '1px solid var(--border-color)',
               display: 'flex',
@@ -1288,7 +1299,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             )}
 
             {/* DM Text Input Form */}
-            <form onSubmit={handleSendDm} style={{
+            <form className="chat-composer" onSubmit={handleSendDm} style={{
               padding: '16px 20px',
               display: 'flex',
               alignItems: 'center',

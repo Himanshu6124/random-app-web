@@ -28,7 +28,7 @@ export function LiveRandomMessageAlert() {
   return (
     <div
       id="live-random-message-alert"
-      className="animate-slide-down"
+      className="animate-slide-down m-toast"
       style={{
         position: 'fixed',
         top: '24px',

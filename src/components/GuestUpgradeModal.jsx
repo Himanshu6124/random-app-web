@@ -88,7 +88,7 @@ export function GuestUpgradeModal() {
   };
 
   return (
-    <div
+    <div className="m-sheet-backdrop"
       id="guest-upgrade-modal-backdrop"
       onClick={(e) => {
         if (e.target.id === 'guest-upgrade-modal-backdrop') handleClose();
@@ -107,7 +107,7 @@ export function GuestUpgradeModal() {
       }}
     >
       <div
-        className="glass-panel animate-scale-up"
+        className="glass-panel animate-scale-up m-sheet"
         style={{
           width: '100%',
           maxWidth: '460px',

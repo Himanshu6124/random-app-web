@@ -5,7 +5,7 @@ export function LogoutConfirmationDialog({ isOpen, onClose, onConfirm }) {
   if (!isOpen) return null;
 
   return (
-    <div style={{
+    <div className="m-sheet-backdrop" style={{
       position: 'fixed',
       inset: 0,
       backgroundColor: 'rgba(0, 0, 0, 0.75)',
@@ -16,7 +16,7 @@ export function LogoutConfirmationDialog({ isOpen, onClose, onConfirm }) {
       zIndex: 1000,
       padding: '16px'
     }}>
-      <div className="glass-panel animate-scale-up" style={{
+      <div className="glass-panel animate-scale-up m-sheet" style={{
         width: '100%',
         maxWidth: '400px',
         backgroundColor: '#1C1C1E',

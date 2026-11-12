@@ -29,7 +29,7 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
   };
 
   return (
-    <div
+    <div className="m-sheet-backdrop"
       id="guest-entry-modal-backdrop"
       onClick={(e) => {
         if (e.target.id === 'guest-entry-modal-backdrop') onClose();
@@ -47,7 +47,7 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
       }}
     >
       <div
-        className="glass-panel animate-scale-up"
+        className="glass-panel animate-scale-up m-sheet"
         style={{
           width: '100%',
           maxWidth: '420px',

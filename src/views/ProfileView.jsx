@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth, INTEREST_TAGS } from '../context/AuthContext';
-import { User, Sparkles, Check, Save, Key, Lock, AlertCircle } from 'lucide-react';
+import { User, Sparkles, Check, Save, Key, Lock, AlertCircle, Download } from 'lucide-react';
 
 export function ProfileView() {
   const { user, isGuest, updateUserProfile, jwtToken, logout, profilePictures, openUpgradeModal } = useAuth();
@@ -470,6 +470,16 @@ export function ProfileView() {
               ● Verified
             </span>
           </div>
+
+          {/* Phone only (see mobile.css): reopen the Add to Home Screen sheet */}
+          <button
+            type="button"
+            className="btn-secondary profile-install-btn"
+            onClick={() => window.dispatchEvent(new Event('rm:show-install'))}
+          >
+            <Download size={18} />
+            <span>Install App on Home Screen</span>
+          </button>
 
           {/* Submit & Logout Buttons */}
           <div className="profile-action-buttons" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--border-color)' }}>

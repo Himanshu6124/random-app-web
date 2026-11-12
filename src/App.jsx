@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider, useSocket } from './context/SocketContext';
 import { Header } from './components/Header';
+import { BottomTabBar } from './components/BottomTabBar';
+import { InstallPrompt } from './components/InstallPrompt';
 import { MatchView } from './views/MatchView';
 import { FriendsView } from './views/FriendsView';
 import { DiscoverView } from './views/DiscoverView';
@@ -57,7 +59,7 @@ function AppContent() {
     <div className="app-container">
       <Header activeTab={activeTab} setActiveTab={setActiveTab} />
       
-      <main className="main-content">
+      <main className="main-content" key={activeTab}>
         {activeTab === 'match' && <MatchView />}
         {activeTab === 'discover' && !isGuest && <DiscoverView onOpenChat={openFriendChat} />}
         {activeTab === 'friends' && (
@@ -69,6 +71,8 @@ function AppContent() {
         )}
         {activeTab === 'profile' && <ProfileView />}
       </main>
+
+      <BottomTabBar activeTab={activeTab} setActiveTab={setActiveTab} />
 
       <LogoutConfirmationDialog
         isOpen={showLogoutModal}
@@ -88,6 +92,7 @@ export default function App() {
     <AuthProvider>
       <SocketProvider>
         <AppContent />
+        <InstallPrompt />
       </SocketProvider>
     </AuthProvider>
   );

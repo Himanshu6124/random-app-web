@@ -1,0 +1,15 @@
+{
+  "name": "RandoMeet",
+  "short_name": "RandoMeet",
+  "description": "Meet strangers worldwide in anonymous real-time chat.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#090a15",
+  "theme_color": "#090a15",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

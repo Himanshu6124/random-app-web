@@ -234,7 +234,7 @@ export function ChatBox() {
   if (!currentPeer) return null;
 
   return (
-    <div className="glass-panel" style={{
+    <div className="glass-panel chat-screen" style={{
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
@@ -255,7 +255,7 @@ export function ChatBox() {
       ))}
 
       {/* Top Header Bar */}
-      <div style={{
+      <div className="chat-topbar" style={{
         padding: '16px 20px',
         borderBottom: '1px solid var(--border-color)',
         display: 'flex',
@@ -455,7 +455,7 @@ export function ChatBox() {
       </div>
 
       {/* Messages Scroll Feed */}
-      <div style={{
+      <div className="chat-feed" style={{
         flex: 1,
         padding: '20px',
         overflowY: 'auto',
@@ -595,7 +595,7 @@ export function ChatBox() {
       </div>
 
       {/* Bottom Bar: Icebreaker & Quick Reactions */}
-      <div style={{
+      <div className="chat-subbar" style={{
         padding: '10px 20px',
         borderTop: '1px solid var(--border-color)',
         display: 'flex',
@@ -727,7 +727,7 @@ export function ChatBox() {
       )}
 
       {/* Text Message Input */}
-      <form onSubmit={handleSend} style={{
+      <form className="chat-composer" onSubmit={handleSend} style={{
         padding: '16px 20px',
         display: 'flex',
         alignItems: 'center',

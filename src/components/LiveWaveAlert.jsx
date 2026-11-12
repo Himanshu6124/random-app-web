@@ -20,7 +20,7 @@ export function LiveWaveAlert({ onOpenChat }) {
 
   return (
     <div
-      className="animate-slide-down"
+      className="animate-slide-down m-toast"
       role="status"
       style={{
         position: 'fixed',

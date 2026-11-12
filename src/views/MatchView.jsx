@@ -44,7 +44,7 @@ export function MatchView() {
       position: 'relative'
     }}>
       {/* MatchRadar — always rendered (idle + searching states) */}
-      <div style={{
+      <div className="match-radar-layer" style={{
         position: 'absolute',
         inset: 0,
         display: 'flex',
@@ -62,7 +62,7 @@ export function MatchView() {
 
       {/* ChatBox — slides in over the top like Android navigation */}
       {chatMounted && (
-        <div style={{
+        <div className="match-chat-layer chat-active" style={{
           position: 'absolute',
           inset: 0,
           display: 'flex',

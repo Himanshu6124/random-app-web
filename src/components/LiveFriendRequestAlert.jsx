@@ -27,7 +27,7 @@ export function LiveFriendRequestAlert() {
   return (
     <div
       id="live-friend-request-alert"
-      className="animate-slide-down"
+      className="animate-slide-down m-toast"
       style={{
         position: 'fixed',
         top: '24px',

@@ -9,7 +9,7 @@ export function FriendRequestDialog({
   onReject
 }) {
   return (
-    <div
+    <div className="m-sheet-backdrop"
       onClick={(e) => {
         if (e.target === e.currentTarget) onDismiss();
       }}
@@ -25,7 +25,7 @@ export function FriendRequestDialog({
         padding: '16px'
       }}
     >
-      <div className="glass-panel animate-scale-up" style={{
+      <div className="glass-panel animate-scale-up m-sheet" style={{
         width: '100%',
         maxWidth: '440px',
         backgroundColor: '#1C1C1E',
