@@ -432,11 +432,12 @@
   }
 }
 
-/* Desktop chat: keep the conversation close together, not at the window's edges */
+/* Desktop chat: the feed uses the panel's width like the header and composer do; only on
+   very wide panels is it capped, so bubbles never sit at the far window edges. */
 @media (min-width: 769px) {
   .chat-feed {
-    padding-left: max(20px, calc((100% - 720px) / 2)) !important;
-    padding-right: max(20px, calc((100% - 720px) / 2)) !important;
+    padding-left: max(24px, calc((100% - 1200px) / 2)) !important;
+    padding-right: max(24px, calc((100% - 1200px) / 2)) !important;
   }
 }
 

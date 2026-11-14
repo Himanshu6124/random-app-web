@@ -535,6 +535,47 @@ export function AuthProvider({ children }) {
   }, [applyFirebaseSession]);
 
   /**
+   * Replays the friend action a guest tapped before signing in, with the NEW jwt. It runs
+   * BEFORE the new session is applied: the token swap makes ChatBox re-query the friendship
+   * status, and that query must already see the request, or the button stays on "Add friend".
+   * An "already exists" answer counts as done.
+   */
+  const runPendingFriendAction = useCallback(async (action, jwt, selfId) => {
+    const targetUserId = action?.targetUserId;
+    if (!targetUserId || targetUserId === selfId) return;
+    const alreadyExists = (err) => err?.status === 409 ||
+      (err?.message && err.message.toLowerCase().includes('already exists'));
+    const send = async () => {
+      try {
+        await authService.sendFriendRequest(targetUserId, jwt);
+      } catch (err) {
+        if (!alreadyExists(err)) throw err;
+      }
+    };
+    try {
+      if (action.action === 'SEND_FRIEND') {
+        await send();
+      } else if (action.action === 'ACCEPT_FRIEND') {
+        try {
+          await authService.acceptFriendRequest(targetUserId, jwt);
+        } catch (err) {
+          // After switching to an existing account the request was addressed to the old
+          // guest id, so there is nothing to accept: ask the other way round instead.
+          await send();
+        }
+        setFriendRequests(prev => prev.filter(r => (r.id !== targetUserId && r.friendUserId !== targetUserId)));
+        setLiveFriendRequest(prev => {
+          if (!prev) return null;
+          const prevId = prev.id || prev.friendUserId;
+          return prevId === targetUserId ? null : prev;
+        });
+      }
+    } catch (err) {
+      console.warn('[AuthContext] Pending friend action after sign-in failed:', err);
+    }
+  }, []);
+
+  /**
    * A guest links a Google account mid-chat. The backend updates the guest's row IN PLACE
    * (same stable id), so the active random chat, its history and the socket room all
    * survive the JWT swap.
@@ -547,6 +588,7 @@ export function AuthProvider({ children }) {
 
       const actionToExecute = pendingUpgradeActionRef.current || pendingUpgradeAction;
       closeUpgradeModal();
+      await runPendingFriendAction(actionToExecute, res.jwt, res.userId);
 
       // Same user id, new JWT: persist the swap. The socket effect keeps the live
       // WebSocket connection intact, updating the token in place without disconnecting.
@@ -563,28 +605,6 @@ export function AuthProvider({ children }) {
       setUser(nextUser);
       setJwtToken(res.jwt);
 
-      if (actionToExecute) {
-        if (actionToExecute.action === 'ACCEPT_FRIEND' && actionToExecute.targetUserId) {
-          try {
-            await authService.acceptFriendRequest(actionToExecute.targetUserId, res.jwt);
-            setFriendRequests(prev => prev.filter(r => (r.id !== actionToExecute.targetUserId && r.friendUserId !== actionToExecute.targetUserId)));
-            setLiveFriendRequest(prev => {
-              if (!prev) return null;
-              const prevId = prev.id || prev.friendUserId;
-              return prevId === actionToExecute.targetUserId ? null : prev;
-            });
-          } catch (err) {
-            console.warn('[AuthContext] Error auto-accepting friend after link:', err);
-          }
-        } else if (actionToExecute.action === 'SEND_FRIEND' && actionToExecute.targetUserId) {
-          try {
-            await authService.sendFriendRequest(actionToExecute.targetUserId, res.jwt);
-          } catch (err) {
-            console.warn('[AuthContext] Error auto-sending friend request after link:', err);
-          }
-        }
-      }
-
       await loadFriendsFromApi(res.jwt);
       await loadFriendRequests(res.jwt);
       return res;
@@ -592,17 +612,27 @@ export function AuthProvider({ children }) {
       setAuthError(err.message || 'Google account linking failed.');
       throw err;
     }
-  }, [jwtToken, user, pendingUpgradeAction, closeUpgradeModal, loadFriendsFromApi, loadFriendRequests]);
+  }, [jwtToken, user, pendingUpgradeAction, closeUpgradeModal, runPendingFriendAction, loadFriendsFromApi, loadFriendRequests]);
 
   /**
-   * A guest picked a Google account that already has a profile. Sign straight into that
-   * profile (same as the login page) instead of linking. It is a different user id, so the
-   * guest's chat state is reset like on logout; the pending action (e.g. add friend) is
-   * replayed with the new account.
+   * A guest picked a Google account that already has a profile. Sign into that profile via
+   * /auth/firebase/switch: the server hands the guest's live random chat over to it, so the
+   * chat keeps running under the new id (no sessionEpoch bump, chat state is NOT reset).
+   * The pending action (e.g. add friend) is replayed with the new account.
+   * Returns the server response; NEEDS_USERNAME means it is a brand-new Google user and
+   * nothing was changed (the caller continues with the link flow).
    */
-  const signInToExistingGoogleAccount = useCallback(async (res) => {
+  const signInToExistingGoogleAccount = useCallback(async (idToken) => {
+    const token = jwtToken || authService.getToken();
+    const res = await authService.firebaseSwitchAccount(idToken, token);
+    if (res?.status === 'NEEDS_USERNAME' || !res?.jwt) {
+      return res;
+    }
+
     const actionToExecute = pendingUpgradeActionRef.current || pendingUpgradeAction;
     closeUpgradeModal();
+    // Guest-only caches must not leak into the real account; the random chat lives in
+    // SocketContext state and is kept.
     try {
       localStorage.removeItem('randomeet_dms');
       localStorage.removeItem('randomeet_friends');
@@ -610,24 +640,11 @@ export function AuthProvider({ children }) {
     setFriends([]);
     setFriendRequests([]);
     setLiveFriendRequest(null);
-    setSessionEpoch(prev => prev + 1);
+    await runPendingFriendAction(actionToExecute, res.jwt, res.userId);
+    // applyFirebaseSession also reloads friends and requests with the new token.
     applyFirebaseSession(res);
-
-    if (actionToExecute?.targetUserId && actionToExecute.targetUserId !== res.userId) {
-      try {
-        if (actionToExecute.action === 'SEND_FRIEND') {
-          await authService.sendFriendRequest(actionToExecute.targetUserId, res.jwt);
-        } else if (actionToExecute.action === 'ACCEPT_FRIEND') {
-          await authService.acceptFriendRequest(actionToExecute.targetUserId, res.jwt);
-        }
-        await loadFriendsFromApi(res.jwt);
-        await loadFriendRequests(res.jwt);
-      } catch (err) {
-        console.warn('[AuthContext] Pending action after existing-account sign-in failed:', err);
-      }
-    }
     return res;
-  }, [pendingUpgradeAction, closeUpgradeModal, applyFirebaseSession, loadFriendsFromApi, loadFriendRequests]);
+  }, [jwtToken, pendingUpgradeAction, closeUpgradeModal, applyFirebaseSession, runPendingFriendAction]);
 
   const performLogout = useCallback(() => {
     setShowLogoutModal(false);

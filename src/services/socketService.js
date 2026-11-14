@@ -115,7 +115,12 @@ export class SocketService {
 
     this._bindNetworkListeners();
 
-    this.client = new Client({
+    // Events of a client that was already replaced (identity switch, logout) arrive late,
+    // after the new client is up: they must not touch the shared state of the new one.
+    let client = null;
+    const isStale = () => this.client !== client;
+
+    client = this.client = new Client({
       brokerURL: this._buildBrokerUrl(this.authToken),
       // Exponential backoff with jitter: a fixed timer makes every client in the
       // fleet retry in lockstep after an outage.
@@ -126,6 +131,7 @@ export class SocketService {
       heartbeatOutgoing: 10000,
       debug: () => {},
       beforeConnect: async () => {
+        if (isStale()) return;
         // Always connect with the token that is current *now*, not the one captured
         // when the client was built (it may have been refreshed by a guest upgrade).
         const token = authService.getToken() || this.authToken;
@@ -144,6 +150,7 @@ export class SocketService {
         }
       },
       onConnect: (frame) => {
+        if (isStale()) return;
         this.isConnected = true;
         this._firstConnect = false;
         this._authExpired = false;
@@ -172,12 +179,14 @@ export class SocketService {
         }
       },
       onStompError: (frame) => {
+        if (isStale()) return;
         console.error('❌ [SocketService] STOMP error:', frame?.headers?.message || 'protocol error');
         if (this.callbacks.onError) {
           this.callbacks.onError(frame?.headers?.message || 'STOMP Protocol Error');
         }
       },
       onWebSocketClose: (evt) => {
+        if (isStale()) return;
         this._markDisconnected();
         log('🔌 [SocketService] WebSocket connection closed');
         // 1008 / 4401 means the handshake was rejected: retrying forever is pointless.
@@ -189,6 +198,7 @@ export class SocketService {
         }
       },
       onDisconnect: () => {
+        if (isStale()) return;
         this._markDisconnected();
         log('🔌 [SocketService] STOMP Client disconnected');
         if (this.callbacks.onDisconnect) {

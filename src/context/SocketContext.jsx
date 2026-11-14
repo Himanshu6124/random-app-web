@@ -99,12 +99,17 @@ export function SocketProvider({ children }) {
   const logoutRef = useRef(performLogout);
   const lastProfileSentRef = useRef({ conversationId: null, signature: null });
   const handleIncomingDirectMessageRef = useRef(handleIncomingDirectMessage);
+  const peerLeftRef = useRef(false);
+  // Identity the socket was last opened for, to tell a guest -> existing-account switch
+  // (same sessionEpoch, new user id: the random chat must survive) from a logout/login.
+  const socketIdentityRef = useRef({ userId: null, epoch: sessionEpoch });
 
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
   useEffect(() => { userRef.current = user; }, [user]);
   useEffect(() => { currentPeerRef.current = currentPeer; }, [currentPeer]);
   useEffect(() => { isPeerOnlineRef.current = isPeerOnline; }, [isPeerOnline]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { peerLeftRef.current = peerLeft; }, [peerLeft]);
   useEffect(() => { logoutRef.current = performLogout; }, [performLogout]);
   useEffect(() => { handleIncomingDirectMessageRef.current = handleIncomingDirectMessage; }, [handleIncomingDirectMessage]);
 
@@ -227,6 +232,31 @@ export function SocketProvider({ children }) {
     // The STOMP principal is the stable user id; activeUserId must match it exactly.
     const userId = user?.id;
     const activeToken = jwtToken || (typeof window !== 'undefined' ? localStorage.getItem('chat_jwt') : null);
+    const previousIdentity = socketIdentityRef.current;
+    socketIdentityRef.current = { userId: userId || null, epoch: sessionEpoch };
+    // A guest signed into an existing account mid-chat: the server already moved the random
+    // room to the new id, so keep the chat and carry it over to the new socket.
+    const switchedIdentity = Boolean(
+      userId && previousIdentity.userId && previousIdentity.userId !== userId &&
+      previousIdentity.epoch === sessionEpoch
+    );
+    let carriedRoomId = null;
+    if (switchedIdentity) {
+      const oldId = previousIdentity.userId;
+      setMessages(prev => prev.map(m => (m.senderId === oldId ? { ...m, senderId: userId } : m)));
+      const peer = currentPeerRef.current;
+      carriedRoomId = !peerLeftRef.current ? (peer?.conversationId || peer?.id || null) : null;
+      // The server already announced the new profile to the peer: do not echo it again.
+      const u = userRef.current;
+      previousUsernameRef.current = u?.username || null;
+      if (carriedRoomId && u?.username) {
+        lastProfileSentRef.current = {
+          conversationId: carriedRoomId,
+          signature: `${u.username}|${u.name || ''}|${u.photoUrl || ''}`
+        };
+      }
+    }
+
     if (!userId || !activeToken) {
       setConnectionStatus('disconnected');
       socketService.disconnect();
@@ -248,6 +278,11 @@ export function SocketProvider({ children }) {
       {
         onConnect: () => {
           setConnectionStatus('connected');
+          // connect() dropped the old identity's subscriptions; rejoin the handed-over room.
+          if (carriedRoomId && !peerLeftRef.current) {
+            socketService.subscribeRoom(carriedRoomId);
+            carriedRoomId = null;
+          }
           // Presence changes while we were disconnected were missed: resync from the server.
           if (!userRef.current?.isGuest) loadFriendsRef.current?.();
 
@@ -342,11 +377,21 @@ export function SocketProvider({ children }) {
           if (!activeConvId || payload?.conversationId !== activeConvId) return;
           // Identity comparison is on userId; the display fields just get refreshed.
           if (!payload?.userId || payload.userId === myId) return;
+          // Our own guest -> existing-account switch, echoed to our still-open guest socket:
+          // it describes US, never the peer.
+          if (payload.previousUserId && payload.previousUserId === myId) return;
+          // Server-announced identity change: the stranger signed into their existing account.
+          const switchedFrom = payload.previousUserId && payload.previousUserId !== myId
+            ? payload.previousUserId : null;
 
           setCurrentPeer(prev => {
             if (!prev) return prev;
+            const idFields = switchedFrom && (prev.id === switchedFrom || prev.friendUserId === switchedFrom)
+              ? { id: payload.userId, friendUserId: payload.userId, peerId: payload.userId, isGuest: false }
+              : {};
             return {
               ...prev,
+              ...idFields,
               username: payload.username || prev.username,
               name: payload.name || payload.username || prev.name,
               friendUserName: payload.name || payload.username || prev.friendUserName,
@@ -357,7 +402,9 @@ export function SocketProvider({ children }) {
 
           setMessages(prev => [
             ...prev,
-            systemMessage(`${payload.name || payload.username} updated their profile.`)
+            systemMessage(switchedFrom
+              ? `${payload.name || payload.username} signed in to their account.`
+              : `${payload.name || payload.username} updated their profile.`)
           ]);
         },
         onPeerDisconnected: (_disconnectedUser, conversationId) => {

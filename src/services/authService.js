@@ -151,6 +151,23 @@ export const authService = {
   },
 
   /**
+   * POST /auth/firebase/switch
+   * A guest mid-chat picked a Google account that already has a profile. Signs into that
+   * profile and hands the guest's live random chat over to it on the server, so the chat
+   * survives the identity change. For a brand-new Google user it answers NEEDS_USERNAME
+   * (no side effects) and the caller continues with firebaseLinkAccount.
+   * Requires the guest's current JWT.
+   */
+  async firebaseSwitchAccount(idToken, token) {
+    const response = await fetch(`${BASE_URL}/auth/firebase/switch`, {
+      method: 'POST',
+      headers: getAuthHeaders(token),
+      body: JSON.stringify({ idToken })
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
    * POST /auth/login
    * Body: { username, password }
    * Returns: { jwt, userId }

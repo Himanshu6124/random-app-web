@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { signInWithGooglePopup } from '../services/firebaseClient';
-import { authService } from '../services/authService';
 import { GoogleUsernameClaimForm } from './GoogleUsernameClaimForm';
 import { X } from 'lucide-react';
 
@@ -46,9 +45,9 @@ export function GuestUpgradeModal() {
 
       // Existing profile for this Google account -> sign straight into it, exactly like
       // the login page does, instead of offering to link (which the backend would reject).
-      const existing = await authService.firebaseSignIn(idToken);
+      // The server also hands the live random chat over to that profile, so it survives.
+      const existing = await signInToExistingGoogleAccount(idToken);
       if (existing?.status !== 'NEEDS_USERNAME' && existing?.jwt) {
-        await signInToExistingGoogleAccount(existing);
         handleClose();
         return;
       }
@@ -84,9 +83,8 @@ export function GuestUpgradeModal() {
       if (message.toLowerCase().includes('already has a profile') && pendingIdToken) {
         // Race: the profile was created after our check. Sign into it instead.
         try {
-          const existing = await authService.firebaseSignIn(pendingIdToken);
+          const existing = await signInToExistingGoogleAccount(pendingIdToken);
           if (existing?.jwt) {
-            await signInToExistingGoogleAccount(existing);
             handleClose();
             return;
           }
