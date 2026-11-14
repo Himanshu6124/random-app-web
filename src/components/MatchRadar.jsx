@@ -1,26 +1,50 @@
 import React, { useEffect, useState } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
-import { XCircle, Zap } from 'lucide-react';
-
-const DOT_COUNT = 8;
+import { X, UserRound } from 'lucide-react';
 
 /**
- * MatchRadar — Home screen + searching animation
- *
- * States:
- *  idle      → Show "Find a Match" CTA with user avatar
- *  searching → Full animated radar with orbiting dots (matches Android's HomeScreenV2 canvas animation)
+ * MatchRadar — Match tab home + search.
+ * States: idle → searching → matched (the chat then slides in).
  */
+const SEARCH_PHRASES = [
+  'Finding a new soul…',
+  'Someone out there is awake too…',
+  'Looking for your kind of person…',
+  'Every story starts with hello…',
+  'Matching you with a kindred soul…',
+  'Almost there…'
+];
+
+// Small heart outlines that drift up around your avatar while searching
+const FLOAT_HEARTS = [
+  { x: '6%', size: 26, delay: '0s', dur: '5.2s' },
+  { x: '80%', size: 20, delay: '1.1s', dur: '4.6s' },
+  { x: '24%', size: 16, delay: '2.3s', dur: '5.8s' },
+  { x: '66%', size: 28, delay: '3.0s', dur: '5s' },
+  { x: '46%', size: 18, delay: '4.1s', dur: '4.4s' }
+];
+
+// Heart outlines that burst up and outward once (upper half only)
+const BURST_ANGLES = [-80, -55, -30, -10, 10, 30, 55, 80];
+function HeartBurst({ className = '' }) {
+  return (
+    <span className={`heart-burst ${className}`} aria-hidden="true">
+      {BURST_ANGLES.map((a, i) => (
+        <svg key={i} viewBox="0 0 24 24" style={{ '--a': `${a}deg` }}>
+          <path d="M12 20.5C9 18.2 4 14.6 4 9.8 4 7.2 6 5.2 8.4 5.2c1.5 0 2.8.8 3.6 2 .8-1.2 2.1-2 3.6-2C18 5.2 20 7.2 20 9.8c0 4.8-5 8.4-8 10.7Z" />
+        </svg>
+      ))}
+    </span>
+  );
+}
+
 export function MatchRadar() {
+  const { matchState, startSearching, cancelSearch } = useSocket();
   const { user } = useAuth();
-  const {
-    matchState,
-    startSearching,
-    cancelSearch
-  } = useSocket();
 
   const isSearching = matchState === 'searching';
+  const isLocked = matchState === 'matched';
 
   // Elapsed time counter shown while searching
   const [elapsed, setElapsed] = useState(0);
@@ -30,190 +54,101 @@ export function MatchRadar() {
     return () => clearInterval(t);
   }, [isSearching]);
 
-  const formatElapsed = (s) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return m > 0 ? `${m}:${sec.toString().padStart(2, '0')}` : `0:${sec.toString().padStart(2, '0')}`;
-  };
+  // Rotating search lines: each one rises in word by word
+  const [phraseIdx, setPhraseIdx] = useState(0);
+  useEffect(() => {
+    if (!isSearching) { setPhraseIdx(0); return; }
+    const t = setInterval(() => setPhraseIdx(i => (i + 1) % SEARCH_PHRASES.length), 4000);
+    return () => clearInterval(t);
+  }, [isSearching]);
 
-  return (
-    <div className="radar-container">
+  const formatElapsed = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
-      {isSearching ? (
-        /* ── SEARCHING STATE ─ Full animated radar like Android HomeScreenV2 ── */
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '32px', width: '100%' }}>
+  const statusState = isLocked ? 'is-locked' : isSearching ? 'is-searching' : 'is-idle';
 
-          {/* Radar Animation */}
-          <div className="radar-animation-box" style={{ position: 'relative', width: '300px', height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+  const title = isLocked
+    ? 'Someone said hello.'
+    : isSearching
+      ? SEARCH_PHRASES[phraseIdx]
+      : "Who's up tonight?";
 
-            {/* Pulsing rings */}
-            {[1, 2, 3].map(i => (
-              <div key={i} style={{
-                position: 'absolute',
-                width: `${60 + i * 60}px`,
-                height: `${60 + i * 60}px`,
-                borderRadius: '50%',
-                border: `${i === 1 ? 2 : 1}px solid ${i === 1 ? 'var(--primary-purple)' : i === 2 ? 'var(--cyan-accent)' : 'rgba(139,92,246,0.3)'}`,
-                animation: `radarPulse ${1.8 + i * 0.6}s infinite cubic-bezier(0.215, 0.61, 0.355, 1) ${i * 0.4}s`,
-                opacity: i === 3 ? 0.4 : 1
-              }} />
-            ))}
-
-            {/* Rotating orbit ring with dots */}
-            {Array.from({ length: DOT_COUNT }).map((_, i) => {
-              const angle = (i / DOT_COUNT) * 360;
-              const radius = 110;
-              const rad = (angle * Math.PI) / 180;
-              const x = Math.cos(rad) * radius;
-              const y = Math.sin(rad) * radius;
-              const size = i % 3 === 0 ? 10 : i % 3 === 1 ? 7 : 5;
-              const colors = ['var(--primary-purple)', 'var(--cyan-accent)', 'var(--pink-accent)', 'var(--green-accent)'];
-              const color = colors[i % colors.length];
-              return (
-                <div key={i} style={{
-                  position: 'absolute',
-                  width: `${size}px`,
-                  height: `${size}px`,
-                  borderRadius: '50%',
-                  background: color,
-                  boxShadow: `0 0 8px ${color}`,
-                  transform: `translate(${x}px, ${y}px)`,
-                  animation: `orbitSpin 4s linear infinite`,
-                  animationDelay: `${-(i / DOT_COUNT) * 4}s`,
-                  transformOrigin: `${-x}px ${-y}px`
-                }} />
-              );
-            })}
-
-            {/* Center avatar */}
-            <div style={{
-              position: 'relative',
-              zIndex: 10,
-              width: '90px',
-              height: '90px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--primary-purple)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '2.5rem',
-              boxShadow: 'var(--shadow-glow)',
-              border: '3px solid rgba(255,255,255,0.25)',
-              overflow: 'hidden',
-              animation: 'glowPulse 2s infinite ease-in-out'
-            }}>
-              {user?.photoUrl
-                ? <img src={user.photoUrl} alt="You" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />
-                : '⚡'
-              }
-            </div>
-          </div>
-
-          {/* Status */}
-          <div style={{ textAlign: 'center' }}>
-            <h2 style={{ fontSize: '1.8rem', fontWeight: 700, marginBottom: '8px', background: 'linear-gradient(135deg, var(--primary-purple), var(--cyan-accent))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-              Finding Your Match...
-            </h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '8px' }}>
-              Looking for someone who is online right now
-            </p>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)', padding: '6px 16px', borderRadius: 'var(--radius-full)', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--green-accent)', boxShadow: 'var(--green-glow)', animation: 'glowPulse 1s infinite', display: 'inline-block' }} />
-              Searching · {formatElapsed(elapsed)}
-            </div>
-          </div>
-
-          {/* Cancel button */}
-          <button
-            onClick={cancelSearch}
-            className="btn-danger"
-            style={{ padding: '14px 36px', fontSize: '1rem', borderRadius: 'var(--radius-full)' }}
-          >
-            <XCircle size={18} />
-            <span>Cancel</span>
-          </button>
-
+  if (isSearching || isLocked) {
+    return (
+      <div className={`radar-container match-home match-search ${statusState}`}>
+        <div className="match-search__stage" aria-hidden="true">
+          {FLOAT_HEARTS.map((h, i) => (
+            <svg
+              key={i}
+              className="match-search__heart"
+              viewBox="0 0 24 24"
+              style={{ left: h.x, width: h.size, height: h.size, animationDelay: h.delay, animationDuration: h.dur }}
+            >
+              <path d="M12 20.5C9 18.2 4 14.6 4 9.8 4 7.2 6 5.2 8.4 5.2c1.5 0 2.8.8 3.6 2 .8-1.2 2.1-2 3.6-2C18 5.2 20 7.2 20 9.8c0 4.8-5 8.4-8 10.7Z" />
+            </svg>
+          ))}
+          {isLocked ? <HeartBurst className="heart-burst--big" /> : <HeartBurst key="start" />}
+          <span className="match-search__avatar">
+            {user?.photoUrl
+              ? <img src={user.photoUrl} alt="" onError={e => { e.target.style.display = 'none'; }} />
+              : <UserRound size={40} />}
+          </span>
         </div>
 
-      ) : (
-        /* ── IDLE STATE ─ Home screen CTA ── */
-        <>
-          {/* User avatar with glow */}
-          <div style={{
-            position: 'relative',
-            width: '130px',
-            height: '130px',
-            marginBottom: '24px'
-          }}>
-            <div style={{
-              position: 'absolute',
-              inset: '-12px',
-              borderRadius: '50%',
-              background: 'conic-gradient(from 0deg, var(--primary-purple), var(--cyan-accent), var(--pink-accent), var(--primary-purple))',
-              opacity: 0.4,
-              filter: 'blur(12px)',
-              animation: 'orbitSpin 6s linear infinite'
-            }} />
-            <div style={{
-              position: 'relative',
-              width: '100%',
-              height: '100%',
-              borderRadius: '50%',
-              backgroundColor: 'var(--primary-purple)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '4rem',
-              boxShadow: 'var(--shadow-glow)',
-              border: '4px solid rgba(255,255,255,0.15)',
-              overflow: 'hidden'
-            }}>
-              {user?.photoUrl
-                ? <img src={user.photoUrl} alt="You" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />
-                : '⚡'
-              }
-            </div>
-          </div>
+        <div className="match-search__words">
+        <h2 className="match-search__phrase" aria-live="polite">
+          <span key={title} className="search-phrase">
+            {title.split(' ').map((word, i) => (
+              <span key={i} className="search-phrase__word" style={{ animationDelay: `${i * 70}ms` }}>
+                {word}{' '}
+              </span>
+            ))}
+          </span>
+        </h2>
 
-          {/* Headline */}
-          <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-            <h2 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '10px', background: 'linear-gradient(135deg, #ffffff 0%, var(--primary-purple) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-              Meet Someone New
-            </h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '1rem', maxWidth: '360px', lineHeight: '1.6' }}>
-              Match anonymously with random people from around the world and start chatting instantly
-            </p>
-          </div>
+        <p className="match-search__timer" role="status">
+          {isLocked ? 'Opening your chat' : `Searching · ${formatElapsed(elapsed)}`}
+        </p>
+        </div>
 
-          {/* FIND A MATCH BUTTON — main CTA */}
+        <div className="match-home__action">
           <button
-            id="find-match-btn"
-            onClick={startSearching}
-            className="btn-primary"
-            style={{
-              padding: '18px 56px',
-              fontSize: '1.15rem',
-              fontWeight: 700,
-              borderRadius: 'var(--radius-full)',
-              marginBottom: '40px',
-              boxShadow: '0 0 40px rgba(139, 92, 246, 0.45)',
-              letterSpacing: '0.3px'
-            }}
+            type="button"
+            onClick={cancelSearch}
+            className="btn-secondary match-home__btn"
+            disabled={isLocked}
           >
-            <Zap size={22} style={{ fill: 'white' }} />
-            <span>Find a Match</span>
+            <X size={18} aria-hidden="true" />
+            <span>Cancel</span>
           </button>
+        </div>
+      </div>
+    );
+  }
 
-        </>
-      )}
+  return (
+    <div className="radar-container match-home">
+      <div className="match-home__copy">
+        <h2 className="match-home__title">{title}</h2>
+        <p className="match-home__lede">
+          Chat one-to-one with a random stranger. Keep the ones you click with.
+        </p>
+      </div>
 
-      {/* CSS for orbit animation */}
-      <style>{`
-        @keyframes orbitSpin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
-      `}</style>
+      <p className="match-status is-idle">
+        <span className="match-status__dot" aria-hidden="true" />
+        Ready when you are
+      </p>
+
+      <div className="match-home__action">
+        <button
+          type="button"
+          id="find-match-btn"
+          onClick={startSearching}
+          className="btn-primary match-home__btn find-match-btn"
+        >
+          <span>Find a Match</span>
+        </button>
+      </div>
     </div>
   );
 }

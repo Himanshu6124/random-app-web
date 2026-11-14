@@ -34,15 +34,15 @@ export function LiveRandomMessageAlert() {
         top: '24px',
         right: '24px',
         zIndex: 2000,
-        backgroundColor: '#1E1B4B',
-        border: '1px solid rgba(6, 182, 212, 0.6)',
-        boxShadow: '0 16px 36px rgba(0, 0, 0, 0.7), 0 0 24px rgba(6, 182, 212, 0.35)',
-        borderRadius: '18px',
+        backgroundColor: '#352131',
+        border: '1px solid rgba(126, 166, 246, 0.6)',
+        boxShadow: '0 16px 36px rgba(0, 0, 0, 0.7), 0 0 24px rgba(126, 166, 246, 0.35)',
+        borderRadius: 'var(--radius-bubble)',
         padding: '12px 20px',
         display: 'flex',
         alignItems: 'center',
         gap: '16px',
-        color: '#ffffff',
+        color: 'var(--text-primary)',
         maxWidth: '92vw',
         width: 'auto'
       }}
@@ -52,9 +52,9 @@ export function LiveRandomMessageAlert() {
         height: '44px',
         borderRadius: '50%',
         overflow: 'hidden',
-        border: '2px solid var(--cyan-accent)',
+        border: '1px solid var(--border-strong)',
         flexShrink: 0,
-        backgroundColor: '#312E81',
+        backgroundColor: 'var(--plum-4)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center'
@@ -62,15 +62,15 @@ export function LiveRandomMessageAlert() {
         {photoUrl ? (
           <img src={photoUrl} alt={peerName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
         ) : (
-          <MessageSquare size={22} color="var(--cyan-accent)" />
+          <MessageSquare size={22} color="var(--text-secondary)" />
         )}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '200px' }}>
-        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {peerName}
         </div>
-        <div style={{ fontSize: '0.8rem', color: '#c7d2fe', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <div style={{ fontSize: 'var(--fs-sm)', color: '#f6a3b2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {messagePreview}
         </div>
       </div>
@@ -87,15 +87,14 @@ export function LiveRandomMessageAlert() {
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            background: 'linear-gradient(135deg, var(--cyan-accent) 0%, #0284c7 100%)',
-            color: '#ffffff',
+            background: 'var(--accent)',
+            color: 'var(--accent-ink)',
             border: 'none',
-            borderRadius: '12px',
+            borderRadius: 'var(--radius-md)',
             padding: '8px 14px',
-            fontSize: '0.85rem',
+            fontSize: 'var(--fs-md)',
             fontWeight: 600,
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(6, 182, 212, 0.3)'
+            cursor: 'pointer'
           }}
         >
           <span>Chat</span>
@@ -107,9 +106,9 @@ export function LiveRandomMessageAlert() {
           type="button"
           onClick={dismissLiveRandomMessage}
           style={{
-            background: 'rgba(255, 255, 255, 0.1)',
+            background: 'var(--plum-4)',
             border: 'none',
-            color: '#94a3b8',
+            color: 'var(--text-secondary)',
             borderRadius: '50%',
             width: '32px',
             height: '32px',

@@ -10,19 +10,19 @@ const MARKER_PAD = 44;
 function MapArt() {
   return (
     <svg className="nearby-map-art" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <rect width="800" height="600" fill="#0c1024" />
-      <rect x="70" y="60" width="150" height="110" rx="14" fill="rgba(52,211,153,0.09)" />
-      <rect x="560" y="390" width="190" height="130" rx="14" fill="rgba(52,211,153,0.09)" />
-      <rect x="430" y="80" width="90" height="70" rx="10" fill="rgba(52,211,153,0.07)" />
-      <path d="M-20 470 C 140 420, 230 520, 380 470 S 640 380, 820 430" stroke="rgba(34,211,238,0.16)" strokeWidth="30" fill="none" />
-      <g stroke="#1b2244" strokeWidth="5" fill="none">
+      <rect width="800" height="600" fill="#1a1019" />
+      <rect x="70" y="60" width="150" height="110" rx="14" fill="rgba(63, 178, 127, 0.09)" />
+      <rect x="560" y="390" width="190" height="130" rx="14" fill="rgba(63, 178, 127, 0.09)" />
+      <rect x="430" y="80" width="90" height="70" rx="10" fill="rgba(63, 178, 127, 0.07)" />
+      <path d="M-20 470 C 140 420, 230 520, 380 470 S 640 380, 820 430" stroke="rgba(126, 166, 246, 0.16)" strokeWidth="30" fill="none" />
+      <g stroke="#352131" strokeWidth="5" fill="none">
         <path d="M0 120 H800" /><path d="M0 250 H800" /><path d="M0 360 H800" /><path d="M0 540 H800" />
         <path d="M120 0 V600" /><path d="M260 0 V600" /><path d="M540 0 V600" /><path d="M680 0 V600" />
       </g>
-      <g stroke="#232c55" strokeWidth="12" fill="none" strokeLinecap="round">
+      <g stroke="#43293d" strokeWidth="12" fill="none" strokeLinecap="round">
         <path d="M-10 600 L 820 -10" /><path d="M400 -10 V610" /><path d="M-10 300 H810" />
       </g>
-      <g stroke="#151b38" strokeWidth="2.5" fill="none">
+      <g stroke="#2a1a27" strokeWidth="2.5" fill="none">
         <path d="M0 60 H800" /><path d="M0 190 H800" /><path d="M0 420 H800" />
         <path d="M60 0 V600" /><path d="M190 0 V600" /><path d="M330 0 V600" /><path d="M470 0 V600" /><path d="M610 0 V600" /><path d="M750 0 V600" />
       </g>

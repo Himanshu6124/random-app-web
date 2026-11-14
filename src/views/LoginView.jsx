@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AlertTriangle, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { GuestEntryModal } from '../components/GuestEntryModal';
 import { GoogleUsernameClaimForm } from '../components/GoogleUsernameClaimForm';
@@ -26,20 +27,21 @@ function GoogleButton({ onClick, disabled, loading, configured }) {
           : 'Google sign-in is not configured yet — use Continue as Guest'}
         style={{
           width: '100%',
+          minHeight: '52px',
           padding: '13px 18px',
-          borderRadius: '12px',
-          background: configured ? '#ffffff' : 'rgba(255, 255, 255, 0.08)',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          color: configured ? '#1f2937' : '#71717a',
-          fontWeight: 700,
-          fontSize: '0.98rem',
+          borderRadius: 'var(--radius-full)',
+          background: configured ? 'var(--google-surface)' : 'transparent',
+          border: configured ? '1px solid var(--google-line)' : '1px solid var(--border-strong)',
+          color: configured ? 'var(--google-text)' : 'var(--text-secondary)',
+          fontFamily: 'var(--font-main)',
+          fontWeight: 600,
+          fontSize: 'var(--fs-base)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           gap: '10px',
           cursor: disabled ? 'not-allowed' : 'pointer',
-          transition: 'all 0.2s',
-          boxShadow: configured ? '0 4px 14px rgba(0, 0, 0, 0.3)' : 'none'
+          transition: 'background-color 0.18s'
         }}
       >
         {loading ? <span className="btn-spinner"></span> : GOOGLE_SVG}
@@ -47,7 +49,7 @@ function GoogleButton({ onClick, disabled, loading, configured }) {
       </button>
       {!configured && (
         <p id="google-not-configured-note" style={{
-          fontSize: '0.78rem', color: '#fbbf24', marginTop: '8px', marginBottom: 0, textAlign: 'center'
+          fontSize: 'var(--fs-sm)', color: 'var(--accent)', marginTop: '8px', marginBottom: 0
         }}>
           Google sign-in &amp; media are not configured yet — Continue as Guest works fully.
         </p>
@@ -61,41 +63,25 @@ function GuestButton({ onClick }) {
     <div>
       <div style={{
         display: 'flex', alignItems: 'center', gap: '12px',
-        margin: '20px 0', color: '#71717a', fontSize: '0.78rem'
+        margin: '20px 0', color: 'var(--text-muted)', fontSize: 'var(--fs-sm)'
       }}>
-        <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.1)' }} />
+        <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
         <span>or</span>
-        <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.1)' }} />
+        <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
       </div>
       <button
         type="button"
         id="continue-as-guest-btn"
         onClick={onClick}
-        style={{
-          width: '100%',
-          padding: '13px 18px',
-          borderRadius: '12px',
-          background: 'rgba(99, 102, 241, 0.15)',
-          border: '1px solid rgba(99, 102, 241, 0.4)',
-          color: '#a5b4fc',
-          fontWeight: 700,
-          fontSize: '0.98rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '10px',
-          cursor: 'pointer',
-          transition: 'all 0.2s',
-          boxShadow: '0 4px 14px rgba(99, 102, 241, 0.15)'
-        }}
+        className="btn-primary"
+        style={{ width: '100%', minHeight: '52px', fontSize: 'var(--fs-base)' }}
       >
-        <span style={{ fontSize: '1.2rem' }}>⚡</span>
         Continue as Guest
       </button>
-      <p style={{ fontSize: '0.78rem', color: '#71717a', marginTop: '8px', marginBottom: 0, textAlign: 'center' }}>
+      <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', marginTop: '8px', marginBottom: 0 }}>
         Enter with just your name &amp; gender • Instant matching
       </p>
-      <p style={{ fontSize: '0.72rem', color: '#52525b', marginTop: '16px', marginBottom: 0, textAlign: 'center' }}>
+      <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', marginTop: '16px', marginBottom: 0 }}>
         You can link a Google account mid-chat later without losing anything.
       </p>
     </div>
@@ -161,22 +147,16 @@ export function LoginView() {
 
   return (
     <div className="login-page-container">
-      <div className="login-bg-glow glow-1"></div>
-      <div className="login-bg-glow glow-2"></div>
-
-      <div className="login-card glass-panel animate-fade-in">
+      <div className="login-card animate-fade-in">
         <div className="login-header">
-          <div className="login-logo animate-glow">
-            <span className="logo-icon">⚡</span>
-          </div>
           <h1 className="login-title">RandoMeet</h1>
           <p className="login-subtitle">Connect instantly with people worldwide</p>
         </div>
 
         {localError && (
           <div id="login-error-alert" className="auth-error-alert">
-            <span>⚠️ {localError}</span>
-            <button type="button" className="auth-error-dismiss" onClick={clearErrors}>✕</button>
+            <AlertTriangle size={16} aria-hidden="true" /><span>{localError}</span>
+            <button type="button" className="auth-error-dismiss" onClick={clearErrors} aria-label="Dismiss"><X size={16} aria-hidden="true" /></button>
           </div>
         )}
 
@@ -200,9 +180,6 @@ export function LoginView() {
           </>
         )}
 
-        <div className="login-footer">
-          <p>Protected by JWT Token Authentication • Chat Monolith Engine</p>
-        </div>
       </div>
 
       <GuestEntryModal

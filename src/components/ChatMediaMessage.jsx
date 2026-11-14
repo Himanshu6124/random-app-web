@@ -26,7 +26,7 @@ export function ChatMediaMessage({ msg }) {
           style={{
             maxWidth: '100%',
             maxHeight: '260px',
-            borderRadius: '10px',
+            borderRadius: 'var(--radius-md)',
             cursor: 'zoom-in',
             display: 'block',
             objectFit: 'cover'
@@ -42,7 +42,7 @@ export function ChatMediaMessage({ msg }) {
             onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
             style={{
               position: 'fixed', inset: 0, zIndex: 2000,
-              background: 'rgba(0, 0, 0, 0.88)',
+              background: 'var(--scrim)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               cursor: 'zoom-out', padding: '24px'
             }}
@@ -51,7 +51,7 @@ export function ChatMediaMessage({ msg }) {
             <img
               src={msg.objectUri || src}
               alt={caption || 'Shared image'}
-              style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: '8px', objectFit: 'contain' }}
+              style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 'var(--radius-sm)', objectFit: 'contain' }}
             />
           </div>
         )}

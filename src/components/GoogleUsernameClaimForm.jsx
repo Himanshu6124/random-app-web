@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AtSign, UserRound } from 'lucide-react';
 
 const boyAvatars = Array.from({ length: 8 }, (_, i) => `/userImages/boy${i + 1}.png`);
 const girlAvatars = Array.from({ length: 8 }, (_, i) => `/userImages/girl${i + 1}.png`);
@@ -44,12 +45,12 @@ export function GoogleUsernameClaimForm({ suggestion, loading, error, onSubmit, 
       <div className="form-group" style={{ textAlign: 'center' }}>
         <p style={{ fontSize: '0.92rem', color: 'var(--text-secondary)', margin: '0 0 4px 0' }}>
           {suggestion?.email ? (
-            <>Signed in as <strong style={{ color: '#ffffff' }}>{suggestion.email}</strong></>
+            <>Signed in as <strong style={{ color: 'var(--text-primary)' }}>{suggestion.email}</strong></>
           ) : (
             <>Google sign-in succeeded</>
           )}
         </p>
-        <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
+        <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', margin: 0 }}>
           One last step — pick the username you will be known by.
         </p>
       </div>
@@ -72,7 +73,7 @@ export function GoogleUsernameClaimForm({ suggestion, loading, error, onSubmit, 
             required
           />
         </div>
-        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>
           3-30 characters · letters, numbers, underscores
         </span>
       </div>
@@ -80,7 +81,7 @@ export function GoogleUsernameClaimForm({ suggestion, loading, error, onSubmit, 
       <div className="form-group">
         <label htmlFor="google-claim-name">Display Name *</label>
         <div className="input-wrapper">
-          <span className="input-icon">👤</span>
+          <span className="input-icon"><AtSign size={16} aria-hidden="true" /></span>
           <input
             id="google-claim-name"
             type="text"
@@ -97,16 +98,16 @@ export function GoogleUsernameClaimForm({ suggestion, loading, error, onSubmit, 
       <div className="form-group">
         <label>Gender</label>
         <div className="input-wrapper">
-          <span className="input-icon">🧑</span>
+          <span className="input-icon"><UserRound size={16} aria-hidden="true" /></span>
           <select
             id="google-claim-gender"
             value={gender}
             onChange={(e) => handleGenderChange(e.target.value)}
             disabled={loading}
-            style={{ background: 'transparent', color: 'white', border: 'none', outline: 'none', flex: 1 }}
+            style={{ background: 'transparent', color: 'var(--text-primary)', border: 'none', outline: 'none', flex: 1 }}
           >
-            <option value="boy" style={{ background: '#1C1C1E' }}>Boy</option>
-            <option value="girl" style={{ background: '#1C1C1E' }}>Girl</option>
+            <option value="boy" style={{ background: '#21141f' }}>Boy</option>
+            <option value="girl" style={{ background: '#21141f' }}>Girl</option>
           </select>
         </div>
       </div>
@@ -128,8 +129,8 @@ export function GoogleUsernameClaimForm({ suggestion, loading, error, onSubmit, 
                   padding: 0,
                   overflow: 'hidden',
                   cursor: 'pointer',
-                  border: isSelected ? '3px solid #10b981' : '2px solid rgba(255, 255, 255, 0.1)',
-                  boxShadow: isSelected ? '0 0 15px rgba(16, 185, 129, 0.6)' : 'none',
+                  border: isSelected ? '2px solid var(--accent)' : '2px solid var(--border-color)',
+                  boxShadow: 'none',
                   transform: isSelected ? 'scale(1.08)' : 'scale(1)',
                   transition: 'all 0.2s ease',
                   background: 'transparent'
@@ -146,7 +147,7 @@ export function GoogleUsernameClaimForm({ suggestion, loading, error, onSubmit, 
           })}
         </div>
 
-        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+        <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>
           Click to choose your profile picture
         </span>
       </div>
@@ -154,11 +155,11 @@ export function GoogleUsernameClaimForm({ suggestion, loading, error, onSubmit, 
       {error && (
         <div id="google-claim-error" style={{
           padding: '8px 12px',
-          borderRadius: '10px',
-          background: 'rgba(239, 68, 68, 0.15)',
-          border: '1px solid rgba(239, 68, 68, 0.4)',
-          color: '#fca5a5',
-          fontSize: '0.82rem',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--danger-tint)',
+          border: '1px solid var(--danger-line)',
+          color: 'var(--danger)',
+          fontSize: 'var(--fs-sm)',
           marginBottom: '12px'
         }}>
           {error}
@@ -171,7 +172,7 @@ export function GoogleUsernameClaimForm({ suggestion, loading, error, onSubmit, 
         id="google-claim-submit-btn"
         disabled={loading || !username.trim() || !name.trim()}
       >
-        {loading ? <span className="btn-spinner"></span> : <>Create Account & Enter 🚀</>}
+        {loading ? <span className="btn-spinner"></span> : <>Create Account & Enter</>}
       </button>
 
       {onCancel && (

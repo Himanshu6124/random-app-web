@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
-import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Sparkles, Hand, Lock, RefreshCw, X, Zap, Ban } from 'lucide-react';
+import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Star, Hand, Lock, RefreshCw, X, Zap, Ban, UserRound, AlertTriangle, CheckCheck, Check } from 'lucide-react';
 import { extractPeerName, MAX_MESSAGE_LENGTH } from '../services/socketService';
 import { authService } from '../services/authService';
 import { MediaComposer } from './MediaComposer';
 import { ChatMediaMessage } from './ChatMediaMessage';
 import { DiscoverConfirmDialog } from './discover/DiscoverConfirmDialog';
+import { useNewMessageIds, displayTime } from '../mobile/useNewMessageIds';
 
 export function ChatBox() {
   const {
@@ -195,7 +196,9 @@ export function ChatBox() {
   const composerDisabled = peerLeft || !isLiveConnected;
   const composerPlaceholder = peerLeft
     ? 'Your chat partner left the chat'
-    : (!isLiveConnected ? 'Reconnecting…' : `Type a message to ${peerName}...`);
+    : (!isLiveConnected ? 'Reconnecting…' : 'Say something sweet…');
+
+  const freshIds = useNewMessageIds(messages, currentPeer?.id || 'random');
 
   const handleSend = (e) => {
     e.preventDefault();
@@ -261,7 +264,7 @@ export function ChatBox() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        background: 'rgba(15, 17, 35, 0.4)',
+        background: 'rgba(26, 16, 25, 0.4)',
         position: 'relative',
         zIndex: 10
       }}>
@@ -271,12 +274,11 @@ export function ChatBox() {
             width: '46px',
             height: '46px',
             borderRadius: '50%',
-            backgroundColor: '#8b5cf6',
+            backgroundColor: 'var(--plum-4)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '1.6rem',
-            boxShadow: 'var(--shadow-glow)',
+            fontSize: 'var(--fs-2xl)',
             overflow: 'hidden',
             flexShrink: 0
           }}>
@@ -288,25 +290,19 @@ export function ChatBox() {
                 onError={(e) => { e.target.style.display = 'none'; }}
               />
             ) : (
-              '⚡'
+              <UserRound size={18} aria-hidden="true" />
             )}
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{peerName}</h3>
-              <span style={{
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                color: isPeerOnline ? 'var(--green-accent)' : 'var(--text-muted)',
-                background: isPeerOnline ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.05)',
-                border: isPeerOnline ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(255, 255, 255, 0.1)',
-                padding: '2px 8px',
-                borderRadius: '10px'
-              }}>
-                {isPeerOnline ? 'Online' : 'Offline'}
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: '8px', rowGap: '2px' }}>
+              <h3 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700 }}>{peerName}</h3>
+              {isPeerOnline ? (
+                <span className="online-badge" aria-label="Online">Online</span>
+              ) : (
+                <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)' }}>Offline</span>
+              )}
             </div>
-            <p className="chat-peer-bio" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            <p className="chat-peer-bio" style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)' }}>
               {currentPeer.bio || 'Random Chat Partner'}
             </p>
           </div>
@@ -324,12 +320,12 @@ export function ChatBox() {
                 alignItems: 'center',
                 gap: '6px',
                 padding: '8px 14px',
-                fontSize: '0.85rem',
+                fontSize: 'var(--fs-md)',
                 fontWeight: 600,
-                borderRadius: '12px',
-                border: '1px solid rgba(16, 185, 129, 0.4)',
-                background: 'rgba(16, 185, 129, 0.15)',
-                color: '#10b981',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid rgba(63, 178, 127, 0.4)',
+                background: 'rgba(63, 178, 127, 0.15)',
+                color: '#3fb27f',
                 cursor: 'default'
               }}
               title="You are friends!"
@@ -348,12 +344,12 @@ export function ChatBox() {
                 alignItems: 'center',
                 gap: '6px',
                 padding: '8px 14px',
-                fontSize: '0.85rem',
+                fontSize: 'var(--fs-md)',
                 fontWeight: 600,
-                borderRadius: '12px',
-                border: '1px solid #f59e0b',
-                background: 'rgba(245, 158, 11, 0.15)',
-                color: '#f59e0b',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-strong)',
+                background: 'transparent',
+                color: 'var(--text-secondary)',
                 cursor: 'pointer'
               }}
               title="Click to cancel friend request"
@@ -372,14 +368,13 @@ export function ChatBox() {
                 alignItems: 'center',
                 gap: '6px',
                 padding: '8px 14px',
-                fontSize: '0.85rem',
+                fontSize: 'var(--fs-md)',
                 fontWeight: 600,
-                borderRadius: '12px',
+                borderRadius: 'var(--radius-md)',
                 border: 'none',
-                background: '#10b981',
-                color: '#ffffff',
-                cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+                background: 'var(--accent)',
+                color: 'var(--accent-ink)',
+                cursor: 'pointer'
               }}
               title="Click to accept friend request"
             >
@@ -392,28 +387,23 @@ export function ChatBox() {
               type="button"
               onClick={handleFriendActionClick}
               disabled={actionLoading}
-              className="btn-cyan"
+              className={isGuest ? 'btn-secondary' : 'btn-primary'}
               style={{
+                color: isGuest ? 'var(--text-secondary)' : undefined,
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
                 padding: '8px 14px',
-                fontSize: '0.85rem',
+                fontSize: 'var(--fs-md)',
                 cursor: 'pointer'
               }}
               title={isGuest ? "Sign up to add friends" : "Add to Friends"}
+              aria-label={isGuest ? "Add Friend (sign up to unlock)" : "Add Friend"}
             >
-              {isGuest ? (
-                <>
-                  <Lock size={15} />
-                  <span>Add Friend</span>
-                </>
-              ) : (
-                <>
-                  <UserPlus size={16} />
-                  <span>{actionLoading ? 'Sending...' : 'Add Friend'}</span>
-                </>
-              )}
+              <UserPlus size={16} aria-hidden="true" />
+              <span className="label-long">{actionLoading ? 'Sending...' : 'Add Friend'}</span>
+              <span className="label-short">Add</span>
+              {isGuest && <Lock size={12} aria-hidden="true" />}
             </button>
           )}
 
@@ -421,11 +411,12 @@ export function ChatBox() {
             id="next-stranger-btn"
             type="button"
             onClick={skipStranger}
-            className="btn-primary"
-            style={{ padding: '8px 16px', fontSize: '0.85rem', cursor: 'pointer' }}
+            className="btn-secondary"
+            style={{ padding: '8px 16px', fontSize: 'var(--fs-md)', cursor: 'pointer' }}
           >
-            <SkipForward size={16} />
-            <span>Next Stranger</span>
+            <SkipForward size={16} aria-hidden="true" />
+            <span className="label-long">Next Stranger</span>
+            <span className="label-short">Next</span>
           </button>
 
           <button
@@ -433,7 +424,7 @@ export function ChatBox() {
             type="button"
             onClick={openBlockConfirm}
             disabled={!peerId || blocking}
-            className="btn-danger"
+            className="btn-secondary chat-tool-btn"
             style={{ padding: '8px 12px', cursor: 'pointer' }}
             title={`Block ${peerName}`}
             aria-label={`Block ${peerName}`}
@@ -445,9 +436,10 @@ export function ChatBox() {
             id="disconnect-chat-btn"
             type="button"
             onClick={disconnectChat}
-            className="btn-danger"
+            className="btn-secondary chat-tool-btn"
             style={{ padding: '8px 12px', cursor: 'pointer' }}
             title="Leave Chat"
+            aria-label="Leave Chat"
           >
             <LogOut size={16} />
           </button>
@@ -465,15 +457,24 @@ export function ChatBox() {
         position: 'relative',
         zIndex: 10
       }}>
+        {!messages.some(m => m.senderId !== 'system') && !peerLeft && (
+          <div className="chat-intro" aria-hidden="true">
+            <svg className="chat-intro__heart" viewBox="0 0 24 24">
+              <path d="M12 20.5C9 18.2 4 14.6 4 9.8 4 7.2 6 5.2 8.4 5.2c1.5 0 2.8.8 3.6 2 .8-1.2 2.1-2 3.6-2C18 5.2 20 7.2 20 9.8c0 4.8-5 8.4-8 10.7Z" />
+            </svg>
+            <p className="chat-intro__title">It's just the two of you now.</p>
+            <p className="chat-intro__hint">Say hi, or tap Ask Icebreaker if you're shy.</p>
+          </div>
+        )}
         {messages.map(msg => {
           if (msg.senderId === 'system') {
             return (
               <div key={msg.id} style={{
                 textAlign: 'center',
                 margin: '12px 0',
-                color: 'var(--cyan-accent)',
-                fontSize: '0.85rem',
-                fontStyle: 'italic'
+                color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-sub)',
+                fontSize: 'var(--fs-md)'
               }}>
                 {msg.text}
               </div>
@@ -487,7 +488,7 @@ export function ChatBox() {
           return (
             <div
               key={msg.id}
-              className="animate-fade-in"
+              className={freshIds.has(msg.id) ? `bubble-in ${isMe ? 'bubble-in--me' : 'bubble-in--them'}` : undefined}
               style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -497,21 +498,20 @@ export function ChatBox() {
               <div style={{
                 maxWidth: '75%',
                 padding: '12px 18px',
-                borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                borderRadius: isMe ? 'var(--radius-bubble) var(--radius-bubble) var(--radius-xs) var(--radius-bubble)' : 'var(--radius-bubble) var(--radius-bubble) var(--radius-bubble) var(--radius-xs)',
                 background: isFailed
-                  ? 'rgba(239, 68, 68, 0.18)'
-                  : isMe 
-                    ? 'linear-gradient(135deg, var(--primary-purple) 0%, #6366f1 100%)' 
-                    : 'rgba(255, 255, 255, 0.08)',
+                  ? 'rgba(229, 72, 77, 0.18)'
+                  : isMe
+                    ? 'var(--accent-tint)'
+                    : 'var(--plum-3)',
                 border: isFailed
-                  ? '1px dashed #ef4444'
-                  : isMe ? 'none' : '1px solid var(--border-color)',
-                color: '#ffffff',
-                fontSize: '0.95rem',
+                  ? '1px dashed #e5484d'
+                  : isMe ? '1px solid var(--accent-line)' : '1px solid var(--border-color)',
+                color: 'var(--text-primary)',
+                fontSize: 'var(--fs-body)',
                 lineHeight: '1.4',
                 overflowWrap: 'anywhere',
-                wordBreak: 'break-word',
-                boxShadow: isMe && !isFailed ? 'var(--shadow-glow)' : 'none'
+                wordBreak: 'break-word'
               }}>
                 {msg.type === 'IMAGE' || msg.type === 'AUDIO' ? (
                   <ChatMediaMessage msg={msg} />
@@ -527,9 +527,9 @@ export function ChatBox() {
                   gap: '8px',
                   marginTop: '6px',
                   fontSize: '0.78rem',
-                  color: '#f87171'
+                  color: 'var(--danger)'
                 }}>
-                  <span>⚠️ Not delivered.</span>
+                  <AlertTriangle size={14} aria-hidden="true" /><span>Not delivered.</span>
                   {msg.serverRefused ? null : (
                   <button
                     id="retry-message-btn"
@@ -537,12 +537,12 @@ export function ChatBox() {
                     disabled={peerLeft || !isPeerOnline || !isLiveConnected}
                     onClick={() => retryMessage(msg.id)}
                     style={{
-                      background: 'rgba(239, 68, 68, 0.25)',
-                      border: '1px solid rgba(239, 68, 68, 0.5)',
-                      color: '#ffffff',
-                      borderRadius: '8px',
+                      background: 'var(--danger-line)',
+                      border: '1px solid var(--danger-line)',
+                      color: 'var(--text-primary)',
+                      borderRadius: 'var(--radius-sm)',
                       padding: '2px 8px',
-                      fontSize: '0.75rem',
+                      fontSize: 'var(--fs-xs)',
                       fontWeight: 600,
                       cursor: 'pointer',
                       display: 'flex',
@@ -557,7 +557,7 @@ export function ChatBox() {
                 </div>
               ) : (
                 <span style={{
-                  fontSize: '0.7rem',
+                  fontSize: 'var(--fs-xs)',
                   color: 'var(--text-muted)',
                   marginTop: '4px',
                   padding: '0 4px',
@@ -565,16 +565,16 @@ export function ChatBox() {
                   alignItems: 'center',
                   gap: '4px'
                 }}>
-                  <span>{msg.time || msg.timestamp}</span>
+                  <span>{displayTime(msg.time || msg.timestamp)}</span>
                   {isMe && (
                     <>
                       <span>•</span>
                       {msg.status === 'SEEN' ? (
-                        <span style={{ color: 'var(--cyan-accent)', fontWeight: 600 }}>✓✓ Seen</span>
+                        <span style={{ color: 'var(--text-secondary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}><CheckCheck size={13} aria-hidden="true" />Seen</span>
                       ) : msg.status === 'SENDING' ? (
                         <span>Sending...</span>
                       ) : (
-                        <span>✓ Sent</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><Check size={13} aria-hidden="true" />Sent</span>
                       )}
                     </>
                   )}
@@ -586,7 +586,7 @@ export function ChatBox() {
 
         {/* Typing Indicator */}
         {isPeerTyping && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: 'var(--fs-md)' }}>
             <span>{peerName} is typing...</span>
           </div>
         )}
@@ -601,7 +601,7 @@ export function ChatBox() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        background: 'rgba(15, 17, 35, 0.5)',
+        background: 'rgba(26, 16, 25, 0.5)',
         position: 'relative',
         zIndex: 20
       }}>
@@ -612,7 +612,7 @@ export function ChatBox() {
           className="btn-secondary"
           style={{
             padding: '8px 16px',
-            fontSize: '0.82rem',
+            fontSize: 'var(--fs-sm)',
             borderRadius: 'var(--radius-full)',
             cursor: 'pointer',
             display: 'flex',
@@ -620,34 +620,25 @@ export function ChatBox() {
             gap: '6px'
           }}
         >
-          <HelpCircle size={15} color="var(--cyan-accent)" />
+          <HelpCircle size={15} color="var(--text-secondary)" />
           <span style={{ fontWeight: 600 }}>Ask Icebreaker</span>
         </button>
 
         {/* Quick Emojis */}
         <div className="chat-subbar-reactions" style={{ display: 'flex', gap: '6px' }}>
           {[
-            { icon: <Heart size={16} color="#ec4899" />, emoji: '❤️' },
-            { icon: <Flame size={16} color="#f97316" />, emoji: '🔥' },
-            { icon: <Sparkles size={16} color="#eab308" />, emoji: '✨' },
-            { icon: <Smile size={16} color="#06b6d4" />, emoji: '😂' },
-            { icon: <Hand size={16} color="#a855f7" />, emoji: '👋' }
+            { icon: <Heart size={16} />, emoji: '❤️' },
+            { icon: <Flame size={16} />, emoji: '🔥' },
+            { icon: <Star size={16} />, emoji: '✨' },
+            { icon: <Smile size={16} />, emoji: '😂' },
+            { icon: <Hand size={16} />, emoji: '👋' }
           ].map(item => (
             <button
               key={item.emoji}
               type="button"
               onClick={(e) => handleReactionClick(e, item.emoji)}
-              style={{
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                padding: '6px 10px',
-                borderRadius: 'var(--radius-full)',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
+              className="reaction-chip"
+              aria-label={`Send ${item.emoji}`}
             >
               {item.icon}
             </button>
@@ -664,12 +655,12 @@ export function ChatBox() {
           justifyContent: 'space-between',
           gap: '12px',
           flexWrap: 'wrap',
-          background: 'rgba(239, 68, 68, 0.12)',
-          borderTop: '1px solid rgba(239, 68, 68, 0.35)',
+          background: 'var(--danger-tint)',
+          borderTop: '1px solid var(--danger-line)',
           position: 'relative',
           zIndex: 20
         }}>
-          <span style={{ fontSize: '0.88rem', color: '#fca5a5' }}>
+          <span style={{ fontSize: 'var(--fs-md)', color: 'var(--danger)' }}>
             Your chat partner left the chat.
           </span>
           <button
@@ -677,7 +668,7 @@ export function ChatBox() {
             type="button"
             onClick={startSearching}
             className="btn-primary"
-            style={{ padding: '8px 16px', fontSize: '0.85rem', cursor: 'pointer' }}
+            style={{ padding: '8px 16px', fontSize: 'var(--fs-md)', cursor: 'pointer' }}
           >
             <Zap size={16} />
             <span>Find a new match</span>
@@ -689,10 +680,10 @@ export function ChatBox() {
       {!isLiveConnected && !peerLeft && (
         <div style={{
           padding: '10px 20px',
-          background: 'rgba(234, 179, 8, 0.12)',
-          borderTop: '1px solid rgba(234, 179, 8, 0.35)',
-          color: '#fde68a',
-          fontSize: '0.85rem',
+          background: 'rgba(240, 114, 137, 0.12)',
+          borderTop: '1px solid rgba(240, 114, 137, 0.35)',
+          color: '#f6a3b2',
+          fontSize: 'var(--fs-md)',
           position: 'relative',
           zIndex: 20
         }}>
@@ -704,10 +695,10 @@ export function ChatBox() {
       {mediaError && (
         <div id="chat-media-error" style={{
           padding: '8px 20px',
-          background: 'rgba(239, 68, 68, 0.12)',
-          borderTop: '1px solid rgba(239, 68, 68, 0.3)',
-          color: '#fca5a5',
-          fontSize: '0.8rem',
+          background: 'var(--danger-tint)',
+          borderTop: '1px solid var(--danger-line)',
+          color: 'var(--danger)',
+          fontSize: 'var(--fs-sm)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -715,13 +706,13 @@ export function ChatBox() {
           position: 'relative',
           zIndex: 20
         }}>
-          <span>⚠️ {mediaError}</span>
+          <AlertTriangle size={14} aria-hidden="true" /><span>{mediaError}</span>
           <button
             type="button"
             onClick={() => setMediaError('')}
-            style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer', fontWeight: 700 }}
+            style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontWeight: 700 }}
           >
-            ✕
+            <X size={14} aria-hidden="true" />
           </button>
         </div>
       )}
@@ -732,7 +723,7 @@ export function ChatBox() {
         display: 'flex',
         alignItems: 'center',
         gap: '12px',
-        background: 'rgba(9, 10, 21, 0.8)',
+        background: 'rgba(20, 12, 20, 0.8)',
         position: 'relative',
         zIndex: 20
       }}>
@@ -756,15 +747,15 @@ export function ChatBox() {
             borderRadius: 'var(--radius-full)',
             background: 'var(--bg-input)',
             border: '1px solid var(--border-color)',
-            color: 'white',
-            fontSize: '0.95rem',
+            color: 'var(--text-primary)',
+            fontSize: 'var(--fs-body)',
             outline: 'none',
             opacity: composerDisabled ? 0.6 : 1
           }}
         />
         <button
           type="submit"
-          className="btn-primary"
+          className="btn-primary send-btn"
           disabled={composerDisabled}
           style={{
             width: '48px',

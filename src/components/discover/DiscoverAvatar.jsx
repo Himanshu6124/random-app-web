@@ -20,7 +20,7 @@ export function DiscoverAvatar({ id, name, photoUrl, size = 48, online, guest = 
       ) : (
         <div
           className="dc-avatar-face"
-          style={{ background: showPhoto ? '#312e81' : avatarColor(id || name || ''), fontSize: Math.round(size * 0.36) }}
+          style={{ background: showPhoto ? 'var(--plum-4)' : avatarColor(id || name || ''), fontSize: Math.round(size * 0.36) }}
         >
           {showPhoto ? <img src={photoUrl} alt="" onError={() => setBroken(true)} /> : initialsOf(name)}
         </div>

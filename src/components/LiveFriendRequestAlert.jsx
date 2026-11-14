@@ -33,15 +33,15 @@ export function LiveFriendRequestAlert() {
         top: '24px',
         right: '24px',
         zIndex: 2000,
-        backgroundColor: '#1E1B4B',
-        border: '1px solid rgba(139, 92, 246, 0.5)',
-        boxShadow: '0 16px 36px rgba(0, 0, 0, 0.7), 0 0 24px rgba(139, 92, 246, 0.35)',
-        borderRadius: '18px',
+        backgroundColor: '#352131',
+        border: '1px solid rgba(240, 114, 137, 0.5)',
+        boxShadow: '0 16px 36px rgba(0, 0, 0, 0.7), 0 0 24px rgba(240, 114, 137, 0.35)',
+        borderRadius: 'var(--radius-bubble)',
         padding: '12px 20px',
         display: 'flex',
         alignItems: 'center',
         gap: '16px',
-        color: '#ffffff',
+        color: 'var(--text-primary)',
         maxWidth: '92vw',
         width: 'auto'
       }}
@@ -51,9 +51,9 @@ export function LiveFriendRequestAlert() {
         height: '44px',
         borderRadius: '50%',
         overflow: 'hidden',
-        border: '2px solid var(--cyan-accent)',
+        border: '1px solid var(--border-strong)',
         flexShrink: 0,
-        backgroundColor: '#312E81',
+        backgroundColor: 'var(--plum-4)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center'
@@ -61,15 +61,15 @@ export function LiveFriendRequestAlert() {
         {photoUrl ? (
           <img src={photoUrl} alt={senderName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
-          <UserPlus size={22} color="var(--cyan-accent)" />
+          <UserPlus size={22} color="var(--text-secondary)" />
         )}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ffffff' }}>
+        <div style={{ fontSize: 'var(--fs-body)', fontWeight: 700, color: 'var(--text-primary)' }}>
           {senderName}
         </div>
-        <div style={{ fontSize: '0.8rem', color: '#c7d2fe' }}>
+        <div style={{ fontSize: 'var(--fs-sm)', color: '#f6a3b2' }}>
           sent you a friend request!
         </div>
       </div>
@@ -83,15 +83,14 @@ export function LiveFriendRequestAlert() {
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            backgroundColor: '#10b981',
-            color: '#ffffff',
+            backgroundColor: 'var(--accent)',
+            color: 'var(--accent-ink)',
             border: 'none',
-            borderRadius: '12px',
+            borderRadius: 'var(--radius-md)',
             padding: '8px 14px',
-            fontSize: '0.85rem',
+            fontSize: 'var(--fs-md)',
             fontWeight: 600,
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+            cursor: 'pointer'
           }}
         >
           <UserCheck size={16} />
@@ -103,9 +102,9 @@ export function LiveFriendRequestAlert() {
           type="button"
           onClick={dismissLiveFriendRequest}
           style={{
-            background: 'rgba(255, 255, 255, 0.1)',
+            background: 'var(--plum-4)',
             border: 'none',
-            color: '#94a3b8',
+            color: 'var(--text-secondary)',
             borderRadius: '50%',
             width: '32px',
             height: '32px',

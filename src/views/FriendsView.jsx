@@ -3,25 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { useSocket, ICEBREAKER_QUESTIONS } from '../context/SocketContext';
 import { socketService, MAX_MESSAGE_LENGTH } from '../services/socketService';
 import { authService } from '../services/authService';
-import {
-  Users,
-  UserMinus,
-  UserPlus,
-  Send,
-  MessageCircle,
-  ArrowLeft,
-  HelpCircle,
-  Heart,
-  Flame,
-  Sparkles,
-  Smile,
-  Hand,
-  MoreVertical,
-  Loader2,
-  Ban,
-  ChevronDown,
-  ChevronRight
-} from 'lucide-react';
+import { Users, UserMinus, UserPlus, Send, MessageCircle, ArrowLeft, HelpCircle, Heart, Flame, Star, Smile, Hand, MoreVertical, Loader2, Ban, ChevronDown, ChevronRight, UserRound, AlertTriangle, CheckCheck, Check, X } from 'lucide-react';
+import { useNewMessageIds, displayTime } from '../mobile/useNewMessageIds';
 import { DiscoverConfirmDialog } from '../components/discover/DiscoverConfirmDialog';
 import { FriendRequestDialog } from '../components/FriendRequestDialog';
 import { MediaComposer } from '../components/MediaComposer';
@@ -347,7 +330,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             type: msg.type || (msg.objectUri ? 'IMAGE' : 'TEXT'),
             objectUri: msg.objectUri || null,
             status: msg.status || 'SENT',
-            time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
             timestamp: rawTime
           };
 
@@ -420,7 +403,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       senderId: user?.id || 'me',
       text: messageText,
       status: 'SENDING',
-      time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
       timestamp: rawTime
     };
 
@@ -485,7 +468,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       type,
       objectUri,
       status: 'SENDING',
-      time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
       timestamp: rawTime
     };
 
@@ -531,7 +514,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       senderId: user?.id || 'me',
       text: emoji,
       status: 'SENDING',
-      time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
       timestamp: rawTime
     };
 
@@ -560,6 +543,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
 
   const activeKey = selectedFriend ? (selectedFriend.conversationId || selectedFriend.id) : null;
   const currentMessages = activeKey ? (dmMessages[activeKey] || []) : [];
+  const freshIds = useNewMessageIds(currentMessages, activeKey);
 
   if (isGuest) {
     return (
@@ -575,30 +559,17 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
           maxWidth: '480px',
           width: '100%',
           padding: '40px 32px',
-          borderRadius: '24px',
+          borderRadius: 'var(--radius-xl)',
           textAlign: 'center',
-          backgroundColor: '#1C1C1E',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.6)'
+          backgroundColor: '#21141f',
+          border: '1px solid var(--border-color)',
+          boxShadow: 'var(--shadow-pop)'
         }}>
-          <div style={{
-            width: '64px',
-            height: '64px',
-            borderRadius: '20px',
-            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 20px',
-            boxShadow: '0 8px 24px rgba(16, 185, 129, 0.35)'
-          }}>
-            <Users size={32} color="#ffffff" />
-          </div>
 
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff', marginBottom: '10px' }}>
+          <h2 style={{ fontSize: 'var(--fs-2xl)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>
             Friends & Direct Messages
           </h2>
-          <p style={{ color: '#a1a1aa', fontSize: '0.95rem', lineHeight: 1.5, marginBottom: '24px' }}>
+          <p style={{ color: '#c9b6bf', fontSize: 'var(--fs-body)', lineHeight: 1.5, marginBottom: '24px' }}>
             Never lose touch with great people you meet! Create a free permanent account to save friends, send direct messages anytime, and see who's online.
           </p>
 
@@ -608,19 +579,19 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             gap: '12px',
             marginBottom: '28px',
             textAlign: 'left',
-            background: 'rgba(255, 255, 255, 0.04)',
+            background: 'var(--plum-3)',
             padding: '16px',
-            borderRadius: '16px',
-            border: '1px solid rgba(255, 255, 255, 0.08)'
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border-color)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem', color: '#e4e4e7' }}>
-              <span style={{ color: '#10b981', fontSize: '1.1rem' }}>✓</span> Save friends met in Random Chat
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: 'var(--fs-body-sm)', color: '#f5ecef' }}>
+              <Check size={16} color="var(--green)" aria-hidden="true" /> Save friends met in Random Chat
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem', color: '#e4e4e7' }}>
-              <span style={{ color: '#10b981', fontSize: '1.1rem' }}>✓</span> 1-on-1 private direct messaging
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: 'var(--fs-body-sm)', color: '#f5ecef' }}>
+              <Check size={16} color="var(--green)" aria-hidden="true" /> 1-on-1 private direct messaging
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem', color: '#e4e4e7' }}>
-              <span style={{ color: '#10b981', fontSize: '1.1rem' }}>✓</span> Real-time online status and typing alerts
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: 'var(--fs-body-sm)', color: '#f5ecef' }}>
+              <Check size={16} color="var(--green)" aria-hidden="true" /> Real-time online status and typing alerts
             </div>
           </div>
 
@@ -632,21 +603,19 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               style={{
                 width: '100%',
                 padding: '14px',
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                color: '#ffffff',
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--accent)',
+                color: 'var(--accent-ink)',
                 border: 'none',
                 fontWeight: 700,
-                fontSize: '1rem',
+                fontSize: 'var(--fs-base)',
                 cursor: 'pointer',
-                boxShadow: '0 8px 20px rgba(16, 185, 129, 0.35)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px'
               }}
             >
-              <Sparkles size={18} />
               Create Free Account
             </button>
 
@@ -657,8 +626,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               style={{
                 width: '100%',
                 padding: '12px',
-                borderRadius: '12px',
-                fontSize: '0.9rem',
+                borderRadius: 'var(--radius-md)',
+                fontSize: 'var(--fs-body-sm)',
                 cursor: 'pointer'
               }}
             >
@@ -693,7 +662,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Users size={22} color="var(--primary-purple)" />
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Friends ({friends.length})</h2>
+            <h2 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700 }}>Friends ({friends.length})</h2>
           </div>
 
           <button
@@ -704,7 +673,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             className="btn-cyan"
             style={{
               padding: '6px 12px',
-              fontSize: '0.8rem',
+              fontSize: 'var(--fs-sm)',
               borderRadius: 'var(--radius-full)',
               display: 'flex',
               alignItems: 'center',
@@ -717,12 +686,12 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             <span>Requests</span>
             {friendRequests.length > 0 && (
               <span style={{
-                backgroundColor: '#FF3B30',
-                color: 'white',
-                fontSize: '0.7rem',
+                backgroundColor: 'var(--danger-fill)',
+                color: 'var(--text-primary)',
+                fontSize: 'var(--fs-xs)',
                 fontWeight: 700,
                 padding: '2px 6px',
-                borderRadius: '10px',
+                borderRadius: 'var(--radius-md)',
                 marginLeft: '2px'
               }}>
                 {friendRequests.length}
@@ -734,11 +703,11 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
         {friends.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)' }}>
             <p>No friends added yet!</p>
-            <p style={{ fontSize: '0.8rem', marginTop: '8px' }}>Match with strangers and send them friend requests!</p>
+            <p style={{ fontSize: 'var(--fs-sm)', marginTop: '8px' }}>Match with strangers and send them friend requests!</p>
             <button
               onClick={onStartMatch}
               className="btn-primary"
-              style={{ marginTop: '16px', padding: '10px 20px', fontSize: '0.85rem' }}
+              style={{ marginTop: '16px', padding: '10px 20px', fontSize: 'var(--fs-md)' }}
             >
               Start Matching
             </button>
@@ -762,7 +731,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                     justifyContent: 'space-between',
                     padding: '12px',
                     borderRadius: 'var(--radius-md)',
-                    background: isSelected ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255, 255, 255, 0.04)',
+                    background: isSelected ? 'rgba(240, 114, 137, 0.2)' : 'rgba(255, 255, 255, 0.04)',
                     border: isSelected ? '1px solid var(--primary-purple)' : '1px solid transparent',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease'
@@ -773,27 +742,27 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                       width: '42px',
                       height: '42px',
                       borderRadius: '50%',
-                      backgroundColor: '#8b5cf6',
+                      backgroundColor: 'var(--plum-4)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: '1.3rem',
+                      fontSize: 'var(--fs-xl)',
                       overflow: 'hidden',
                       flexShrink: 0
                     }}>
                       {friend.photoUrl ? (
                         <img src={friend.photoUrl} alt={friend.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
                       ) : (
-                        '👤'
+                        <UserRound size={18} aria-hidden="true" />
                       )}
                     </div>
                     <div style={{ overflow: 'hidden', flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ fontSize: '0.95rem', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                        <span style={{ fontSize: 'var(--fs-body)', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
                           {friend.name || friend.friendUserName || friendId}
                         </span>
                         <span style={{
-                          fontSize: '0.72rem',
+                          fontSize: 'var(--fs-xs)',
                           fontWeight: 600,
                           color: friend.isOnline ? 'var(--green-accent)' : 'var(--text-muted)',
                           flexShrink: 0
@@ -803,8 +772,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '2px' }}>
                         <span style={{
-                          fontSize: '0.75rem',
-                          color: (friend.unseenCount || 0) > 0 ? '#ffffff' : 'var(--text-muted)',
+                          fontSize: 'var(--fs-xs)',
+                          color: (friend.unseenCount || 0) > 0 ? 'var(--text-primary)' : 'var(--text-muted)',
                           fontWeight: (friend.unseenCount || 0) > 0 ? 600 : 400,
                           whiteSpace: 'nowrap',
                           textOverflow: 'ellipsis',
@@ -814,19 +783,18 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                         </span>
                         {(friend.unseenCount || 0) > 0 && (
                           <span style={{
-                            backgroundColor: '#ef4444',
-                            color: '#ffffff',
-                            fontSize: '0.7rem',
+                            backgroundColor: 'var(--danger-fill)',
+                            color: 'var(--text-primary)',
+                            fontSize: 'var(--fs-xs)',
                             fontWeight: 700,
                             minWidth: '18px',
                             height: '18px',
-                            borderRadius: '9px',
+                            borderRadius: 'var(--radius-sm)',
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             padding: '0 5px',
-                            flexShrink: 0,
-                            boxShadow: '0 2px 6px rgba(239, 68, 68, 0.4)'
+                            flexShrink: 0
                           }}>
                             {friend.unseenCount}
                           </span>
@@ -873,7 +841,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                 background: 'none',
                 border: 'none',
                 color: 'var(--text-secondary)',
-                fontSize: '0.85rem',
+                fontSize: 'var(--fs-md)',
                 fontWeight: 600,
                 cursor: 'pointer',
                 padding: '4px 0'
@@ -896,15 +864,15 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                       gap: '8px',
                       padding: '8px 10px',
                       borderRadius: 'var(--radius-md)',
-                      background: 'rgba(255, 255, 255, 0.04)'
+                      background: 'var(--plum-3)'
                     }}
                   >
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: '0.88rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div style={{ fontSize: 'var(--fs-md)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {blocked.name}
                       </div>
                       {blocked.username && (
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>@{blocked.username}</div>
+                        <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)' }}>@{blocked.username}</div>
                       )}
                     </div>
                     <button
@@ -965,7 +933,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              background: 'rgba(15, 17, 35, 0.4)',
+              background: 'rgba(26, 16, 25, 0.4)',
               // Must be positioned, or zIndex is ignored and the options menu renders
               // underneath the messages log (which made "Remove Friend" unclickable).
               position: 'relative',
@@ -979,7 +947,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: 'white',
+                    color: 'var(--text-primary)',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -995,30 +963,29 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                   width: '44px',
                   height: '44px',
                   borderRadius: '50%',
-                  backgroundColor: '#8b5cf6',
+                  backgroundColor: 'var(--plum-4)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '1.4rem',
-                  overflow: 'hidden',
-                  boxShadow: 'var(--shadow-glow)'
+                  fontSize: 'var(--fs-2xl)',
+                  overflow: 'hidden'
                 }}>
                   {selectedFriend.photoUrl ? (
                     <img src={selectedFriend.photoUrl} alt={selectedFriend.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
                   ) : (
-                    '👤'
+                    <UserRound size={18} aria-hidden="true" />
                   )}
                 </div>
 
                 <div>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username}</h3>
-                  <span style={{
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: selectedFriend.isOnline ? 'var(--green-accent)' : 'var(--text-muted)'
-                  }}>
-                    {selectedFriend.isOnline ? 'Online' : 'Offline'}
-                  </span>
+                  <h3 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700 }}>{selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username}</h3>
+                  {selectedFriend.isOnline ? (
+                    <span className="online-badge" aria-label="Online">Online</span>
+                  ) : (
+                    <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text-muted)' }}>
+                      Offline
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1045,10 +1012,10 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                     position: 'absolute',
                     right: 0,
                     top: '36px',
-                    backgroundColor: '#1e1b4b',
+                    backgroundColor: '#352131',
                     border: '1px solid var(--border-color)',
                     borderRadius: 'var(--radius-md)',
-                    boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                    boxShadow: 'var(--shadow-card)',
                     padding: '6px 0',
                     width: '170px',
                     zIndex: 50
@@ -1063,8 +1030,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                         padding: '10px 16px',
                         background: 'none',
                         border: 'none',
-                        color: '#ef4444',
-                        fontSize: '0.85rem',
+                        color: 'var(--danger)',
+                        fontSize: 'var(--fs-md)',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
@@ -1084,8 +1051,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                         padding: '10px 16px',
                         background: 'none',
                         border: 'none',
-                        color: '#ef4444',
-                        fontSize: '0.85rem',
+                        color: 'var(--danger)',
+                        fontSize: 'var(--fs-md)',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
@@ -1110,8 +1077,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               gap: '12px',
               zIndex: 10
             }}>
-              <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.82rem', margin: '12px 0' }}>
-                Direct conversation with <strong style={{ color: 'white' }}>{selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username}</strong>
+              <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--fs-sm)', margin: '12px 0' }}>
+                Direct conversation with <strong style={{ color: 'var(--text-primary)' }}>{selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username}</strong>
               </div>
 
               {fetchingMessages && (
@@ -1120,8 +1087,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
-                  color: 'var(--cyan-accent)',
-                  fontSize: '0.82rem',
+                  color: 'var(--text-secondary)',
+                  fontSize: 'var(--fs-sm)',
                   padding: '8px'
                 }}>
                   <Loader2 size={16} className="animate-spin" />
@@ -1134,7 +1101,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                 return (
                   <div
                     key={m.id}
-                    className="animate-fade-in"
+                    className={freshIds.has(m.id) ? `bubble-in ${isMe ? 'bubble-in--me' : 'bubble-in--them'}` : undefined}
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
@@ -1144,13 +1111,13 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                     <div style={{
                       maxWidth: '75%',
                       padding: '12px 18px',
-                      borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                      borderRadius: isMe ? 'var(--radius-bubble) var(--radius-bubble) var(--radius-xs) var(--radius-bubble)' : 'var(--radius-bubble) var(--radius-bubble) var(--radius-bubble) var(--radius-xs)',
                       background: isMe
-                        ? 'linear-gradient(135deg, var(--cyan-accent) 0%, #0284c7 100%)'
-                        : 'rgba(255, 255, 255, 0.08)',
-                      border: isMe ? 'none' : '1px solid var(--border-color)',
-                      color: 'white',
-                      fontSize: '0.95rem',
+                        ? 'var(--accent-tint)'
+                        : 'var(--plum-3)',
+                      border: isMe ? '1px solid var(--accent-line)' : '1px solid var(--border-color)',
+                      color: 'var(--text-primary)',
+                      fontSize: 'var(--fs-body)',
                       lineHeight: '1.4',
                       overflowWrap: 'anywhere',
                       wordBreak: 'break-word',
@@ -1163,8 +1130,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                       )}
                     </div>
                     <span style={{
-                      fontSize: '0.7rem',
-                      color: m.status === 'FAILED' ? '#f87171' : 'var(--text-muted)',
+                      fontSize: 'var(--fs-xs)',
+                      color: m.status === 'FAILED' ? 'var(--danger)' : 'var(--text-muted)',
                       marginTop: '4px',
                       padding: '0 4px',
                       display: 'inline-flex',
@@ -1177,14 +1144,14 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                         'Sending...'
                       ) : (
                         <>
-                          <span>{m.time}</span>
+                          <span>{displayTime(m.time)}</span>
                           {isMe && (
                             <>
                               <span>•</span>
                               {m.status === 'SEEN' ? (
-                                <span style={{ color: 'var(--cyan-accent)', fontWeight: 600 }}>✓✓ Seen</span>
+                                <span style={{ color: 'var(--text-secondary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}><CheckCheck size={13} aria-hidden="true" />Seen</span>
                               ) : (
-                                <span>✓ Sent</span>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><Check size={13} aria-hidden="true" />Sent</span>
                               )}
                             </>
                           )}
@@ -1196,7 +1163,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               })}
 
               {isFriendTyping && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: 'var(--fs-md)' }}>
                   <span>{selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username} is typing...</span>
                 </div>
               )}
@@ -1211,7 +1178,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              background: 'rgba(15, 17, 35, 0.5)',
+              background: 'rgba(26, 16, 25, 0.5)',
               zIndex: 20
             }}>
               <button
@@ -1220,7 +1187,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                 className="btn-secondary"
                 style={{
                   padding: '6px 14px',
-                  fontSize: '0.8rem',
+                  fontSize: 'var(--fs-sm)',
                   borderRadius: 'var(--radius-full)',
                   cursor: 'pointer',
                   display: 'flex',
@@ -1228,32 +1195,24 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                   gap: '6px'
                 }}
               >
-                <HelpCircle size={14} color="var(--cyan-accent)" />
+                <HelpCircle size={14} color="var(--text-secondary)" />
                 <span style={{ fontWeight: 600 }}>Ask Icebreaker</span>
               </button>
 
               <div style={{ display: 'flex', gap: '6px' }}>
                 {[
-                  { icon: <Heart size={15} color="#ec4899" />, emoji: '❤️' },
-                  { icon: <Flame size={15} color="#f97316" />, emoji: '🔥' },
-                  { icon: <Sparkles size={15} color="#eab308" />, emoji: '✨' },
-                  { icon: <Smile size={15} color="#06b6d4" />, emoji: '😂' },
-                  { icon: <Hand size={15} color="#a855f7" />, emoji: '👋' }
+                  { icon: <Heart size={15} />, emoji: '❤️' },
+                  { icon: <Flame size={15} />, emoji: '🔥' },
+                  { icon: <Star size={15} />, emoji: '✨' },
+                  { icon: <Smile size={15} />, emoji: '😂' },
+                  { icon: <Hand size={15} />, emoji: '👋' }
                 ].map(item => (
                   <button
                     key={item.emoji}
                     type="button"
                     onClick={(e) => handleReactionClick(e, item.emoji)}
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.08)',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      padding: '6px 10px',
-                      borderRadius: 'var(--radius-full)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
+                    className="reaction-chip"
+                    aria-label={`Send ${item.emoji}`}
                   >
                     {item.icon}
                   </button>
@@ -1265,33 +1224,33 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             {mediaError && (
               <div id="dm-media-error" style={{
                 padding: '8px 20px',
-                background: 'rgba(239, 68, 68, 0.12)',
-                borderTop: '1px solid rgba(239, 68, 68, 0.3)',
-                color: '#fca5a5',
-                fontSize: '0.8rem',
+                background: 'var(--danger-tint)',
+                borderTop: '1px solid var(--danger-line)',
+                color: 'var(--danger)',
+                fontSize: 'var(--fs-sm)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: '12px',
                 zIndex: 20
               }}>
-                <span>⚠️ {mediaError}</span>
+                <AlertTriangle size={14} aria-hidden="true" /><span>{mediaError}</span>
                 <button
                   type="button"
                   onClick={() => setMediaError('')}
-                  style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer', fontWeight: 700 }}
+                  style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontWeight: 700 }}
                 >
-                  ✕
+                  <X size={14} aria-hidden="true" />
                 </button>
               </div>
             )}
             {!isLiveConnected && (
               <div style={{
                 padding: '10px 20px',
-                background: 'rgba(234, 179, 8, 0.12)',
-                borderTop: '1px solid rgba(234, 179, 8, 0.35)',
-                color: '#fde68a',
-                fontSize: '0.85rem',
+                background: 'rgba(240, 114, 137, 0.12)',
+                borderTop: '1px solid rgba(240, 114, 137, 0.35)',
+                color: '#f6a3b2',
+                fontSize: 'var(--fs-md)',
                 zIndex: 20
               }}>
                 Reconnecting… messages cannot be delivered right now.
@@ -1304,7 +1263,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               display: 'flex',
               alignItems: 'center',
               gap: '12px',
-              background: 'rgba(9, 10, 21, 0.8)',
+              background: 'rgba(20, 12, 20, 0.8)',
               zIndex: 20
             }}>
               <MediaComposer
@@ -1333,8 +1292,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                   borderRadius: 'var(--radius-full)',
                   background: 'var(--bg-input)',
                   border: '1px solid var(--border-color)',
-                  color: 'white',
-                  fontSize: '0.95rem',
+                  color: 'var(--text-primary)',
+                  fontSize: 'var(--fs-body)',
                   outline: 'none',
                   opacity: isLiveConnected ? 1 : 0.6
                 }}
@@ -1361,8 +1320,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--text-muted)' }}>
             <MessageCircle size={48} color="var(--primary-purple)" style={{ marginBottom: '16px' }} />
-            <p style={{ fontSize: '1rem', fontWeight: 600 }}>Select a friend to start chatting!</p>
-            <p style={{ fontSize: '0.8rem', marginTop: '6px', opacity: 0.8 }}>Choose a friend from the left sidebar to send direct messages.</p>
+            <p style={{ fontSize: 'var(--fs-base)', fontWeight: 600 }}>Select a friend to start chatting!</p>
+            <p style={{ fontSize: 'var(--fs-sm)', marginTop: '6px', opacity: 0.8 }}>Choose a friend from the left sidebar to send direct messages.</p>
           </div>
         )}
       </div>

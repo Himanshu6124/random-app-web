@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Zap, X, User, Sparkles } from 'lucide-react';
+import { X, User } from 'lucide-react';
 
 export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
   const [name, setName] = useState('');
@@ -37,8 +37,7 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.75)',
-        backdropFilter: 'blur(8px)',
+        backgroundColor: 'var(--scrim)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -51,13 +50,13 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
         style={{
           width: '100%',
           maxWidth: '420px',
-          backgroundColor: '#1C1C1E',
-          borderRadius: '24px',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
+          backgroundColor: '#21141f',
+          borderRadius: 'var(--radius-xl)',
+          border: '1px solid var(--border-color)',
           padding: '28px',
-          boxShadow: '0 24px 48px rgba(0, 0, 0, 0.7)',
+          boxShadow: 'var(--shadow-pop)',
           position: 'relative',
-          color: '#ffffff'
+          color: 'var(--text-primary)'
         }}
       >
         {/* Close Button */}
@@ -69,15 +68,15 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
             position: 'absolute',
             top: '20px',
             right: '20px',
-            background: 'rgba(255, 255, 255, 0.08)',
+            background: 'var(--plum-3)',
             border: 'none',
             borderRadius: '50%',
-            width: '36px',
-            height: '36px',
+            width: '44px',
+            height: '44px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#a1a1aa',
+            color: '#c9b6bf',
             cursor: 'pointer',
             transition: 'all 0.2s'
           }}
@@ -87,23 +86,11 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
 
         {/* Header Icon */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '16px',
-            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 8px 16px rgba(99, 102, 241, 0.35)'
-          }}>
-            <Zap size={24} color="#ffffff" />
-          </div>
           <div>
-            <h2 style={{ fontSize: '1.3rem', fontWeight: 700, margin: 0, color: '#ffffff' }}>
+            <h2 style={{ fontSize: 'var(--fs-xl)', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
               Quick Guest Entry
             </h2>
-            <p style={{ fontSize: '0.85rem', color: '#a1a1aa', margin: '2px 0 0' }}>
+            <p style={{ fontSize: 'var(--fs-md)', color: '#c9b6bf', margin: '2px 0 0' }}>
               Instant matching • No password needed
             </p>
           </div>
@@ -112,11 +99,11 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
         {error && (
           <div style={{
             padding: '10px 14px',
-            borderRadius: '10px',
-            backgroundColor: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            color: '#f87171',
-            fontSize: '0.88rem',
+            borderRadius: 'var(--radius-md)',
+            backgroundColor: 'var(--danger-tint)',
+            border: '1px solid var(--danger-line)',
+            color: 'var(--danger)',
+            fontSize: 'var(--fs-md)',
             marginBottom: '16px'
           }}>
             {error}
@@ -126,18 +113,18 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           {/* Name Field */}
           <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#e4e4e7', marginBottom: '8px' }}>
+            <label style={{ display: 'block', fontSize: 'var(--fs-md)', fontWeight: 600, color: '#f5ecef', marginBottom: '8px' }}>
               Your Name *
             </label>
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: '12px',
+              backgroundColor: 'var(--plum-0)',
+              border: '1px solid var(--border-strong)',
+              borderRadius: 'var(--radius-md)',
               padding: '0 14px'
             }}>
-              <User size={18} color="#71717a" style={{ marginRight: '10px' }} />
+              <User size={18} color="#a8939e" style={{ marginRight: '10px' }} />
               <input
                 id="guest-name-input"
                 type="text"
@@ -152,8 +139,9 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
                   background: 'transparent',
                   border: 'none',
                   outline: 'none',
-                  color: '#ffffff',
-                  fontSize: '0.95rem',
+                  color: 'var(--text-primary)',
+                  fontFamily: 'var(--font-sub)',
+                  fontSize: 'var(--fs-base)',
                   padding: '12px 0'
                 }}
               />
@@ -162,7 +150,7 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
 
           {/* Gender Selector */}
           <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#e4e4e7', marginBottom: '8px' }}>
+            <label style={{ display: 'block', fontSize: 'var(--fs-md)', fontWeight: 600, color: '#f5ecef', marginBottom: '8px' }}>
               Select Gender *
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -172,25 +160,25 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
                 onClick={() => setGender('boy')}
                 style={{
                   padding: '12px',
-                  borderRadius: '12px',
+                  borderRadius: 'var(--radius-md)',
                   border: gender === 'boy'
-                    ? '2px solid #6366f1'
+                    ? '1.5px solid var(--accent)'
                     : '1px solid rgba(255, 255, 255, 0.1)',
                   backgroundColor: gender === 'boy'
-                    ? 'rgba(99, 102, 241, 0.2)'
-                    : 'rgba(255, 255, 255, 0.04)',
-                  color: '#ffffff',
+                    ? 'var(--plum-5)'
+                    : 'var(--plum-3)',
+                  color: gender === 'boy' ? 'var(--accent)' : 'var(--text-primary)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
                   fontWeight: 600,
-                  fontSize: '0.95rem',
+                  fontSize: 'var(--fs-body)',
                   cursor: 'pointer',
                   transition: 'all 0.2s'
                 }}
               >
-                <span style={{ fontSize: '1.2rem' }}>👦</span> Male
+                Male
               </button>
 
               <button
@@ -199,28 +187,28 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
                 onClick={() => setGender('girl')}
                 style={{
                   padding: '12px',
-                  borderRadius: '12px',
+                  borderRadius: 'var(--radius-md)',
                   border: gender === 'girl'
-                    ? '2px solid #ec4899'
+                    ? '1.5px solid var(--accent)'
                     : '1px solid rgba(255, 255, 255, 0.1)',
                   backgroundColor: gender === 'girl'
-                    ? 'rgba(236, 72, 153, 0.2)'
-                    : 'rgba(255, 255, 255, 0.04)',
-                  color: '#ffffff',
+                    ? 'var(--plum-5)'
+                    : 'var(--plum-3)',
+                  color: gender === 'girl' ? 'var(--accent)' : 'var(--text-primary)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
                   fontWeight: 600,
-                  fontSize: '0.95rem',
+                  fontSize: 'var(--fs-body)',
                   cursor: 'pointer',
                   transition: 'all 0.2s'
                 }}
               >
-                <span style={{ fontSize: '1.2rem' }}>👧</span> Female
+                Female
               </button>
             </div>
-            <p style={{ fontSize: '0.75rem', color: '#71717a', margin: '6px 0 0' }}>
+            <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', margin: '6px 0 0' }}>
               An avatar will be automatically assigned for you.
             </p>
           </div>
@@ -233,19 +221,19 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
             style={{
               marginTop: '8px',
               padding: '14px',
-              borderRadius: '12px',
+              borderRadius: 'var(--radius-md)',
               border: 'none',
-              background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
-              color: '#ffffff',
+              background: (loading || !name.trim()) ? 'var(--plum-3)' : 'var(--accent)',
+              color: (loading || !name.trim()) ? 'var(--text-muted)' : 'var(--accent-ink)',
+              fontFamily: 'var(--font-main)',
               fontWeight: 700,
-              fontSize: '1rem',
+              fontSize: 'var(--fs-base)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '8px',
               cursor: (loading || !name.trim()) ? 'not-allowed' : 'pointer',
-              opacity: (loading || !name.trim()) ? 0.6 : 1,
-              boxShadow: '0 8px 20px rgba(99, 102, 241, 0.4)',
+              
               transition: 'all 0.2s'
             }}
           >
@@ -255,10 +243,7 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
                 Entering Chat...
               </>
             ) : (
-              <>
-                <Sparkles size={18} />
-                Start Chatting 🚀
-              </>
+              'Start Chatting'
             )}
           </button>
         </form>

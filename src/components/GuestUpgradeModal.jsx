@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { signInWithGooglePopup } from '../services/firebaseClient';
+import { authService } from '../services/authService';
 import { GoogleUsernameClaimForm } from './GoogleUsernameClaimForm';
-import { Sparkles, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 export function GuestUpgradeModal() {
   const {
@@ -11,13 +12,12 @@ export function GuestUpgradeModal() {
     upgradeModalReason,
     closeUpgradeModal,
     linkGoogleAccount,
-    firebaseConfigured,
-    performLogout
+    signInToExistingGoogleAccount,
+    firebaseConfigured
   } = useAuth();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [conflictChoice, setConflictChoice] = useState(false);
   const [pendingIdToken, setPendingIdToken] = useState(null);
   const [googleClaim, setGoogleClaim] = useState(null);
   const [claimLoading, setClaimLoading] = useState(false);
@@ -30,7 +30,6 @@ export function GuestUpgradeModal() {
     setPendingIdToken(null);
     setError('');
     setClaimError('');
-    setConflictChoice(false);
     closeUpgradeModal();
   };
 
@@ -44,6 +43,16 @@ export function GuestUpgradeModal() {
     try {
       const fbUser = await signInWithGooglePopup();
       const idToken = await fbUser.getIdToken();
+
+      // Existing profile for this Google account -> sign straight into it, exactly like
+      // the login page does, instead of offering to link (which the backend would reject).
+      const existing = await authService.firebaseSignIn(idToken);
+      if (existing?.status !== 'NEEDS_USERNAME' && existing?.jwt) {
+        await signInToExistingGoogleAccount(existing);
+        handleClose();
+        return;
+      }
+
       setPendingIdToken(idToken);
 
       const baseUsername = user?.name
@@ -58,12 +67,7 @@ export function GuestUpgradeModal() {
         photoUrl: user?.photoUrl || ''
       });
     } catch (err) {
-      const message = err.message || 'Google account linking failed.';
-      if (message.toLowerCase().includes('already has a profile')) {
-        setConflictChoice(true);
-      } else {
-        setError(message);
-      }
+      setError(err.message || 'Google account linking failed.');
     } finally {
       setLoading(false);
     }
@@ -77,11 +81,18 @@ export function GuestUpgradeModal() {
       handleClose();
     } catch (err) {
       const message = err.message || 'Google account linking failed.';
-      if (message.toLowerCase().includes('already has a profile')) {
-        setConflictChoice(true);
-      } else {
-        setClaimError(message);
+      if (message.toLowerCase().includes('already has a profile') && pendingIdToken) {
+        // Race: the profile was created after our check. Sign into it instead.
+        try {
+          const existing = await authService.firebaseSignIn(pendingIdToken);
+          if (existing?.jwt) {
+            await signInToExistingGoogleAccount(existing);
+            handleClose();
+            return;
+          }
+        } catch (e) { /* fall through to the error below */ }
       }
+      setClaimError(message);
     } finally {
       setClaimLoading(false);
     }
@@ -96,8 +107,7 @@ export function GuestUpgradeModal() {
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        backdropFilter: 'blur(8px)',
+        backgroundColor: 'var(--scrim)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -111,13 +121,13 @@ export function GuestUpgradeModal() {
         style={{
           width: '100%',
           maxWidth: '460px',
-          backgroundColor: '#1C1C1E',
-          borderRadius: '24px',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
+          backgroundColor: '#21141f',
+          borderRadius: 'var(--radius-xl)',
+          border: '1px solid var(--border-color)',
           padding: '28px',
-          boxShadow: '0 24px 50px rgba(0, 0, 0, 0.8)',
+          boxShadow: 'var(--shadow-pop)',
           position: 'relative',
-          color: '#ffffff',
+          color: 'var(--text-primary)',
           maxHeight: '90vh',
           overflowY: 'auto'
         }}
@@ -131,15 +141,15 @@ export function GuestUpgradeModal() {
             position: 'absolute',
             top: '20px',
             right: '20px',
-            background: 'rgba(255, 255, 255, 0.08)',
+            background: 'var(--plum-3)',
             border: 'none',
             borderRadius: '50%',
-            width: '36px',
-            height: '36px',
+            width: '44px',
+            height: '44px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#a1a1aa',
+            color: '#c9b6bf',
             cursor: 'pointer',
             transition: 'all 0.2s',
             zIndex: 10
@@ -150,23 +160,11 @@ export function GuestUpgradeModal() {
 
         {/* Header Icon */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '16px',
-            background: 'linear-gradient(135deg, #10b981, #059669)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 8px 16px rgba(16, 185, 129, 0.35)'
-          }}>
-            <Sparkles size={24} color="#ffffff" />
-          </div>
           <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#ffffff' }}>
+            <h2 style={{ fontSize: 'var(--fs-xl)', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
               Create Free Account
             </h2>
-            <p style={{ fontSize: '0.85rem', color: '#34d399', margin: '2px 0 0', fontWeight: 500 }}>
+            <p style={{ fontSize: 'var(--fs-md)', color: 'var(--text-secondary)', margin: '4px 0 0', fontWeight: 500 }}>
               {upgradeModalReason
                 ? (upgradeModalReason.charAt(0).toUpperCase() + upgradeModalReason.slice(1))
                 : 'Save friends & unlock direct messaging!'}
@@ -177,54 +175,18 @@ export function GuestUpgradeModal() {
         {error && (
           <div style={{
             padding: '10px 14px',
-            borderRadius: '10px',
-            backgroundColor: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            color: '#f87171',
-            fontSize: '0.88rem',
+            borderRadius: 'var(--radius-md)',
+            backgroundColor: 'var(--danger-tint)',
+            border: '1px solid var(--danger-line)',
+            color: 'var(--danger)',
+            fontSize: 'var(--fs-md)',
             marginBottom: '16px'
           }}>
             {error}
           </div>
         )}
 
-        {conflictChoice ? (
-          /* CONFLICT: this Google account already has a profile. Offer a clear choice
-             instead of silently dropping the user out of their chat (CONTRACT B1-4). */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <p style={{ fontSize: '0.9rem', color: '#e4e4e7', margin: 0 }}>
-              Your Google account already has a profile in this app. You can open the login
-              screen and sign into it — but that means leaving your <strong>current chat</strong>.
-            </p>
-            <button
-              type="button"
-              id="upgrade-conflict-leave-btn"
-              onClick={() => {
-                handleClose();
-                performLogout();
-              }}
-              style={{
-                padding: '12px', borderRadius: '12px', border: 'none',
-                background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
-                color: '#ffffff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer'
-              }}
-            >
-              Leave chat & open login screen
-            </button>
-            <button
-              type="button"
-              onClick={() => { setConflictChoice(false); setError(''); }}
-              style={{
-                padding: '12px', borderRadius: '12px',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                background: 'rgba(255, 255, 255, 0.06)',
-                color: '#ffffff', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer'
-              }}
-            >
-              Stay in this chat
-            </button>
-          </div>
-        ) : googleClaim ? (
+        {googleClaim ? (
           <GoogleUsernameClaimForm
             suggestion={googleClaim}
             loading={claimLoading}
@@ -234,7 +196,7 @@ export function GuestUpgradeModal() {
           />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <p style={{ fontSize: '0.88rem', color: '#a1a1aa', margin: 0 }}>
+            <p style={{ fontSize: 'var(--fs-md)', color: '#c9b6bf', margin: 0 }}>
               Sign in with Google to create your account — your active chat, messages and friends stay exactly as they are.
             </p>
 
@@ -248,12 +210,12 @@ export function GuestUpgradeModal() {
                 : 'Google sign-in is not configured on this server yet'}
               style={{
                 padding: '14px',
-                borderRadius: '12px',
-                border: 'none',
-                background: (loading || !firebaseConfigured) ? 'rgba(255, 255, 255, 0.15)' : '#ffffff',
-                color: (loading || !firebaseConfigured) ? '#71717a' : '#1f2937',
+                borderRadius: 'var(--radius-md)',
+                border: (loading || !firebaseConfigured) ? '1px solid var(--border-strong)' : '1px solid var(--google-line)',
+                background: (loading || !firebaseConfigured) ? 'var(--plum-3)' : 'var(--google-surface)',
+                color: (loading || !firebaseConfigured) ? 'var(--text-muted)' : 'var(--google-text)',
                 fontWeight: 700,
-                fontSize: '1rem',
+                fontSize: 'var(--fs-base)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -278,13 +240,13 @@ export function GuestUpgradeModal() {
             </button>
 
             {!firebaseConfigured && (
-              <p style={{ fontSize: '0.78rem', color: '#fbbf24', margin: 0 }}>
+              <p style={{ fontSize: '0.78rem', color: '#f07289', margin: 0 }}>
                 Google sign-in is not configured on this server yet. Your guest account still
                 works; ask the admin to set the Firebase configuration to enable upgrades.
               </p>
             )}
 
-            <p style={{ fontSize: '0.75rem', color: '#52525b', margin: 0, textAlign: 'center' }}>
+            <p style={{ fontSize: 'var(--fs-xs)', color: '#a8939e', margin: 0, textAlign: 'center' }}>
               Mid-chat upgrade keeps the conversation alive — nothing is lost.
             </p>
           </div>

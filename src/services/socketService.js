@@ -536,7 +536,7 @@ export class SocketService {
           status: payload.status || 'SENT',
           type: payload.type || 'TEXT',
           timestamp: rawTime,
-          time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
         };
         this.callbacks.onMessageReceived?.(msg);
         this._emitRoom(conversationId, 'onMessage', msg);

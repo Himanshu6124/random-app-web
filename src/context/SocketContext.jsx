@@ -48,7 +48,7 @@ const systemMessage = (text) => ({
   id: 'sys_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
   senderId: 'system',
   text,
-  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 });
 
 export function SocketProvider({ children }) {
@@ -155,7 +155,7 @@ export function SocketProvider({ children }) {
       socketService.subscribeRoom(conversationId);
     }
 
-    setMessages([systemMessage(`You are now connected with ${resolvedName}! Say hi!`)]);
+    setMessages([systemMessage(`You and ${resolvedName} are connected.`)]);
 
     if (soundEnabledRef.current) playChime('match');
   }, []);
@@ -414,7 +414,7 @@ export function SocketProvider({ children }) {
             // The server rejected the content itself, so re-sending it would fail again:
             // this entry carries the reason, not the original text, and offers no retry.
             serverRefused: true,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
           }]);
         },
         onError: (err) => {
@@ -577,7 +577,7 @@ export function SocketProvider({ children }) {
         text: messageText,
         message: messageText,
         status: 'FAILED',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
       }]);
     }
 
@@ -640,7 +640,7 @@ export function SocketProvider({ children }) {
         status: 'FAILED',
         // No retry affordance for media: a text re-send would lose the file.
         serverRefused: true,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
       }]);
     }
     return delivered;

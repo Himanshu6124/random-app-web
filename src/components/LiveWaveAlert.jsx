@@ -28,15 +28,15 @@ export function LiveWaveAlert({ onOpenChat }) {
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 2000,
-        backgroundColor: '#161a35',
-        border: '1px solid rgba(34, 211, 238, 0.45)',
-        boxShadow: '0 16px 36px rgba(0, 0, 0, 0.7), var(--shadow-cyan)',
-        borderRadius: '18px',
+        backgroundColor: '#2a1a27',
+        border: '1px solid rgba(126, 166, 246, 0.45)',
+        boxShadow: 'var(--shadow-pop)',
+        borderRadius: 'var(--radius-bubble)',
         padding: '10px 14px 10px 16px',
         display: 'flex',
         alignItems: 'center',
         gap: '12px',
-        color: '#ffffff',
+        color: 'var(--text-primary)',
         maxWidth: '92vw'
       }}
     >
@@ -46,24 +46,24 @@ export function LiveWaveAlert({ onOpenChat }) {
         borderRadius: '50%',
         overflow: 'hidden',
         flexShrink: 0,
-        backgroundColor: '#0e7490',
+        backgroundColor: 'var(--plum-4)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center'
       }}>
         {liveWave.photoUrl
           ? <img src={liveWave.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          : <Hand size={20} color="#ffffff" />}
+          : <Hand size={20} color="var(--accent)" />}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>{name} waved at you</span>
-        <span style={{ fontSize: '0.8rem', color: '#a3b0c4' }}>They're nearby.</span>
+        <span style={{ fontSize: 'var(--fs-body)', fontWeight: 700 }}>{name} waved at you</span>
+        <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)' }}>They're nearby.</span>
       </div>
       <button
         type="button"
         onClick={() => { const id = liveWave.id; dismissLiveWave(); onOpenChat?.(id); }}
         className="btn-cyan"
-        style={{ padding: '8px 14px', borderRadius: '12px', fontSize: '0.85rem' }}
+        style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: 'var(--fs-md)' }}
       >
         <MessageCircle size={16} />
         <span>Message</span>
@@ -73,9 +73,9 @@ export function LiveWaveAlert({ onOpenChat }) {
         onClick={dismissLiveWave}
         aria-label="Dismiss"
         style={{
-          background: 'rgba(255, 255, 255, 0.1)',
+          background: 'var(--plum-4)',
           border: 'none',
-          color: '#94a3b8',
+          color: 'var(--text-secondary)',
           borderRadius: '50%',
           width: '32px',
           height: '32px',

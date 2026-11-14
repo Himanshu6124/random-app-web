@@ -1,0 +1,561 @@
+/* App shell: header wordmark, match home, selected states, chat header */
+
+/* Header */
+.app-wordmark {
+  font-family: var(--font-main);
+  font-weight: 700;
+  font-size: var(--fs-xl);
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.app-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sub);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.app-status__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.app-count {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-sub);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Match tab */
+.match-home {
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  gap: 32px;
+  max-width: 560px !important;
+  padding-top: 40px !important;
+}
+
+.match-home__title {
+  font-family: var(--font-main);
+  font-weight: 700;
+  font-size: clamp(1.9rem, 6vw, 2.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  text-wrap: balance;
+}
+
+.match-home__lede {
+  margin-top: 12px;
+  font-family: var(--font-sub);
+  font-size: var(--fs-base);
+  line-height: 1.55;
+  color: var(--text-secondary);
+  max-width: 40ch;
+  text-wrap: pretty;
+}
+
+.match-home__action {
+  margin-top: auto;
+}
+
+.match-home__btn {
+  width: 100%;
+  min-height: 56px;
+  font-size: var(--fs-lg) !important;
+  font-weight: 700 !important;
+}
+
+/* Match status line */
+.match-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-sub);
+  font-size: var(--fs-body-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.match-status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.match-status.is-searching { color: var(--text-primary); }
+.match-status.is-searching .match-status__dot {
+  background: var(--accent);
+  animation: statusPulse 1.4s ease-in-out infinite;
+}
+.match-status.is-locked .match-status__dot { background: var(--live); }
+
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .match-status.is-searching .match-status__dot { animation: none; }
+}
+
+/* Selected choice (segmented options, chips): lifted ramp step + rose edge, never a solid rose fill */
+.btn-secondary.is-selected {
+  border: 1.5px solid var(--accent);
+  background: var(--plum-5);
+  color: var(--accent);
+}
+
+/* Desktop: the action sits under the status instead of at the screen's foot */
+@media (min-width: 769px) {
+  .match-home {
+    justify-content: center !important;
+    padding-top: 0 !important;
+  }
+  .match-home__action {
+    margin-top: 0;
+  }
+}
+
+
+/* Desktop header nav: inactive tabs recede; the current tab gets ink text, a plum pill and a rose icon (same as the phone tab bar) */
+.header-nav .btn-secondary {
+  color: var(--text-secondary);
+  border-color: transparent;
+  background: transparent;
+  position: relative;
+}
+.header-nav .btn-secondary:hover {
+  color: var(--text-primary);
+  background: var(--plum-3);
+}
+.header-nav .btn-secondary.is-current {
+  color: var(--text-primary);
+  background: var(--plum-3);
+}
+.header-nav .btn-secondary.is-current svg:first-child {
+  color: var(--accent);
+}
+
+/* Header connection state sits right; ON AIR replaces it while live */
+.app-conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sub);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.app-conn__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.app-conn.is-connecting { color: var(--accent); }
+.app-conn.is-connecting .app-conn__dot { background: var(--accent); }
+
+/* Chat header: long label on wide screens, short on phones */
+.label-short { display: none; }
+
+.chat-tool-btn {
+  color: var(--text-secondary) !important;
+}
+.chat-tool-btn:hover {
+  color: var(--text-primary) !important;
+}
+
+/* Phones: Next keeps a visible label inside the icon-button row */
+@media (max-width: 768px) {
+  .chat-header-actions button#next-stranger-btn,
+  .chat-header-actions button#add-friend-btn {
+    width: auto;
+    padding: 0 12px !important;
+    gap: 6px;
+  }
+}
+@media (max-width: 640px) {
+  .label-long { display: none; }
+  .label-short { display: inline; }
+}
+
+/* Reaction chips: bare muted icons; a fill only on hover/press */
+.reaction-chip {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 6px 8px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.reaction-chip:hover,
+.reaction-chip:active {
+  background: var(--plum-3);
+  color: var(--text-primary);
+}
+
+/* ─── Search stage: the whole Match tab while searching ─── */
+.match-search {
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center;
+  gap: clamp(10px, 3svh, 28px) !important;
+  padding-top: clamp(8px, 2svh, 24px) !important;
+  padding-bottom: 8px !important;
+  min-height: 100%;
+}
+
+/* Your avatar beating lub-dub, with small heart outlines drifting up around it */
+.match-search__stage {
+  position: relative;
+  width: min(64vw, 280px, 32svh);
+  aspect-ratio: 1;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  margin-top: auto;
+}
+
+.match-search__heart {
+  position: absolute;
+  bottom: 18%;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  opacity: 0;
+  animation: heartFloat 5s ease-out infinite;
+}
+
+@keyframes heartFloat {
+  0%   { transform: translateY(0) scale(0.8); opacity: 0; }
+  15%  { opacity: 1; }
+  100% { transform: translateY(-150%) translateY(-90px) scale(1.1); opacity: 0; }
+}
+
+.match-search__avatar {
+  position: relative;
+  width: 40%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--plum-4);
+  color: var(--text-secondary);
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--accent);
+  animation: heartbeat 2.4s ease-in-out infinite;
+}
+.match-search__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* lub-dub */
+@keyframes heartbeat {
+  0%, 40%, 100% { transform: scale(1); }
+  10% { transform: scale(1.06); }
+  20% { transform: scale(0.98); }
+  30% { transform: scale(1.04); }
+}
+
+.match-search__words {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.match-search__phrase {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  font-family: var(--font-main);
+  font-weight: 700;
+  font-size: clamp(1.4rem, min(7.5vw, 4.4svh), 2.75rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  max-width: 16ch;
+  min-height: 2.3em;
+  text-wrap: balance;
+}
+
+.match-search__timer {
+  font-family: var(--font-sub);
+  font-size: var(--fs-body-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.match-search .match-home__action {
+  width: 100%;
+  max-width: 560px;
+}
+
+/* Matched: hearts stop, the avatar settles, gold marks the live moment */
+.match-search.is-locked .match-search__heart { display: none; }
+.match-search.is-locked .match-search__avatar { animation: none; border-color: var(--live); }
+.match-search.is-locked .match-search__timer { color: var(--live); }
+
+@media (prefers-reduced-motion: reduce) {
+  .match-search__heart { display: none; }
+  .match-search__avatar { animation: none; }
+}
+
+/* Search headline: each phrase rises in word by word, then gives way to the next */
+.search-phrase__word {
+  display: inline-block;
+  white-space: pre;
+  opacity: 0.35;
+  animation: wordRise 0.6s var(--ease-out) forwards;
+}
+
+@keyframes wordRise {
+  from {
+    opacity: 0.35;
+    transform: translateY(0.2em);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-phrase__word {
+    opacity: 1;
+    animation: none;
+  }
+}
+
+/* Phones: Add Friend is the add-person icon (+ lock for guests); the name keeps its room */
+@media (max-width: 640px) {
+  .chat-header-actions button#add-friend-btn span.label-short {
+    display: none;
+  }
+}
+
+/* ─── Phones: touch-sized controls, full-width content, readable tab labels ─── */
+@media (max-width: 768px) {
+  #header-upgrade-btn { min-height: 44px; }
+  #profile-upgrade-btn { min-height: 44px; }
+  .profile-card button[type="button"] { min-height: 44px; }
+  .reaction-chip { min-width: 40px; min-height: 40px; }
+  .tabbar-label { font-size: 0.75rem !important; }
+
+  /* Profile fills the screen instead of floating as a card inside margins */
+  .profile-card {
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 16px !important;
+  }
+}
+
+/* Chat: a quiet romantic moment before the first message */
+.chat-intro {
+  order: 1;
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 24px 16px;
+}
+.chat-intro__heart {
+  width: 44px;
+  height: 44px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  margin-bottom: 8px;
+  animation: heartbeat 2.4s ease-in-out infinite;
+}
+.chat-intro__title {
+  font-family: var(--font-main);
+  font-weight: 600;
+  font-size: var(--fs-xl);
+  color: var(--text-primary);
+  text-wrap: balance;
+}
+.chat-intro__hint {
+  font-family: var(--font-sub);
+  font-size: var(--fs-body-sm);
+  color: var(--text-secondary);
+  max-width: 30ch;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-intro__heart { animation: none; }
+}
+
+/* Desktop: the search stage is one compact centred group, not spread over the window */
+@media (min-width: 769px) {
+  .match-search {
+    min-height: 0 !important;
+    max-height: 600px;
+    margin: auto !important;
+    justify-content: center !important;
+  }
+  .match-search__stage {
+    margin-top: 0;
+    width: 240px;
+  }
+  .match-search .match-home__action {
+    max-width: 420px;
+  }
+}
+
+/* Desktop chat: keep the conversation close together, not at the window's edges */
+@media (min-width: 769px) {
+  .chat-feed {
+    padding-left: max(20px, calc((100% - 720px) / 2)) !important;
+    padding-right: max(20px, calc((100% - 720px) / 2)) !important;
+  }
+}
+
+/* ─── Moments: small rewarding motion, never looping on its own outside search ─── */
+
+/* Heart burst: eight hearts fly outward once */
+.heart-burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+}
+.heart-burst svg {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  opacity: 0;
+  animation: heartBurst 0.7s var(--ease-out) forwards;
+}
+.heart-burst--big svg {
+  width: 22px;
+  height: 22px;
+  animation-duration: 0.9s;
+}
+@keyframes heartBurst {
+  0%   { opacity: 1; transform: rotate(var(--a)) translateY(0) rotate(calc(-1 * var(--a))) scale(0.4); }
+  70%  { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--a)) translateY(-90px) rotate(calc(-1 * var(--a))) scale(1); }
+}
+.heart-burst--big svg {
+  animation-name: heartBurstBig;
+}
+@keyframes heartBurstBig {
+  0%   { opacity: 1; transform: rotate(var(--a)) translateY(0) rotate(calc(-1 * var(--a))) scale(0.4); }
+  70%  { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--a)) translateY(-150px) rotate(calc(-1 * var(--a))) scale(1.1); }
+}
+
+.find-match-btn {
+  position: relative;
+  overflow: visible;
+}
+.find-match-btn:active {
+  transform: scale(0.96);
+}
+
+/* The match locks: the avatar pops before the chat slides in */
+.match-search.is-locked .match-search__avatar {
+  animation: matchPop 0.5s var(--ease-out) both;
+}
+@keyframes matchPop {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.18); }
+  100% { transform: scale(1.08); }
+}
+
+/* Message bubbles pop in from their own side */
+.bubble-in {
+  animation: bubbleIn 0.32s var(--ease-out) both;
+}
+.bubble-in--me   { transform-origin: bottom right; }
+.bubble-in--them { transform-origin: bottom left; }
+.bubble-in--me > div:first-child   { transform-origin: bottom right; }
+@keyframes bubbleIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.92); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Send: the plane nudges forward on press */
+.send-btn svg {
+  transition: transform 0.2s var(--ease-out);
+}
+.send-btn:active svg {
+  transform: translate(3px, -3px) rotate(8deg);
+}
+
+/* Reactions: a springy tap */
+.reaction-chip:active svg {
+  animation: reactPop 0.35s var(--ease-out);
+}
+@keyframes reactPop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.35); color: var(--accent); }
+  100% { transform: scale(1); }
+}
+
+/* Tab bar: the newly tapped icon settles in once */
+.tabbar-item.just-tapped .tabbar-icon svg {
+  animation: tabSettle 0.38s var(--ease-out);
+}
+@keyframes tabSettle {
+  from { transform: scale(0.86); }
+  to   { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heart-burst,
+  .match-search.is-locked .match-search__avatar,
+  .bubble-in,
+  .reaction-chip:active svg,
+  .tabbar-item.just-tapped .tabbar-icon svg {
+    animation: none !important;
+  }
+  .heart-burst { display: none; }
+  .send-btn svg { transition: none; }
+}
+
+/* Desktop search: a bigger avatar fills its stage */
+@media (min-width: 769px) {
+  .match-search__stage { width: 200px; }
+  .match-search__avatar { width: 58%; }
+}
+
+/* Desktop: every phrase fits on one line, so no second line is reserved */
+@media (min-width: 769px) {
+  .match-search__phrase { max-width: none; min-height: 1.15em; white-space: nowrap; }
+}

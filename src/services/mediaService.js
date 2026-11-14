@@ -105,8 +105,18 @@ export async function prepareImage(file) {
  * Rejects when mic permission is denied or MediaRecorder is unavailable.
  */
 export function startVoiceRecording() {
-  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-    return Promise.reject(new Error('Voice recording is not supported in this browser.'));
+  if (typeof window !== 'undefined' && window.isSecureContext === false) {
+    return Promise.reject(
+      new Error('Voice recording requires a secure connection (HTTPS or localhost). Microphone access is blocked over plain HTTP.')
+    );
+  }
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return Promise.reject(new Error('Microphone access (navigator.mediaDevices) is not supported in this browser.'));
+  }
+
+  if (typeof MediaRecorder === 'undefined') {
+    return Promise.reject(new Error('MediaRecorder is not supported in this browser.'));
   }
 
   return navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {

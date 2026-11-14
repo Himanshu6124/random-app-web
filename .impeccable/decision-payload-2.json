@@ -1,0 +1,63 @@
+{
+  "title": "Choose RandoMeet's love-themed world",
+  "question": "The roll assigned Moonflower. Keep it, take Love Letters, or re-roll. Fonts stay Outfit + Plus Jakarta Sans.",
+  "options": [
+    {
+      "id": "assigned",
+      "kind": "assigned",
+      "label": "Moonflower",
+      "kicker": "THE ROLL",
+      "lineage": "night-blooming gardens: flowers that open only after dark",
+      "thesis": "Some things only open at night. A stranger, a bud, and maybe a bloom by morning.",
+      "palette": ["#1a1022", "#2a1934", "#f07a8a", "#e9c46a", "#f3ece6"],
+      "materials": ["deep plum night", "moon-petal ivory text", "rose action", "jasmine gold for live"],
+      "viewport": "Match tab: plum night ground, a single line-drawn moonflower bud centred; while searching its petals slowly open; when a stranger is found it blooms and the chat slides in. Rose 'Find a Match' pill in thumb reach.",
+      "risk": "Flowers can turn cute or wellness-app soft; the bloom must stay a fine line drawing, never an emoji or a pastel illustration.",
+      "raised": [
+        {"from": "challenger-zoo", "raise": "One dominant shape per screen: the bloom owns the Match tab; nothing competes with it."},
+        {"from": "challenger-saville", "raise": "Vast quiet ground: the plum night stays mostly empty; restraint carries the intimacy."},
+        {"from": "challenger-annual", "raise": "Every divider is a 1px hairline; no cards inside cards."},
+        {"from": "challenger-timetable", "raise": "Rank by weight and case before size: few type sizes, clear steps."},
+        {"from": "challenger-wallet", "raise": "Nothing vanishes: ended chats stay visible in history, marked, not deleted."},
+        {"from": "challenger-splitflap", "raise": "State changes happen in place (the same bud opens); no screen swaps for status."}
+      ],
+      "html": ".impeccable/mocks/decision/love-assigned.html",
+      "htmlFrame": "390x844"
+    },
+    {
+      "id": "model-pick",
+      "kind": "pick",
+      "label": "Love Letters",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "handwritten letters sealed with wax",
+      "thesis": "Every match is a letter from someone you haven't met yet.",
+      "palette": ["#141a2e", "#1f2742", "#c8414b", "#efe6d8", "#b9b3a8"],
+      "materials": ["midnight-ink envelope", "wax-seal red", "letter-paper ivory text"],
+      "viewport": "Match tab: a sealed midnight envelope; searching, the wax seal pulses; matched, the seal breaks and the chat unfolds like a letter.",
+      "risk": "Familiar: paper-and-wax romance is a well-worn look and can drift toward cream stationery.",
+      "html": ".impeccable/mocks/decision/love-pick.html",
+      "htmlFrame": "390x844"
+    },
+    {"id": "challenger-zoo", "kind": "challenger", "catalogId": "aww2-zoo-gardens-guide-map", "label": "Zoo Gardens Guide Map", "verdict": "declined", "lineage": "illustrated garden guide maps", "thesis": "Flat colour lobes divided by coastline.", "palette": ["#8ED462", "#F5F1E4", "#FF705D", "#2C2E2A"], "materials": ["flat colour", "SVG coast"], "viewport": "One swelling lobe per screen.", "case": "Bright and playful: reads childish for warm late-night romance.", "risk": "Childish.", "kept": "One dominant shape owns each screen.", "hero": "https://impeccable.style/worlds/cards/aww2-zoo-gardens-guide-map-hero.webp"},
+    {"id": "challenger-saville", "kind": "challenger", "catalogId": "brand-identity-canon-saville-catalog-sleeve", "label": "Factory Catalog Sleeve", "verdict": "declined", "lineage": "Factory Records sleeves", "thesis": "Coded colour strips on matte black.", "palette": ["#0b0b0b", "#ffffff", "#e63946"], "materials": ["matte black", "pulse lines"], "viewport": "One pulsar plot.", "case": "Cryptic and cold; hides names people need to read.", "risk": "Cold.", "kept": "Vast quiet ground; restraint.", "hero": "https://impeccable.style/worlds/cards/brand-identity-canon-saville-catalog-sleeve-hero.webp"},
+    {"id": "challenger-annual", "kind": "challenger", "catalogId": "design-annual-s-plate-section", "label": "Design Annual Plates", "verdict": "declined", "lineage": "design annual plate sections", "thesis": "Registration marks on near-white stock.", "palette": ["#F5F4F6", "#16181A", "#DCDDF3"], "materials": ["uncoated stock", "crosshairs"], "viewport": "Plates on a sheet.", "case": "Gallery-white and corporate; wrong for 2am in bed.", "risk": "Corporate.", "kept": "1px hairlines everywhere.", "hero": "https://impeccable.style/worlds/cards/design-annual-s-plate-section-hero.webp"},
+    {"id": "challenger-timetable", "kind": "challenger", "catalogId": "rw-timetable-slide-rack", "label": "Timetable Slide Rack", "verdict": "declined", "lineage": "airline pocket timetables", "thesis": "One type size, raked glass slides.", "palette": ["#d9a521", "#1c1c1c", "#e34a2f", "#f3ecd8"], "materials": ["goldenrod bed", "tinted glass"], "viewport": "Raked slides.", "case": "Schedule logic, not intimacy.", "risk": "Cryptic.", "kept": "Rank by weight and case.", "hero": "https://impeccable.style/worlds/cards/rw-timetable-slide-rack-hero.webp"},
+    {"id": "challenger-wallet", "kind": "challenger", "catalogId": "vernacular-ephemera-jet-age-ticket-wallet", "label": "Jet-Age Ticket Wallet", "verdict": "declined", "lineage": "airline ticket wallets", "thesis": "Coupons for one journey.", "palette": ["#13294b", "#c8102e", "#ffffff", "#5b2a86"], "materials": ["coupon stock", "carbon numerals"], "viewport": "Coupon book.", "case": "Travel bureaucracy, not romance.", "risk": "Official.", "kept": "Nothing disappears; ended states stay visible.", "hero": "https://impeccable.style/worlds/cards/vernacular-ephemera-jet-age-ticket-wallet-hero.webp"},
+    {"id": "challenger-splitflap", "kind": "challenger", "catalogId": "signals-instruments-split-flap-concourse", "label": "Split-Flap Concourse", "verdict": "declined", "lineage": "station departure boards", "thesis": "Flaps cascading in place.", "palette": ["#111111", "#ffffff", "#f2a900"], "materials": ["flap faces", "steel"], "viewport": "Departure board.", "case": "Public and loud; the opposite of intimate.", "risk": "Cold.", "kept": "State changes in place.", "hero": "https://impeccable.style/worlds/cards/signals-instruments-split-flap-concourse-hero.webp"}
+  ],
+  "reroll": {"registers": ["safer", "bolder"]},
+  "buildPath": {"value": "code"},
+  "canon": true,
+  "canonCard": {
+    "kind": "canon",
+    "label": "The category standard",
+    "thesis": "A mainstream dating app look, executed impeccably.",
+    "palette": ["#ffffff", "#fd5068", "#ff7854", "#21262e"],
+    "materials": ["white cards", "coral-pink accent", "big photos"],
+    "viewport": "White screen, big profile card, coral heart button.",
+    "risk": "Looks like every dating app, and reads swipe-first rather than chat-first.",
+    "html": ".impeccable/mocks/decision/love-canon.html",
+    "htmlFrame": "390x844"
+  },
+  "steer": true
+}

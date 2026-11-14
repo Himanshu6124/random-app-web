@@ -158,7 +158,7 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
       {uploading && (
-        <span id="media-upload-progress" style={{ fontSize: '0.75rem', color: 'var(--cyan-accent)', whiteSpace: 'nowrap' }}>
+        <span id="media-upload-progress" style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
           {progress}%
         </span>
       )}
@@ -166,11 +166,11 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
       {recording ? (
         <>
           <span id="voice-recording-timer" style={{
-            fontSize: '0.82rem', color: '#ef4444', fontWeight: 700, whiteSpace: 'nowrap',
+            fontSize: 'var(--fs-sm)', color: 'var(--danger)', fontWeight: 700, whiteSpace: 'nowrap',
             display: 'flex', alignItems: 'center', gap: '6px'
           }}>
             <span style={{
-              width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444',
+              width: '8px', height: '8px', borderRadius: '50%', background: 'var(--danger-fill)',
               display: 'inline-block'
             }} />
             {formatMs(elapsed)}
@@ -184,17 +184,17 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
             style={{ ...btnStyle, cursor: 'pointer' }}
             title="Discard recording"
           >
-            <X size={18} color="#ef4444" />
+            <X size={18} color="#e5484d" />
           </button>
           <button
             type="button"
             id="voice-stop-btn"
             onClick={handleStopRecording}
             disabled={disabled}
-            style={{ ...btnStyle, cursor: 'pointer', borderColor: '#ef4444' }}
+            style={{ ...btnStyle, cursor: 'pointer', borderColor: 'var(--danger-line)' }}
             title="Send voice note"
           >
-            <Square size={16} color="#ef4444" fill="#ef4444" />
+            <Square size={16} color="#e5484d" fill="#e5484d" />
           </button>
         </>
       ) : (
@@ -214,7 +214,7 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
             style={{ ...btnStyle, opacity: (disabled || busy) ? 0.5 : 1, cursor: (disabled || busy) ? 'not-allowed' : 'pointer' }}
             title="Send an image"
           >
-            <ImageIcon size={18} color="var(--cyan-accent)" />
+            <ImageIcon size={18} color="var(--text-secondary)" />
           </button>
           <button
             type="button"
@@ -224,7 +224,7 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
             style={{ ...btnStyle, opacity: (disabled || busy) ? 0.5 : 1, cursor: (disabled || busy) ? 'not-allowed' : 'pointer' }}
             title="Record a voice note (max 2 min)"
           >
-            <Mic size={18} color="#a5b4fc" />
+            <Mic size={18} color="var(--text-secondary)" />
           </button>
         </>
       )}

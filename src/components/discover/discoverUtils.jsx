@@ -1,6 +1,6 @@
 import React from 'react';
 
-const AVATAR_COLORS = ['#7c3aed', '#0e7490', '#be185d', '#047857', '#b45309', '#4f46e5', '#be123c'];
+const AVATAR_COLORS = ['#9a6a1c', '#3f63b8', '#a64d66', '#2b7d59', '#6f55a8', '#a8543a', '#3f6f80'];
 
 export function initialsOf(name = '') {
   const parts = String(name).trim().split(/\s+/).filter(Boolean);

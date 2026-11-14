@@ -1,0 +1,93 @@
+{
+  "title": "Choose RandoMeet's love-themed world",
+  "question": "Fresh hand. The roll assigned String Lights. Keep it, take an alternate, or re-roll again. Fonts stay Outfit + Plus Jakarta Sans.",
+  "options": [
+    {
+      "id": "assigned",
+      "kind": "assigned",
+      "label": "String Lights",
+      "kicker": "THE ROLL",
+      "lineage": "a bedroom wall at night: photos pinned along a string of warm fairy lights",
+      "thesis": "The people you keep end up on your wall. Every match is a new light on the string.",
+      "palette": ["#1c1018", "#2a1824", "#f2b880", "#e86a6a", "#f4ebe4"],
+      "materials": ["deep wine-dark wall", "warm bulb dots (flat, no glow)", "photo frames with white borders"],
+      "viewport": "Match tab: a thin string drapes across the top third with small warm bulbs; while searching the bulbs light one by one along the string; when matched a new photo frame clips onto it. Warm coral 'Find a Match' pill in thumb reach.",
+      "risk": "Fairy lights can tip into cosy-cute or a lamplight glow; bulbs stay flat dots and frames stay crisp.",
+      "raised": [
+        {"from": "challenger-specimen", "raise": "No ornament beyond the string: flat surfaces and generous empty wall."},
+        {"from": "challenger-manual", "raise": "Each tab owns one hue on its section header only (Match, Friends, Discover), never splashed across content."},
+        {"from": "challenger-airport", "raise": "The action colour is reserved for actions and nothing else."},
+        {"from": "challenger-boarding", "raise": "One alert colour, used only when something changes (new message, request)."}
+      ],
+      "html": ".impeccable/mocks/decision/love2-assigned.html",
+      "htmlFrame": "390x844"
+    },
+    {
+      "id": "model-pick",
+      "kind": "pick",
+      "label": "Late-Night Cinema",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "a late show for two: velvet seats, the screen's light on faces",
+      "thesis": "Two strangers in the dark, sharing the same screen.",
+      "palette": ["#140d12", "#2b1220", "#8e1b33", "#e8c27a", "#f1e9e2"],
+      "materials": ["velvet wine", "projector-white text", "brass gold for live"],
+      "viewport": "Match tab: a wide 'screen' rectangle at the top; searching, a countdown leader runs on it; matched, the screen lights with the stranger's name like an opening title.",
+      "risk": "Familiar: wine-and-gold reads like many date-night brands.",
+      "html": ".impeccable/mocks/decision/love2-pick.html",
+      "htmlFrame": "390x844"
+    },
+    {
+      "id": "challenger-stars",
+      "kind": "challenger",
+      "catalogId": "notation-diagram-systems-star-atlas",
+      "label": "Star Atlas",
+      "verdict": "competitive",
+      "lineage": "celestial star charts",
+      "thesis": "Everyone you meet is a star; the ones you keep draw your constellation.",
+      "palette": ["#0e1430", "#1a2350", "#f4efe6", "#e46a5a", "#d9b56a"],
+      "materials": ["deep chart blue", "chalk-white stars", "red-flashlight ring for the live one"],
+      "viewport": "Match tab: a quiet star field; searching, faint stars twinkle; matched, a line draws from your star to theirs.",
+      "case": "Stargazing is romantic and widely loved; loses some clarity because a chart is abstract for chat.",
+      "risk": "Blue night ground sits close to the radio theme you moved away from.",
+      "html": ".impeccable/mocks/decision/love2-stars.html",
+      "htmlFrame": "390x844",
+      "hero": "https://impeccable.style/worlds/cards/notation-diagram-systems-star-atlas-hero.webp"
+    },
+    {
+      "id": "challenger-warm",
+      "kind": "challenger",
+      "catalogId": "digital-design-canon-warm-consumer-app-surface",
+      "label": "Warm Consumer App",
+      "verdict": "competitive",
+      "lineage": "friendly consumer app surfaces",
+      "thesis": "Soft, warm and obvious: every control says plainly what it does.",
+      "palette": ["#f6efe9", "#ffffff", "#e2536b", "#2b2228"],
+      "materials": ["warm tinted ground", "white soft cards", "one rose action colour"],
+      "viewport": "Match tab: warm light ground, one large friendly card with your avatar, rose 'Find a Match' button.",
+      "case": "Very clear to use; weaker on romance and on the late-night-in-bed scene (it is a light theme).",
+      "risk": "Generic and bright at 2am.",
+      "html": ".impeccable/mocks/decision/love2-warm.html",
+      "htmlFrame": "390x844",
+      "hero": "https://impeccable.style/worlds/cards/digital-design-canon-warm-consumer-app-surface-hero.webp"
+    },
+    {"id": "challenger-specimen", "kind": "challenger", "catalogId": "variable-font-specimen", "label": "Variable Font Specimen", "verdict": "declined", "lineage": "type specimens", "thesis": "Glyph grids that morph.", "palette": ["#f7f6f2", "#111111", "#ff4d00"], "materials": ["paper", "ink"], "viewport": "Glyph grid.", "case": "About letterforms, not people; conflicts with pinned fonts.", "risk": "Cold.", "kept": "No ornament; flat surfaces.", "hero": "https://impeccable.style/worlds/cards/variable-font-specimen-hero.webp"},
+    {"id": "challenger-manual", "kind": "challenger", "catalogId": "rw-manual-acetate-tab-board", "label": "Acetate Tab Manual", "verdict": "declined", "lineage": "software reference manuals", "thesis": "Hue-coded tabbed sections.", "palette": ["#e2662b", "#f3cf2a", "#3a9a52", "#f2f0ea"], "materials": ["acetate", "divider board"], "viewport": "Tabbed manual.", "case": "Technical manual tone; wrong for romance.", "risk": "Corporate.", "kept": "One hue per section, on headers only.", "hero": "https://impeccable.style/worlds/cards/rw-manual-acetate-tab-board-hero.webp"},
+    {"id": "challenger-airport", "kind": "challenger", "catalogId": "wayfinding-cartography-signage-terminal-yellow-wayfinding", "label": "Airport Yellow Signs", "verdict": "declined", "lineage": "airport wayfinding", "thesis": "Yellow overhead bands.", "palette": ["#ffcc00", "#111111", "#ffffff"], "materials": ["sign panels"], "viewport": "Overhead bands.", "case": "Loud public signage; the opposite of intimate.", "risk": "Loud.", "kept": "Action colour reserved for action only.", "hero": "https://impeccable.style/worlds/cards/wayfinding-cartography-signage-terminal-yellow-wayfinding-hero.webp"},
+    {"id": "challenger-boarding", "kind": "challenger", "catalogId": "vernacular-ephemera-boarding-pass-and-gate-board", "label": "Boarding Pass & Gate Board", "verdict": "declined", "lineage": "boarding passes", "thesis": "Segmented passes, live gate board.", "palette": ["#ffffff", "#111111", "#e5484d"], "materials": ["neutral panels", "mono block"], "viewport": "Pass + board.", "case": "Travel logistics, not romance.", "risk": "Cold.", "kept": "One alert colour for changes only.", "hero": "https://impeccable.style/worlds/cards/vernacular-ephemera-boarding-pass-and-gate-board-hero.webp"}
+  ],
+  "reroll": {"registers": ["safer", "bolder"]},
+  "buildPath": {"value": "code"},
+  "canon": true,
+  "canonCard": {
+    "kind": "canon",
+    "label": "The category standard",
+    "thesis": "A mainstream dating app look, executed impeccably.",
+    "palette": ["#ffffff", "#fd5068", "#ff7854", "#21262e"],
+    "materials": ["white cards", "coral-pink accent", "big photos"],
+    "viewport": "White screen, big profile card, coral heart button.",
+    "risk": "Looks like every dating app, and reads swipe-first rather than chat-first.",
+    "html": ".impeccable/mocks/decision/love2-canon.html",
+    "htmlFrame": "390x844"
+  },
+  "steer": true
+}

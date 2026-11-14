@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth, INTEREST_TAGS } from '../context/AuthContext';
-import { User, Sparkles, Check, Save, Key, Lock, AlertCircle, Download } from 'lucide-react';
+import { User, Check, Save, Lock, AlertCircle, Download, UserRound } from 'lucide-react';
 
 export function ProfileView() {
-  const { user, isGuest, updateUserProfile, jwtToken, logout, profilePictures, openUpgradeModal } = useAuth();
+  const { user, isGuest, updateUserProfile, logout, profilePictures, openUpgradeModal } = useAuth();
 
   const [username, setUsername] = useState(user?.username || '');
   const [name, setName] = useState(user?.name || user?.username || '');
@@ -104,20 +104,17 @@ export function ProfileView() {
     }}>
       <div className="glass-panel profile-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-          <User size={26} color="var(--primary-purple)" />
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 700 }}>My Profile</h2>
+          <h2 style={{ fontSize: 'var(--fs-2xl)', fontWeight: 700 }}>My Profile</h2>
           {isGuest && (
             <span style={{
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              backgroundColor: 'rgba(99, 102, 241, 0.2)',
-              color: '#a5b4fc',
-              border: '1px solid rgba(99, 102, 241, 0.4)',
-              padding: '3px 8px',
-              borderRadius: '8px',
-              textTransform: 'uppercase'
+              fontSize: 'var(--fs-xs)',
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-strong)',
+              padding: '2px 8px',
+              borderRadius: 'var(--radius-sm)'
             }}>
-              Guest Session
+              Guest
             </span>
           )}
         </div>
@@ -125,9 +122,9 @@ export function ProfileView() {
         {isGuest && (
           <div style={{
             padding: '14px 18px',
-            borderRadius: '16px',
-            backgroundColor: 'rgba(99, 102, 241, 0.12)',
-            border: '1px solid rgba(99, 102, 241, 0.3)',
+            borderRadius: 'var(--radius-lg)',
+            backgroundColor: 'rgba(240, 114, 137, 0.12)',
+            border: '1px solid rgba(240, 114, 137, 0.3)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -136,10 +133,9 @@ export function ProfileView() {
             flexWrap: 'wrap'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Sparkles size={20} color="#a5b4fc" />
               <div>
-                <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.92rem' }}>Temporary Guest Account</div>
-                <div style={{ color: '#a1a1aa', fontSize: '0.8rem' }}>Create a permanent account to keep friends and custom details.</div>
+                <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.92rem' }}>Temporary Guest Account</div>
+                <div style={{ color: '#c9b6bf', fontSize: 'var(--fs-sm)' }}>Create a permanent account to keep friends and custom details.</div>
               </div>
             </div>
             <button
@@ -148,14 +144,13 @@ export function ProfileView() {
               onClick={() => openUpgradeModal('save your profile & friends')}
               style={{
                 padding: '8px 16px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                color: '#ffffff',
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--accent)',
+                color: 'var(--accent-ink)',
                 border: 'none',
                 fontWeight: 700,
-                fontSize: '0.85rem',
+                fontSize: 'var(--fs-md)',
                 cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
                 whiteSpace: 'nowrap'
               }}
             >
@@ -176,29 +171,28 @@ export function ProfileView() {
               width: '100px',
               height: '100px',
               borderRadius: '50%',
-              backgroundColor: '#8b5cf6',
+              backgroundColor: 'var(--plum-4)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '3rem',
-              boxShadow: 'var(--shadow-glow)',
+              fontSize: 'var(--fs-3xl)',
               marginBottom: '16px',
               overflow: 'hidden'
             }}>
               {avatar ? (
                 <img src={avatar} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
               ) : (
-                '👤'
+                <UserRound size={18} aria-hidden="true" />
               )}
             </div>
             
             {/* Avatar Selector Grid */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: '10px' }}>
-              <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              <label style={{ fontSize: 'var(--fs-md)', color: 'var(--text-muted)' }}>
                 {isGuest ? 'Guest Avatar:' : `Choose ${currentGender === 'girl' ? 'Female' : 'Male'} Avatar:`}
               </label>
               {isGuest && (
-                <span style={{ fontSize: '0.75rem', color: '#a5b4fc', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Lock size={12} /> Auto-assigned by gender
                 </span>
               )}
@@ -211,9 +205,9 @@ export function ProfileView() {
                 style={{
                   width: '100%',
                   padding: '14px 18px',
-                  borderRadius: '12px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px dashed rgba(255, 255, 255, 0.2)',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: 'var(--plum-3)',
+                  border: '1px dashed var(--border-strong)',
                   textAlign: 'center',
                   cursor: 'pointer',
                   display: 'flex',
@@ -223,7 +217,7 @@ export function ProfileView() {
                   transition: 'background 0.2s ease'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#a5b4fc', fontSize: '0.88rem', fontWeight: 600 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)', fontSize: 'var(--fs-md)', fontWeight: 600 }}>
                   <Lock size={16} />
                   <span>Avatar Selection Locked</span>
                 </div>
@@ -243,11 +237,11 @@ export function ProfileView() {
                       height: '48px',
                       borderRadius: '50%',
                       overflow: 'hidden',
-                      border: avatar === picUrl ? '3px solid #10b981' : '1px solid transparent',
+                      border: avatar === picUrl ? '3px solid #3fb27f' : '1px solid transparent',
                       cursor: 'pointer',
                       padding: 0,
                       transition: 'all 0.2s ease',
-                      boxShadow: avatar === picUrl ? '0 0 15px rgba(16, 185, 129, 0.6)' : 'none'
+                      boxShadow: avatar === picUrl ? '0 0 0 2px var(--accent)' : 'none'
                     }}
                   >
                     <img src={picUrl} alt={`Avatar ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
@@ -263,11 +257,11 @@ export function ProfileView() {
             onClick={() => { if (isGuest) openUpgradeModal('customize your username'); }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              <label style={{ fontSize: 'var(--fs-md)', color: 'var(--text-secondary)' }}>
                 Username (@):
               </label>
               {isGuest && (
-                <span style={{ fontSize: '0.75rem', color: '#a5b4fc', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
                   <Lock size={12} /> Upgrade to customize
                 </span>
               )}
@@ -288,8 +282,8 @@ export function ProfileView() {
                 borderRadius: 'var(--radius-md)',
                 background: isGuest ? 'rgba(255, 255, 255, 0.05)' : 'var(--bg-input)',
                 border: '1px solid var(--border-color)',
-                color: isGuest ? 'var(--text-muted)' : 'white',
-                fontSize: '0.95rem',
+                color: isGuest ? 'var(--text-muted)' : 'var(--text-primary)',
+                fontSize: 'var(--fs-body)',
                 outline: 'none',
                 cursor: isGuest ? 'pointer' : 'text'
               }}
@@ -298,7 +292,7 @@ export function ProfileView() {
 
           {/* Display Name */}
           <div style={{ marginBottom: '20px' }}>
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', display: 'block' }}>
+            <label style={{ fontSize: 'var(--fs-md)', color: 'var(--text-secondary)', marginBottom: '8px', display: 'block' }}>
               Display Name:
             </label>
             <input
@@ -314,8 +308,8 @@ export function ProfileView() {
                 borderRadius: 'var(--radius-md)',
                 background: 'var(--bg-input)',
                 border: '1px solid var(--border-color)',
-                color: 'white',
-                fontSize: '0.95rem',
+                color: 'var(--text-primary)',
+                fontSize: 'var(--fs-body)',
                 outline: 'none'
               }}
             />
@@ -323,7 +317,7 @@ export function ProfileView() {
 
           {/* Gender */}
           <div style={{ marginBottom: '20px' }}>
-            <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px', display: 'block' }}>
+            <label style={{ fontSize: 'var(--fs-md)', color: 'var(--text-secondary)', marginBottom: '8px', display: 'block' }}>
               Gender:
             </label>
             <div style={{ display: 'flex', gap: '10px' }}>
@@ -333,10 +327,10 @@ export function ProfileView() {
                   id={`gender-select-${g}`}
                   type="button"
                   onClick={() => handleGenderChange(g)}
-                  className={currentGender === g ? 'btn-primary' : 'btn-secondary'}
-                  style={{ flex: 1, padding: '10px', fontSize: '0.85rem', textTransform: 'capitalize' }}
+                  className={currentGender === g ? 'btn-secondary is-selected' : 'btn-secondary'}
+                  style={{ flex: 1, padding: '10px', fontSize: 'var(--fs-md)', textTransform: 'capitalize' }}
                 >
-                  {g === 'boy' ? '👦 Male (Boy)' : '👧 Female (Girl)'}
+                  {g === 'boy' ? 'Male (Boy)' : 'Female (Girl)'}
                 </button>
               ))}
             </div>
@@ -348,11 +342,11 @@ export function ProfileView() {
             onClick={() => { if (isGuest) openUpgradeModal('add a custom bio'); }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              <label style={{ fontSize: 'var(--fs-md)', color: 'var(--text-secondary)' }}>
                 Bio:
               </label>
               {isGuest && (
-                <span style={{ fontSize: '0.75rem', color: '#a5b4fc', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
                   <Lock size={12} /> Upgrade to customize
                 </span>
               )}
@@ -370,8 +364,8 @@ export function ProfileView() {
                 borderRadius: 'var(--radius-md)',
                 background: isGuest ? 'rgba(255, 255, 255, 0.03)' : 'var(--bg-input)',
                 border: '1px solid var(--border-color)',
-                color: isGuest ? 'var(--text-muted)' : 'white',
-                fontSize: '0.95rem',
+                color: isGuest ? 'var(--text-muted)' : 'var(--text-primary)',
+                fontSize: 'var(--fs-body)',
                 outline: 'none',
                 resize: 'none',
                 fontFamily: 'var(--font-main)',
@@ -386,11 +380,11 @@ export function ProfileView() {
             onClick={() => { if (isGuest) openUpgradeModal('select personal interests'); }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              <label style={{ fontSize: 'var(--fs-md)', color: 'var(--text-secondary)' }}>
                 Favorite Topics:
               </label>
               {isGuest && (
-                <span style={{ fontSize: '0.75rem', color: '#a5b4fc', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
                   <Lock size={12} /> Upgrade to choose
                 </span>
               )}
@@ -407,17 +401,17 @@ export function ProfileView() {
                     style={{
                       padding: '6px 14px',
                       borderRadius: 'var(--radius-full)',
-                      border: isSelected ? '1px solid var(--cyan-accent)' : '1px solid var(--border-color)',
-                      background: isSelected ? 'rgba(6, 182, 212, 0.2)' : 'rgba(255,255,255,0.04)',
-                      color: isSelected ? '#ffffff' : 'var(--text-secondary)',
-                      fontSize: '0.85rem',
+                      border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border-color)',
+                      background: isSelected ? 'var(--accent-tint)' : 'transparent',
+                      color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      fontSize: 'var(--fs-md)',
                       cursor: isGuest ? 'pointer' : 'pointer',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '4px'
                     }}
                   >
-                    {isSelected && <Sparkles size={12} color="var(--cyan-accent)" />}
+                    {isSelected && <Check size={12} aria-hidden="true" />}
                     {tag}
                   </button>
                 );
@@ -428,11 +422,11 @@ export function ProfileView() {
           {saveError && (
             <div style={{
               padding: '12px 16px',
-              borderRadius: '10px',
-              backgroundColor: 'rgba(239, 68, 68, 0.15)',
-              border: '1px solid rgba(239, 68, 68, 0.3)',
-              color: '#f87171',
-              fontSize: '0.88rem',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'var(--danger-tint)',
+              border: '1px solid var(--danger-line)',
+              color: 'var(--danger)',
+              fontSize: 'var(--fs-md)',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
@@ -442,34 +436,6 @@ export function ProfileView() {
               <span>{saveError}</span>
             </div>
           )}
-
-          {/* JWT Authentication Status Badge */}
-          <div style={{
-            background: 'rgba(139, 92, 246, 0.08)',
-            border: '1px solid rgba(139, 92, 246, 0.25)',
-            borderRadius: 'var(--radius-md)',
-            padding: '14px 18px',
-            marginBottom: '24px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Key size={20} color="var(--primary-purple)" />
-              <div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  JWT Authenticated Session
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  {jwtToken ? 'Your session is active on this device' : 'Valid local session token'}
-                </div>
-              </div>
-            </div>
-            <span className="glass-pill" style={{ padding: '4px 10px', fontSize: '0.75rem', color: 'var(--green-accent)', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
-              ● Verified
-            </span>
-          </div>
 
           {/* Phone only (see mobile.css): reopen the Add to Home Screen sheet */}
           <button
@@ -493,7 +459,7 @@ export function ProfileView() {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {savedSuccess && (
-                <span style={{ color: 'var(--green-accent)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: 'var(--green-accent)', fontSize: 'var(--fs-body-sm)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Check size={18} /> Profile Saved!
                 </span>
               )}

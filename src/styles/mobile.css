@@ -11,7 +11,7 @@
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   --ease-out-native: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --bar-bg: rgba(9, 10, 21, 0.86);
+  --bar-bg: rgba(20, 12, 20, 0.86);
 }
 
 html {
@@ -77,17 +77,21 @@ nav,
   gap: 16px;
 }
 .landing-auth-loading .loading-logo {
-  font-size: 3rem;
+  font-family: var(--font-main);
+  font-weight: 700;
+  font-size: var(--fs-3xl);
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
 }
 .landing-auth-loading h2 {
-  font-size: 1rem;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-secondary);
 }
 .landing-auth-loading .loading-spinner {
   width: 28px;
   height: 28px;
-  border: 3px solid rgba(255, 255, 255, 0.12);
+  border: 3px solid var(--border-color);
   border-top-color: var(--primary-purple);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -180,8 +184,6 @@ nav,
     border-radius: 0 !important;
     border-width: 0 0 1px 0 !important;
     background: var(--bar-bg) !important;
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
     box-shadow: none !important;
     flex-wrap: nowrap !important;
     flex-shrink: 0;
@@ -197,14 +199,14 @@ nav,
   .header-brand > div:first-child {
     width: 34px !important;
     height: 34px !important;
-    border-radius: 10px !important;
+    border-radius: var(--radius-md) !important;
   }
   .header-brand > div:first-child svg {
     width: 20px;
     height: 20px;
   }
   .header-brand h1 {
-    font-size: 1.15rem !important;
+    font-size: var(--fs-lg) !important;
   }
   .header-actions {
     gap: 8px;
@@ -217,8 +219,6 @@ nav,
     align-items: stretch;
     padding: 6px 4px max(6px, var(--safe-bottom));
     background: var(--bar-bg);
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
     border-top: 1px solid var(--border-color);
     z-index: 60;
   }
@@ -236,28 +236,28 @@ nav,
     border: none;
     color: var(--text-muted);
     font-family: var(--font-main);
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     font-weight: 600;
     letter-spacing: 0.01em;
     cursor: pointer;
     transition: color 0.2s ease;
   }
   .tabbar-item.is-active {
-    color: #ffffff;
+    color: var(--text-primary);
   }
   .tabbar-icon {
     position: relative;
     width: 60px;
     height: 30px;
-    border-radius: 15px;
+    border-radius: var(--radius-lg);
     display: flex;
     align-items: center;
     justify-content: center;
     transition: background-color 0.25s ease, transform 0.12s ease;
   }
   .tabbar-item.is-active .tabbar-icon {
-    background: rgba(139, 92, 246, 0.24);
-    color: #c4b5fd;
+    background: var(--plum-4);
+    color: var(--accent);
   }
   .tabbar-item:active .tabbar-icon {
     transform: scale(0.9);
@@ -267,16 +267,16 @@ nav,
     height: 26px;
     border-radius: 50%;
     overflow: hidden;
-    background: var(--primary-purple);
+    background: var(--plum-4);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.85rem;
+    font-size: var(--fs-md);
     box-shadow: 0 0 0 2px transparent;
     transition: box-shadow 0.2s ease;
   }
   .tabbar-item.is-active .tabbar-avatar {
-    box-shadow: 0 0 0 2px #c4b5fd;
+    box-shadow: 0 0 0 2px var(--accent);
   }
   .tabbar-avatar img {
     width: 100%;
@@ -290,14 +290,14 @@ nav,
     min-width: 18px;
     height: 18px;
     padding: 0 5px;
-    border-radius: 9px;
-    background: #ef4444;
-    color: #fff;
-    font-size: 0.66rem;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: var(--fs-xs);
     font-weight: 700;
     line-height: 18px;
     text-align: center;
-    box-shadow: 0 0 0 2px #0b0c18;
+    box-shadow: 0 0 0 2px #140c14;
   }
   .tabbar-lock {
     position: absolute;
@@ -313,9 +313,8 @@ nav,
     display: none;
   }
 
-  /* ── Full-screen chat: hide app chrome ───────── */
-  .app-container:has(.chat-active) .header-wrapper,
-  .app-container:has(.chat-active) .bottom-tabbar {
+  /* ── Full-screen chat: hide the header, keep the bottom tabs ── */
+  .app-container:has(.chat-active) .header-wrapper {
     display: none !important;
   }
 
@@ -334,16 +333,12 @@ nav,
     border: none !important;
     box-shadow: none !important;
     background: var(--bg-primary) !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
   }
   .chat-topbar {
     padding: calc(var(--safe-top) + 8px) 10px 8px !important;
     min-height: calc(var(--safe-top) + 60px);
     gap: 8px;
     background: var(--bar-bg) !important;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
     flex-shrink: 0;
   }
   .chat-topbar > div:first-child {
@@ -355,7 +350,7 @@ nav,
     min-width: 0;
   }
   .chat-topbar h3 {
-    font-size: 1rem !important;
+    font-size: var(--fs-base) !important;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -368,18 +363,18 @@ nav,
     flex-shrink: 0;
   }
   .chat-back-btn:active {
-    background: rgba(255, 255, 255, 0.1) !important;
+    background: var(--plum-4) !important;
   }
   .chat-header-actions {
     gap: 6px;
     flex-shrink: 0;
   }
   .chat-header-actions button {
-    width: 38px;
-    height: 38px;
+    width: 44px;
+    height: 44px;
     padding: 0 !important;
     justify-content: center;
-    border-radius: 12px !important;
+    border-radius: var(--radius-md) !important;
   }
   .chat-feed {
     padding: 14px 12px !important;
@@ -424,8 +419,6 @@ nav,
     border: none !important;
     box-shadow: none !important;
     background: transparent !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
     padding: 16px 16px 0 !important;
     min-height: 0;
   }
@@ -437,7 +430,7 @@ nav,
     overscroll-behavior: contain;
   }
   .friends-list > div:active {
-    background: rgba(255, 255, 255, 0.08) !important;
+    background: var(--plum-3) !important;
   }
   .friends-chat-area.chat-active {
     animation: screenPush 0.32s var(--ease-out-native) both;
@@ -499,8 +492,8 @@ nav,
     left: 50%;
     width: 38px;
     height: 5px;
-    border-radius: 3px;
-    background: rgba(255, 255, 255, 0.22);
+    border-radius: var(--radius-xs);
+    background: var(--plum-4);
     transform: translateX(-50%);
   }
   .dc-dialog-actions {
@@ -522,9 +515,7 @@ nav,
     transform: none !important;
     padding: 10px 12px !important;
     gap: 10px !important;
-    border-radius: 20px !important;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    border-radius: var(--radius-xl) !important;
     animation: toastIn 0.4s var(--ease-out-native) both !important;
   }
   .m-toast > div:nth-child(2) {
@@ -576,17 +567,15 @@ nav,
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: var(--scrim);
 }
 .install-sheet {
   position: relative;
   width: 100%;
   max-width: 420px;
   padding: 24px;
-  background: #15172b !important;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #21141f !important;
+  border: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -599,7 +588,7 @@ nav,
   height: 34px;
   border-radius: 50%;
   border: none;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--plum-3);
   color: var(--text-secondary);
   display: flex;
   align-items: center;
@@ -615,17 +604,17 @@ nav,
 .install-icon {
   width: 60px;
   height: 60px;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   flex-shrink: 0;
-  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.35);
+  border: 1px solid var(--border-strong);
 }
 .install-head h2 {
-  font-size: 1.15rem;
+  font-size: var(--fs-lg);
   font-weight: 700;
   line-height: 1.25;
 }
 .install-head p {
-  font-size: 0.85rem;
+  font-size: var(--fs-md);
   color: var(--text-secondary);
   margin-top: 2px;
 }
@@ -640,24 +629,24 @@ nav,
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 0.9rem;
+  font-size: var(--fs-body-sm);
   color: var(--text-secondary);
 }
 .install-perks svg {
-  color: var(--cyan-accent);
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 .install-steps {
   padding: 14px;
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--plum-3);
   border: 1px solid var(--border-color);
 }
 .install-steps li {
   display: block;
   position: relative;
   padding-left: 32px;
-  font-size: 0.9rem;
+  font-size: var(--fs-body-sm);
   line-height: 1.9;
 }
 .install-steps .install-step-num {
@@ -673,9 +662,9 @@ nav,
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: rgba(139, 92, 246, 0.25);
-  color: #c4b5fd;
-  font-size: 0.75rem;
+  background: rgba(240, 114, 137, 0.25);
+  color: #f6a3b2;
+  font-size: var(--fs-xs);
   font-weight: 700;
   display: inline-flex;
   align-items: center;
@@ -687,13 +676,13 @@ nav,
   align-items: center;
   gap: 5px;
   padding: 2px 8px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  background: var(--plum-3);
   font-weight: 600;
   white-space: nowrap;
 }
 .install-chip svg {
-  color: #60a5fa;
+  color: var(--text-secondary);
 }
 .install-actions {
   display: flex;
@@ -703,7 +692,7 @@ nav,
 .install-cta {
   width: 100%;
   min-height: 50px;
-  font-size: 1rem !important;
+  font-size: var(--fs-base) !important;
 }
 .install-later {
   background: none;

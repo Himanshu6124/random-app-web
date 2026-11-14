@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Check, Loader2 } from 'lucide-react';
+import { X, Check, Loader2, UserRound } from 'lucide-react';
 
 export function FriendRequestDialog({
   friendRequests = [],
@@ -16,8 +16,7 @@ export function FriendRequestDialog({
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.75)',
-        backdropFilter: 'blur(8px)',
+        backgroundColor: 'var(--scrim)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -28,11 +27,11 @@ export function FriendRequestDialog({
       <div className="glass-panel animate-scale-up m-sheet" style={{
         width: '100%',
         maxWidth: '440px',
-        backgroundColor: '#1C1C1E',
-        borderRadius: '20px',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
+        backgroundColor: '#21141f',
+        borderRadius: 'var(--radius-xl)',
+        border: '1px solid var(--border-color)',
         padding: '24px',
-        boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+        boxShadow: 'var(--shadow-pop)',
         display: 'flex',
         flexDirection: 'column'
       }}>
@@ -43,7 +42,7 @@ export function FriendRequestDialog({
           justifyContent: 'space-between',
           marginBottom: '20px'
         }}>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#ffffff', margin: 0 }}>
+          <h2 style={{ fontSize: 'var(--fs-xl)', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
             Friend Requests
           </h2>
           <button
@@ -83,7 +82,7 @@ export function FriendRequestDialog({
             justifyContent: 'center',
             height: '180px',
             color: 'var(--text-muted)',
-            fontSize: '0.9rem'
+            fontSize: 'var(--fs-body-sm)'
           }}>
             No pending friend requests
           </div>
@@ -106,9 +105,9 @@ export function FriendRequestDialog({
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '12px 16px',
-                    backgroundColor: '#2C2C2E',
-                    borderRadius: '14px',
-                    border: '1px solid rgba(255, 255, 255, 0.05)'
+                    backgroundColor: '#2a1a27',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px solid var(--border-color)'
                   }}
                 >
                   {/* Profile Image & User Info */}
@@ -117,11 +116,11 @@ export function FriendRequestDialog({
                       width: '46px',
                       height: '46px',
                       borderRadius: '50%',
-                      backgroundColor: '#8b5cf6',
+                      backgroundColor: 'var(--plum-4)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: '1.3rem',
+                      fontSize: 'var(--fs-xl)',
                       overflow: 'hidden',
                       flexShrink: 0
                     }}>
@@ -133,15 +132,15 @@ export function FriendRequestDialog({
                           onError={(e) => { e.target.style.display = 'none'; }}
                         />
                       ) : (
-                        '👤'
+                        <UserRound size={18} aria-hidden="true" />
                       )}
                     </div>
 
                     <div style={{ overflow: 'hidden' }}>
                       <div style={{
                         fontWeight: 600,
-                        fontSize: '0.95rem',
-                        color: '#ffffff',
+                        fontSize: 'var(--fs-body)',
+                        color: 'var(--text-primary)',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis'
@@ -170,9 +169,9 @@ export function FriendRequestDialog({
                         width: '36px',
                         height: '36px',
                         borderRadius: '50%',
-                        backgroundColor: '#FF3B30',
+                        backgroundColor: 'var(--danger-fill)',
                         border: 'none',
-                        color: '#ffffff',
+                        color: 'var(--text-primary)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -190,9 +189,9 @@ export function FriendRequestDialog({
                         width: '36px',
                         height: '36px',
                         borderRadius: '50%',
-                        backgroundColor: '#34C759',
+                        backgroundColor: 'var(--accent)',
                         border: 'none',
-                        color: '#ffffff',
+                        color: 'var(--accent-ink)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',

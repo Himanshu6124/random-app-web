@@ -20,14 +20,14 @@ const replaceIfChanged = (setter, next) => {
 };
 
 export const AVATAR_LIST = [
-  { icon: '👾', bg: '#8b5cf6', label: 'Alien' },
-  { icon: '🦊', bg: '#f97316', label: 'Fox' },
-  { icon: '🚀', bg: '#06b6d4', label: 'Rocket' },
-  { icon: '⚡', bg: '#eab308', label: 'Flash' },
-  { icon: '🐱', bg: '#ec4899', label: 'Cyber Cat' },
-  { icon: '🐼', bg: '#10b981', label: 'Panda' },
-  { icon: '💎', bg: '#3b82f6', label: 'Diamond' },
-  { icon: '🔮', bg: '#a855f7', label: 'Mystic' }
+  { icon: '👾', bg: '#6f55a8', label: 'Alien' },
+  { icon: '🦊', bg: '#a8543a', label: 'Fox' },
+  { icon: '🚀', bg: '#3f63b8', label: 'Rocket' },
+  { icon: '⚡', bg: '#9a6a1c', label: 'Flash' },
+  { icon: '🐱', bg: '#a64d66', label: 'Cyber Cat' },
+  { icon: '🐼', bg: '#2b7d59', label: 'Panda' },
+  { icon: '💎', bg: '#3f6f80', label: 'Diamond' },
+  { icon: '🔮', bg: '#584a9e', label: 'Mystic' }
 ];
 
 export const INTEREST_TAGS = [
@@ -594,6 +594,41 @@ export function AuthProvider({ children }) {
     }
   }, [jwtToken, user, pendingUpgradeAction, closeUpgradeModal, loadFriendsFromApi, loadFriendRequests]);
 
+  /**
+   * A guest picked a Google account that already has a profile. Sign straight into that
+   * profile (same as the login page) instead of linking. It is a different user id, so the
+   * guest's chat state is reset like on logout; the pending action (e.g. add friend) is
+   * replayed with the new account.
+   */
+  const signInToExistingGoogleAccount = useCallback(async (res) => {
+    const actionToExecute = pendingUpgradeActionRef.current || pendingUpgradeAction;
+    closeUpgradeModal();
+    try {
+      localStorage.removeItem('randomeet_dms');
+      localStorage.removeItem('randomeet_friends');
+    } catch (e) {}
+    setFriends([]);
+    setFriendRequests([]);
+    setLiveFriendRequest(null);
+    setSessionEpoch(prev => prev + 1);
+    applyFirebaseSession(res);
+
+    if (actionToExecute?.targetUserId && actionToExecute.targetUserId !== res.userId) {
+      try {
+        if (actionToExecute.action === 'SEND_FRIEND') {
+          await authService.sendFriendRequest(actionToExecute.targetUserId, res.jwt);
+        } else if (actionToExecute.action === 'ACCEPT_FRIEND') {
+          await authService.acceptFriendRequest(actionToExecute.targetUserId, res.jwt);
+        }
+        await loadFriendsFromApi(res.jwt);
+        await loadFriendRequests(res.jwt);
+      } catch (err) {
+        console.warn('[AuthContext] Pending action after existing-account sign-in failed:', err);
+      }
+    }
+    return res;
+  }, [pendingUpgradeAction, closeUpgradeModal, applyFirebaseSession, loadFriendsFromApi, loadFriendRequests]);
+
   const performLogout = useCallback(() => {
     setShowLogoutModal(false);
     authService.clearSession();
@@ -675,6 +710,7 @@ export function AuthProvider({ children }) {
     signInWithGoogle,
     completeGoogleSignup,
     linkGoogleAccount,
+    signInToExistingGoogleAccount,
     firebaseConfigured: isFirebaseConfigured(),
     upgradeModalOpen,
     upgradeModalReason,
@@ -712,7 +748,7 @@ export function AuthProvider({ children }) {
     isAuthenticated, isGuest, jwtToken, user, sessionEpoch, profilePictures, authLoading,
     authError, showLogoutModal, requestLogout, cancelLogout, performLogout, clearAuthError,
     login, signUp, loginAsGuest, upgradeGuestAccount, signInWithGoogle, completeGoogleSignup,
-    linkGoogleAccount, upgradeModalOpen, upgradeModalReason,
+    linkGoogleAccount, signInToExistingGoogleAccount, upgradeModalOpen, upgradeModalReason,
     pendingUpgradeAction, openUpgradeModal, closeUpgradeModal, logout, updateUserProfile,
     soundEnabled, friends, totalUnreadFriendsCount, markFriendMessagesSeen, handleIncomingDirectMessage,
     activeDmFriendId, setActiveDmFriendId, friendRequests, friendRequestsLoading, liveFriendRequest,

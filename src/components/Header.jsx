@@ -1,77 +1,35 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import { Sparkles, Users, MessageSquare, Volume2, VolumeX, LogOut, Lock, Compass } from 'lucide-react';
+import { Users, MessageSquare, Volume2, VolumeX, LogOut, Lock, Compass, UserRound } from 'lucide-react';
 
 export function Header({ activeTab, setActiveTab }) {
   const { user, isGuest, soundEnabled, setSoundEnabled, logout, openUpgradeModal, totalUnreadFriendsCount } = useAuth();
-  const { connectionStatus, unreadRandomCount } = useSocket();
-
-  const statusConfig = {
-    connected: { color: 'var(--green-accent)', label: 'Online' },
-    connecting: { color: '#eab308', label: 'Connecting...' },
-    disconnected: { color: 'var(--text-muted)', label: 'Offline' }
-  };
-  const status = statusConfig[connectionStatus] || statusConfig.disconnected;
+  const { unreadRandomCount } = useSocket();
 
   return (
     <header className="glass-panel header-wrapper">
       {/* Brand Logo */}
       <div className="header-brand">
-        <div style={{
-          width: '42px',
-          height: '42px',
-          borderRadius: '12px',
-          background: 'linear-gradient(135deg, var(--primary-purple) 0%, var(--cyan-accent) 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: 'var(--shadow-glow)',
-          flexShrink: 0
-        }}>
-          <Sparkles size={24} color="#ffffff" />
-        </div>
-        <div>
-          <h1 style={{ fontSize: '1.4rem', fontWeight: '800', background: 'linear-gradient(90deg, #ffffff, #a78bfa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0, lineHeight: 1.2 }}>
-            RandoMeet
-          </h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem' }}>
-            <span style={{ color: status.color, fontWeight: 600 }}>{status.label}</span>
-          </div>
-        </div>
+        <h1 className="app-wordmark">RandoMeet</h1>
       </div>
 
       {/* Navigation Tabs */}
       <nav className="header-nav">
         <button
-          className={activeTab === 'match' ? 'btn-primary' : 'btn-secondary'}
+          className={activeTab === 'match' ? 'btn-secondary is-current' : 'btn-secondary'}
           onClick={() => setActiveTab('match')}
           style={{ padding: '8px 16px', borderRadius: 'var(--radius-full)', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
         >
           <MessageSquare size={18} />
           <span>Random Match</span>
           {unreadRandomCount > 0 && (
-            <span style={{
-              backgroundColor: '#ef4444',
-              color: '#ffffff',
-              fontSize: '0.72rem',
-              fontWeight: 700,
-              minWidth: '18px',
-              height: '18px',
-              borderRadius: '9px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '0 5px',
-              boxShadow: '0 2px 6px rgba(239, 68, 68, 0.4)'
-            }}>
-              {unreadRandomCount}
-            </span>
+            <span className="app-count">{unreadRandomCount}</span>
           )}
         </button>
 
         <button
-          className={activeTab === 'discover' ? 'btn-primary' : 'btn-secondary'}
+          className={activeTab === 'discover' ? 'btn-secondary is-current' : 'btn-secondary'}
           onClick={() => {
             if (isGuest) {
               openUpgradeModal('find friends, see who is nearby and keep your match history');
@@ -89,7 +47,7 @@ export function Header({ activeTab, setActiveTab }) {
         </button>
 
         <button
-          className={activeTab === 'friends' ? 'btn-primary' : 'btn-secondary'}
+          className={activeTab === 'friends' ? 'btn-secondary is-current' : 'btn-secondary'}
           onClick={() => {
             if (isGuest) {
               openUpgradeModal('access Friends & Direct Messages');
@@ -103,22 +61,7 @@ export function Header({ activeTab, setActiveTab }) {
           <Users size={18} />
           <span>Friends</span>
           {!isGuest && totalUnreadFriendsCount > 0 && (
-            <span style={{
-              backgroundColor: '#ef4444',
-              color: '#ffffff',
-              fontSize: '0.72rem',
-              fontWeight: 700,
-              minWidth: '18px',
-              height: '18px',
-              borderRadius: '9px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '0 5px',
-              boxShadow: '0 2px 6px rgba(239, 68, 68, 0.4)'
-            }}>
-              {totalUnreadFriendsCount}
-            </span>
+            <span className="app-count">{totalUnreadFriendsCount}</span>
           )}
           {isGuest && <Lock size={13} style={{ opacity: 0.8 }} />}
         </button>
@@ -126,41 +69,14 @@ export function Header({ activeTab, setActiveTab }) {
 
       {/* Right User Actions */}
       <div className="header-actions">
-        {/* Upgrade Button for Guests */}
-        {isGuest && (
-          <button
-            type="button"
-            id="header-upgrade-btn"
-            onClick={() => openUpgradeModal('unlock all features')}
-            style={{
-              padding: '6px 14px',
-              borderRadius: 'var(--radius-full)',
-              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-              color: '#ffffff',
-              border: 'none',
-              fontWeight: 700,
-              fontSize: '0.82rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)',
-              flexShrink: 0
-            }}
-          >
-            <Sparkles size={14} />
-            <span>Upgrade</span>
-          </button>
-        )}
-
         {/* Sound Toggle */}
         <button
           onClick={() => setSoundEnabled(!soundEnabled)}
           className="btn-secondary"
           title={soundEnabled ? "Mute audio chimes" : "Enable audio chimes"}
-          style={{ width: '38px', height: '38px', padding: 0, borderRadius: '50%', flexShrink: 0 }}
+          style={{ width: '44px', height: '44px', padding: 0, borderRadius: '50%', flexShrink: 0 }}
         >
-          {soundEnabled ? <Volume2 size={18} color="var(--cyan-accent)" /> : <VolumeX size={18} color="var(--text-muted)" />}
+          {soundEnabled ? <Volume2 size={18} color="var(--text-primary)" /> : <VolumeX size={18} color="var(--text-muted)" />}
         </button>
 
         {/* Profile Avatar Button */}
@@ -171,7 +87,7 @@ export function Header({ activeTab, setActiveTab }) {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            background: 'rgba(255, 255, 255, 0.05)',
+            background: 'transparent',
             border: '1px solid var(--border-color)',
             padding: '4px 12px 4px 4px',
             borderRadius: 'var(--radius-full)',
@@ -184,32 +100,30 @@ export function Header({ activeTab, setActiveTab }) {
             width: '30px',
             height: '30px',
             borderRadius: '50%',
-            backgroundColor: '#8b5cf6',
+            backgroundColor: 'var(--plum-4)',
+            color: 'var(--text-secondary)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '1rem',
+            fontSize: 'var(--fs-base)',
             overflow: 'hidden',
             flexShrink: 0
           }}>
             {user?.photoUrl ? (
               <img src={user.photoUrl} alt="User Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display='none'; }} />
             ) : (
-              '⚡'
+              <UserRound size={16} aria-hidden="true" />
             )}
           </div>
-          <span className="header-user-name" style={{ fontSize: '0.85rem', fontWeight: 600 }}>{user?.name || user?.username}</span>
+          <span className="header-user-name" style={{ fontSize: 'var(--fs-md)', fontWeight: 600 }}>{user?.name || user?.username}</span>
           {isGuest && (
             <span style={{
-              fontSize: '0.65rem',
-              fontWeight: 700,
-              backgroundColor: 'rgba(99, 102, 241, 0.25)',
-              color: '#a5b4fc',
-              border: '1px solid rgba(99, 102, 241, 0.5)',
-              padding: '2px 6px',
-              borderRadius: '6px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em'
+              fontSize: 'var(--fs-xs)',
+              fontWeight: 600,
+              color: 'var(--accent)',
+              border: '1px solid var(--accent-line)',
+              padding: '1px 6px',
+              borderRadius: 'var(--radius-xs)'
             }}>
               Guest
             </span>
@@ -221,7 +135,7 @@ export function Header({ activeTab, setActiveTab }) {
           onClick={logout}
           className="btn-secondary header-signout-btn"
           title={isGuest ? "Exit Guest Session" : "Sign Out / Logout"}
-          style={{ padding: '8px 14px', borderRadius: 'var(--radius-full)', fontSize: '0.85rem', flexShrink: 0 }}
+          style={{ padding: '8px 14px', borderRadius: 'var(--radius-full)', fontSize: 'var(--fs-md)', flexShrink: 0 }}
         >
           <LogOut size={16} />
           <span className="header-signout-text">{isGuest ? 'Exit' : 'Sign Out'}</span>

@@ -571,7 +571,7 @@ export const authService = {
           referredMessageId: m.referredMessageId || null,
           status: m.status || 'SENT',
           type: m.type || 'TEXT',
-          time: new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
           timestamp: rawTime
         };
       });

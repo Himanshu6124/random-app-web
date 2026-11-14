@@ -1,0 +1,442 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-14T15:43:04+00:00",
+  "title": "Design System: RandoMeet",
+  "extensions": {
+    "colorMeta": {
+      "plum-0": {
+        "role": "neutral",
+        "displayName": "Plum 0, Midnight",
+        "tonalRamp": [
+          "#140c14",
+          "#1a1019",
+          "#21141f",
+          "#2a1a27",
+          "#352131",
+          "#43293d",
+          "#6b4a63",
+          "#a8939e"
+        ]
+      },
+      "plum-1": {
+        "role": "neutral",
+        "displayName": "Plum 1, Ground",
+        "tonalRamp": [
+          "#140c14",
+          "#1a1019",
+          "#21141f",
+          "#2a1a27",
+          "#352131",
+          "#43293d",
+          "#6b4a63",
+          "#a8939e"
+        ]
+      },
+      "plum-2": {
+        "role": "neutral",
+        "displayName": "Plum 2, Card",
+        "tonalRamp": [
+          "#140c14",
+          "#1a1019",
+          "#21141f",
+          "#2a1a27",
+          "#352131",
+          "#43293d",
+          "#6b4a63",
+          "#a8939e"
+        ]
+      },
+      "plum-3": {
+        "role": "neutral",
+        "displayName": "Plum 3, Raised",
+        "tonalRamp": [
+          "#140c14",
+          "#1a1019",
+          "#21141f",
+          "#2a1a27",
+          "#352131",
+          "#43293d",
+          "#6b4a63",
+          "#a8939e"
+        ]
+      },
+      "plum-4": {
+        "role": "neutral",
+        "displayName": "Plum 4, Line / Lifted",
+        "tonalRamp": [
+          "#140c14",
+          "#1a1019",
+          "#21141f",
+          "#2a1a27",
+          "#352131",
+          "#43293d",
+          "#6b4a63",
+          "#a8939e"
+        ]
+      },
+      "plum-5": {
+        "role": "neutral",
+        "displayName": "Plum 5, Strong Line",
+        "tonalRamp": [
+          "#140c14",
+          "#1a1019",
+          "#21141f",
+          "#2a1a27",
+          "#352131",
+          "#43293d",
+          "#6b4a63",
+          "#a8939e"
+        ]
+      },
+      "rose": {
+        "role": "primary",
+        "displayName": "Night Rose",
+        "tonalRamp": [
+          "#3a0f1b",
+          "#5c1a2c",
+          "#8a2a43",
+          "#b8405d",
+          "#f07289",
+          "#f4889b",
+          "#f6a3b2",
+          "#fbd9e0"
+        ]
+      },
+      "rose-hover": {
+        "role": "primary",
+        "displayName": "Rose Hover"
+      },
+      "rose-ink": {
+        "role": "primary",
+        "displayName": "Rose Ink"
+      },
+      "rose-tint": {
+        "role": "primary",
+        "displayName": "Rose Tint",
+        "canonical": "rgba(240, 114, 137, 0.12)"
+      },
+      "rose-line": {
+        "role": "primary",
+        "displayName": "Rose Line",
+        "canonical": "rgba(240, 114, 137, 0.45)"
+      },
+      "live-gold": {
+        "role": "secondary",
+        "displayName": "Live Gold",
+        "tonalRamp": [
+          "#3b2c10",
+          "#5e4719",
+          "#866628",
+          "#b38c45",
+          "#e8c27a",
+          "#eed09a",
+          "#f4e0bb",
+          "#faf0dc"
+        ]
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Danger Coral"
+      },
+      "danger-fill": {
+        "role": "tertiary",
+        "displayName": "Danger Fill"
+      },
+      "sky": {
+        "role": "tertiary",
+        "displayName": "Info Sky"
+      },
+      "green": {
+        "role": "tertiary",
+        "displayName": "Friend Green"
+      },
+      "text-primary": {
+        "role": "neutral",
+        "displayName": "Warm White"
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Dusk"
+      },
+      "text-muted": {
+        "role": "neutral",
+        "displayName": "Ash"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Match tab headline (\"Who's up tonight?\")."
+      },
+      "display-stage": {
+        "displayName": "Display Stage",
+        "purpose": "Rotating phrase on the search stage, sized against width and screen height."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Wordmark and the chat intro line."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Chat messages and default interface text (Outfit)."
+      },
+      "support": {
+        "displayName": "Support",
+        "purpose": "Ledes and explainers under a headline (Plus Jakarta Sans)."
+      },
+      "support-sm": {
+        "displayName": "Support Small",
+        "purpose": "Status lines, timers, connection state, hints."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Button and tab labels."
+      },
+      "label-live": {
+        "displayName": "Live Label",
+        "purpose": "The LIVE badge only."
+      }
+    },
+    "shadows": [
+      {
+        "name": "overlay-card",
+        "value": "0 8px 24px -8px rgba(10, 4, 9, 0.6)",
+        "purpose": "Discover confirmation dialog; overlays only."
+      },
+      {
+        "name": "overlay-pop",
+        "value": "0 16px 40px -12px rgba(10, 4, 9, 0.75)",
+        "purpose": "Modal dialogs such as sign-out; overlays only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Default curve for state transitions and every one-shot moment."
+      },
+      {
+        "name": "ease-out-native",
+        "value": "cubic-bezier(0.2, 0.8, 0.2, 1)",
+        "purpose": "Phone screen fades, pushes, sheets and toasts."
+      },
+      {
+        "name": "heartbeat",
+        "value": "2.4s ease-in-out infinite; scale 1, 1.06, 0.98, 1.04, 1",
+        "purpose": "Searching avatar and chat intro heart (lub-dub)."
+      },
+      {
+        "name": "heart-float",
+        "value": "5s ease-out infinite, staggered",
+        "purpose": "Rose heart outlines drifting up on the search stage."
+      },
+      {
+        "name": "word-rise",
+        "value": "0.6s ease-out, 70ms per word, from 0.2em below and 35% opacity",
+        "purpose": "Search phrase words rising in; phrase rotates every 4s."
+      },
+      {
+        "name": "heart-burst",
+        "value": "0.7s ease-out (big: 0.9s), eight outlines",
+        "purpose": "Search start; the big burst marks a locked match."
+      },
+      {
+        "name": "match-pop",
+        "value": "0.5s ease-out; scale 1, 1.18, 1.08",
+        "purpose": "Avatar pop when a match locks."
+      },
+      {
+        "name": "bubble-in",
+        "value": "0.32s ease-out; translateY 8px, scale 0.92",
+        "purpose": "Newly arrived messages only; history never animates."
+      },
+      {
+        "name": "send-nudge",
+        "value": "0.2s ease-out; translate(3px,-3px) rotate(8deg)",
+        "purpose": "Send icon on press."
+      },
+      {
+        "name": "react-pop",
+        "value": "0.35s ease-out; scale 1.35",
+        "purpose": "Reaction icon spring on tap."
+      },
+      {
+        "name": "tab-bounce",
+        "value": "0.38s ease-out; scale 0.85, 1.12, 1",
+        "purpose": "Tab icon bounce after a tap."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "prefers-reduced-motion: reduce",
+        "purpose": "Every animation above is switched off."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone-short-labels",
+        "value": "640px"
+      },
+      {
+        "name": "phone",
+        "value": "768px"
+      },
+      {
+        "name": "desktop",
+        "value": "769px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one rose action pill; Find a Match, accept, send.",
+      "html": "<button class=\"ds-btn-primary\">Find a Match</button>",
+      "css": ":host{--plum-0:#140c14;--plum-1:#1a1019;--plum-2:#21141f;--plum-3:#2a1a27;--plum-4:#352131;--plum-5:#43293d;--accent:#f07289;--accent-hover:#f4889b;--accent-ink:#2a0a12;--accent-tint:rgba(240,114,137,.12);--accent-line:rgba(240,114,137,.45);--live:#e8c27a;--danger:#ff8a8f;--text-primary:#f5ecef;--text-secondary:#c9b6bf;--text-muted:#a8939e;--font-main:\"Outfit\",-apple-system,sans-serif;--font-sub:\"Plus Jakarta Sans\",-apple-system,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);} .ds-btn-primary{background:var(--accent);color:var(--accent-ink);border:none;padding:12px 24px;border-radius:9999px;font-family:var(--font-main);font-weight:600;font-size:1rem;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:background-color .18s var(--ease-out),transform .12s var(--ease-out);}.ds-btn-primary:hover{background:var(--accent-hover);}.ds-btn-primary:active{transform:scale(.98);}.ds-btn-primary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}.ds-btn-primary:disabled{background:var(--plum-4);color:var(--text-muted);cursor:not-allowed;}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Neutral pill with a strong plum hairline; Cancel on the search stage.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ":host{--plum-0:#140c14;--plum-1:#1a1019;--plum-2:#21141f;--plum-3:#2a1a27;--plum-4:#352131;--plum-5:#43293d;--accent:#f07289;--accent-hover:#f4889b;--accent-ink:#2a0a12;--accent-tint:rgba(240,114,137,.12);--accent-line:rgba(240,114,137,.45);--live:#e8c27a;--danger:#ff8a8f;--text-primary:#f5ecef;--text-secondary:#c9b6bf;--text-muted:#a8939e;--font-main:\"Outfit\",-apple-system,sans-serif;--font-sub:\"Plus Jakarta Sans\",-apple-system,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);} .ds-btn-secondary{background:transparent;color:var(--text-primary);border:1px solid var(--plum-5);padding:12px 24px;border-radius:9999px;font-family:var(--font-main);font-weight:500;font-size:1rem;cursor:pointer;transition:background-color .18s var(--ease-out),border-color .18s var(--ease-out);}.ds-btn-secondary:hover{background:var(--plum-3);border-color:var(--text-muted);}.ds-btn-secondary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}"
+    },
+    {
+      "name": "Selected Choice",
+      "kind": "chip",
+      "refersTo": "button-selected",
+      "description": "A selected option: plum-5 fill with a rose edge, never a solid rose fill.",
+      "html": "<div class=\"ds-choice-row\"><button class=\"ds-choice is-selected\">Friends</button><button class=\"ds-choice\">Anyone</button></div>",
+      "css": ":host{--plum-0:#140c14;--plum-1:#1a1019;--plum-2:#21141f;--plum-3:#2a1a27;--plum-4:#352131;--plum-5:#43293d;--accent:#f07289;--accent-hover:#f4889b;--accent-ink:#2a0a12;--accent-tint:rgba(240,114,137,.12);--accent-line:rgba(240,114,137,.45);--live:#e8c27a;--danger:#ff8a8f;--text-primary:#f5ecef;--text-secondary:#c9b6bf;--text-muted:#a8939e;--font-main:\"Outfit\",-apple-system,sans-serif;--font-sub:\"Plus Jakarta Sans\",-apple-system,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);} .ds-choice-row{display:flex;gap:8px;}.ds-choice{background:transparent;color:var(--text-primary);border:1px solid var(--plum-5);padding:10px 20px;border-radius:9999px;font-family:var(--font-main);font-weight:500;cursor:pointer;}.ds-choice:hover{background:var(--plum-3);}.ds-choice.is-selected{border:1.5px solid var(--accent);background:var(--plum-5);color:var(--accent);}.ds-choice:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}"
+    },
+    {
+      "name": "LIVE Badge",
+      "kind": "custom",
+      "refersTo": "live-badge",
+      "description": "Gold broadcast tag that marks a live chat, and nothing else.",
+      "html": "<span class=\"ds-live\">LIVE</span>",
+      "css": ":host{--plum-0:#140c14;--plum-1:#1a1019;--plum-2:#21141f;--plum-3:#2a1a27;--plum-4:#352131;--plum-5:#43293d;--accent:#f07289;--accent-hover:#f4889b;--accent-ink:#2a0a12;--accent-tint:rgba(240,114,137,.12);--accent-line:rgba(240,114,137,.45);--live:#e8c27a;--danger:#ff8a8f;--text-primary:#f5ecef;--text-secondary:#c9b6bf;--text-muted:#a8939e;--font-main:\"Outfit\",-apple-system,sans-serif;--font-sub:\"Plus Jakarta Sans\",-apple-system,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);} .ds-live{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-main);font-weight:600;font-size:.75rem;letter-spacing:.08em;color:var(--live);border:1.5px solid currentColor;border-radius:4px;padding:3px 8px;line-height:1;}.ds-live::before{content:\"\";width:6px;height:6px;border-radius:50%;background:currentColor;}"
+    },
+    {
+      "name": "Chat Bubbles",
+      "kind": "custom",
+      "refersTo": "bubble-me",
+      "description": "Yours in rose tint with a rose hairline, theirs in plum-3; a 4px tail corner on the speaker side.",
+      "html": "<div class=\"ds-feed\"><div class=\"ds-bubble ds-them\">hey, can't sleep either?</div><div class=\"ds-bubble ds-me\">nope :) what keeps you up?</div></div>",
+      "css": ":host{--plum-0:#140c14;--plum-1:#1a1019;--plum-2:#21141f;--plum-3:#2a1a27;--plum-4:#352131;--plum-5:#43293d;--accent:#f07289;--accent-hover:#f4889b;--accent-ink:#2a0a12;--accent-tint:rgba(240,114,137,.12);--accent-line:rgba(240,114,137,.45);--live:#e8c27a;--danger:#ff8a8f;--text-primary:#f5ecef;--text-secondary:#c9b6bf;--text-muted:#a8939e;--font-main:\"Outfit\",-apple-system,sans-serif;--font-sub:\"Plus Jakarta Sans\",-apple-system,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);} .ds-feed{display:flex;flex-direction:column;gap:10px;padding:16px;background:var(--plum-1);}.ds-bubble{max-width:75%;padding:12px 18px;font-family:var(--font-main);font-size:.95rem;line-height:1.4;color:var(--text-primary);animation:ds-in .32s var(--ease-out) both;}.ds-them{align-self:flex-start;background:var(--plum-3);border:1px solid var(--plum-4);border-radius:18px 18px 18px 4px;transform-origin:bottom left;}.ds-me{align-self:flex-end;background:var(--accent-tint);border:1px solid var(--accent-line);border-radius:18px 18px 4px 18px;transform-origin:bottom right;}@keyframes ds-in{from{opacity:0;transform:translateY(8px) scale(.92);}to{opacity:1;transform:none;}}@media (prefers-reduced-motion:reduce){.ds-bubble{animation:none;}}"
+    },
+    {
+      "name": "Chat Composer",
+      "kind": "input",
+      "refersTo": "input-composer",
+      "description": "Plum-0 pill field with a rose send circle whose plane nudges on press.",
+      "html": "<form class=\"ds-composer\" onsubmit=\"return false\"><input class=\"ds-input\" placeholder=\"Say something sweet…\"><button class=\"ds-send\" aria-label=\"Send\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m22 2-7 20-4-9-9-4Z\"/><path d=\"M22 2 11 13\"/></svg></button></form>",
+      "css": ":host{--plum-0:#140c14;--plum-1:#1a1019;--plum-2:#21141f;--plum-3:#2a1a27;--plum-4:#352131;--plum-5:#43293d;--accent:#f07289;--accent-hover:#f4889b;--accent-ink:#2a0a12;--accent-tint:rgba(240,114,137,.12);--accent-line:rgba(240,114,137,.45);--live:#e8c27a;--danger:#ff8a8f;--text-primary:#f5ecef;--text-secondary:#c9b6bf;--text-muted:#a8939e;--font-main:\"Outfit\",-apple-system,sans-serif;--font-sub:\"Plus Jakarta Sans\",-apple-system,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);} .ds-composer{display:flex;align-items:center;gap:12px;padding:12px;background:rgba(20,12,20,.86);}.ds-input{flex:1;padding:14px 20px;border-radius:9999px;background:var(--plum-0);border:1px solid var(--plum-4);color:var(--text-primary);font-family:var(--font-main);font-size:.95rem;caret-color:var(--accent);outline:none;}.ds-input::placeholder{color:var(--text-muted);}.ds-input:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}.ds-send{width:48px;height:48px;border-radius:50%;border:none;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;cursor:pointer;}.ds-send:hover{background:var(--accent-hover);}.ds-send svg{transition:transform .2s var(--ease-out);}.ds-send:active svg{transform:translate(3px,-3px) rotate(8deg);}"
+    },
+    {
+      "name": "Phone Tab Bar",
+      "kind": "nav",
+      "refersTo": "tab-item-active",
+      "description": "Four tabs; the current one gets a plum-4 pill behind a rose icon and a white label.",
+      "html": "<nav class=\"ds-tabbar\"><button class=\"ds-tab is-active\"><span class=\"ds-tab-icon\"><svg viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"/></svg></span><span>Match</span></button><button class=\"ds-tab\"><span class=\"ds-tab-icon\"><svg viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z\"/></svg></span><span>Discover</span></button><button class=\"ds-tab\"><span class=\"ds-tab-icon\"><svg viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/><path d=\"M22 21v-2a4 4 0 0 0-3-3.87\"/><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"/></svg></span><span>Friends</span></button></nav>",
+      "css": ":host{--plum-0:#140c14;--plum-1:#1a1019;--plum-2:#21141f;--plum-3:#2a1a27;--plum-4:#352131;--plum-5:#43293d;--accent:#f07289;--accent-hover:#f4889b;--accent-ink:#2a0a12;--accent-tint:rgba(240,114,137,.12);--accent-line:rgba(240,114,137,.45);--live:#e8c27a;--danger:#ff8a8f;--text-primary:#f5ecef;--text-secondary:#c9b6bf;--text-muted:#a8939e;--font-main:\"Outfit\",-apple-system,sans-serif;--font-sub:\"Plus Jakarta Sans\",-apple-system,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);} .ds-tabbar{display:flex;padding:6px 4px;background:rgba(20,12,20,.86);border-top:1px solid var(--plum-4);}.ds-tab{flex:1;min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;border:none;color:var(--text-muted);font-family:var(--font-main);font-size:.75rem;font-weight:600;cursor:pointer;transition:color .2s ease;}.ds-tab:hover{color:var(--text-secondary);}.ds-tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}.ds-tab-icon{width:60px;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center;transition:background-color .25s ease;}.ds-tab.is-active{color:#fff;}.ds-tab.is-active .ds-tab-icon{background:var(--plum-4);color:var(--accent);}"
+    },
+    {
+      "name": "Reaction Chips",
+      "kind": "chip",
+      "refersTo": "reaction-chip",
+      "description": "Bare muted line icons; a plum fill only on hover or press, and a spring on tap.",
+      "html": "<div class=\"ds-reacts\"><button class=\"ds-react\" aria-label=\"Heart\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linejoin=\"round\"><path d=\"M12 20.5C9 18.3 3.5 14.6 3.5 9.6 3.5 7 5.5 5 8 5c1.6 0 3 .8 4 2.2C13 5.8 14.4 5 16 5c2.5 0 4.5 2 4.5 4.6 0 5-5.5 8.7-8.5 10.9z\"/></svg></button></div>",
+      "css": ":host{--plum-0:#140c14;--plum-1:#1a1019;--plum-2:#21141f;--plum-3:#2a1a27;--plum-4:#352131;--plum-5:#43293d;--accent:#f07289;--accent-hover:#f4889b;--accent-ink:#2a0a12;--accent-tint:rgba(240,114,137,.12);--accent-line:rgba(240,114,137,.45);--live:#e8c27a;--danger:#ff8a8f;--text-primary:#f5ecef;--text-secondary:#c9b6bf;--text-muted:#a8939e;--font-main:\"Outfit\",-apple-system,sans-serif;--font-sub:\"Plus Jakarta Sans\",-apple-system,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);} .ds-reacts{display:flex;gap:4px;}.ds-react{background:transparent;border:none;color:var(--text-secondary);padding:6px 8px;min-width:40px;min-height:40px;border-radius:9999px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .15s ease,color .15s ease;}.ds-react:hover,.ds-react:active{background:var(--plum-3);color:var(--text-primary);}.ds-react:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}.ds-react:active svg{animation:ds-pop .35s var(--ease-out);}@keyframes ds-pop{0%{transform:scale(1);}40%{transform:scale(1.35);color:var(--accent);}100%{transform:scale(1);}}"
+    },
+    {
+      "name": "Search Stage",
+      "kind": "custom",
+      "refersTo": "button-match",
+      "description": "Signature: beating avatar ringed in rose, a rising phrase, a quiet timer and a full-width Cancel pill.",
+      "html": "<div class=\"ds-stage\"><div class=\"ds-avatar\"></div><h2 class=\"ds-phrase\"><span style=\"animation-delay:0ms\">Finding </span><span style=\"animation-delay:70ms\">a </span><span style=\"animation-delay:140ms\">new </span><span style=\"animation-delay:210ms\">soul…</span></h2><p class=\"ds-timer\">Searching · 0:12</p><button class=\"ds-cancel\">Cancel</button></div>",
+      "css": ":host{--plum-0:#140c14;--plum-1:#1a1019;--plum-2:#21141f;--plum-3:#2a1a27;--plum-4:#352131;--plum-5:#43293d;--accent:#f07289;--accent-hover:#f4889b;--accent-ink:#2a0a12;--accent-tint:rgba(240,114,137,.12);--accent-line:rgba(240,114,137,.45);--live:#e8c27a;--danger:#ff8a8f;--text-primary:#f5ecef;--text-secondary:#c9b6bf;--text-muted:#a8939e;--font-main:\"Outfit\",-apple-system,sans-serif;--font-sub:\"Plus Jakarta Sans\",-apple-system,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);} .ds-stage{display:flex;flex-direction:column;align-items:center;gap:20px;padding:32px 16px;background:var(--plum-1);text-align:center;}.ds-avatar{width:96px;height:96px;border-radius:50%;background:var(--plum-4);border:2px solid var(--accent);animation:ds-beat 2.4s ease-in-out infinite;}@keyframes ds-beat{0%,40%,100%{transform:scale(1);}10%{transform:scale(1.06);}20%{transform:scale(.98);}30%{transform:scale(1.04);}}.ds-phrase{margin:0;font-family:var(--font-main);font-weight:700;font-size:2rem;line-height:1.12;letter-spacing:-.02em;color:var(--text-primary);}.ds-phrase span{display:inline-block;white-space:pre;opacity:.35;animation:ds-rise .6s var(--ease-out) forwards;}@keyframes ds-rise{from{opacity:.35;transform:translateY(.2em);}to{opacity:1;transform:none;}}.ds-timer{margin:0;font-family:var(--font-sub);font-size:.9375rem;color:var(--text-secondary);font-variant-numeric:tabular-nums;}.ds-cancel{width:100%;max-width:420px;min-height:56px;background:transparent;color:var(--text-primary);border:1px solid var(--plum-5);border-radius:9999px;font-family:var(--font-main);font-weight:700;font-size:1.125rem;cursor:pointer;}.ds-cancel:hover{background:var(--plum-3);}.ds-cancel:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}@media (prefers-reduced-motion:reduce){.ds-avatar,.ds-phrase span{animation:none;opacity:1;}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "One Rose in a Dark Room",
+    "overview": "RandoMeet is a simple warm dark app, opened on a phone, late, in bed, with the lights off. There is no metaphor and no costume. Warmth comes from two things only: a stepped plum ground that every surface is cut from, and one rose colour that marks what you can do next. Everything else is quiet: warm white text, 1px hairlines, pill buttons, line icons in one muted tone.\n\nDensity is low and thumb-led. The Match tab puts one question and one rose pill in reach; searching turns the whole tab into a centred stage sized to the screen, so Cancel never needs a scroll. Motion is the one place the system lets itself be tender: a beating avatar, drifting heart outlines, a phrase that rises in word by word, and a set of one-shot moments that answer the user's own taps. Nothing moves on its own outside the search stage and the chat's opening heart.\n\nThe world refuses glassy purple-neon gradients and swipe-card dating clichés. Surfaces are flat; there is no glass, blur or glow.",
+    "keyCharacteristics": [
+      "One six-step plum ramp for every surface, ground plum-1.",
+      "Rose is the single action colour; gold means \"live\" and nothing else.",
+      "Flat surfaces, 1px hairlines, pill-shaped controls.",
+      "Lucide line icons in one muted colour.",
+      "Rose heart outlines (never filled) are the recurring motif: app icon, search stage, chat intro, tap bursts.",
+      "Every animation is off under reduced motion."
+    ],
+    "rules": [
+      {
+        "name": "The One Rose Rule",
+        "body": "Rose is the only action colour. If something is pressable and primary, it is rose with Rose Ink; if it is not, it is not rose.",
+        "section": "colors"
+      },
+      {
+        "name": "The Gold Means Live Rule",
+        "body": "Live Gold appears only while a chat is live or a match has locked. It is never decoration and never a second accent.",
+        "section": "colors"
+      },
+      {
+        "name": "The Plum Selection Rule",
+        "body": "A selected or current state is a lifted plum fill with a rose icon or rose hairline, never a solid rose fill. Solid rose is reserved for the action itself.",
+        "section": "colors"
+      },
+      {
+        "name": "The Twelve Pixel Floor Rule",
+        "body": "No text on a phone is smaller than 12px (0.75rem); tab labels and count badges sit exactly on the floor. Form fields render at 16px on phones so iOS never zooms.",
+        "section": "typography"
+      },
+      {
+        "name": "The Thumb Reach Rule",
+        "body": "On a phone the primary action sits at the foot of the screen, full width, directly above the tab bar (Find a Match, Cancel). On desktop it moves up under the content it acts on.",
+        "section": "layout"
+      },
+      {
+        "name": "The No Scroll To Cancel Rule",
+        "body": "The search stage sizes itself to screen height (avatar stage capped at 32svh, phrase scaled by svh) so every element, including Cancel, is visible without scrolling.",
+        "section": "layout"
+      },
+      {
+        "name": "The Quiet Header Rule",
+        "body": "The header never shows Upgrade and never says \"Online\". It shows the connection state only when something is wrong (\"Connecting...\" or \"Offline\"). Upgrading lives in Profile, the locked tabs and the upgrade sheet. A live chat goes full screen on phones, hiding header and tab bar.",
+        "section": "layout"
+      },
+      {
+        "name": "The Touch Size Rule",
+        "body": "On phones, interactive targets are at least 44px (chat-header actions, composer send, profile buttons; tab items are 52px tall; reaction chips 40px within the 44px row).",
+        "section": "layout"
+      },
+      {
+        "name": "The Step Not Shadow Rule",
+        "body": "To lift a surface, take one step up the plum ramp. Shadows belong only to overlays; in-flow cards and bars never cast one.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** cut every surface from the plum ramp; lift by stepping one plum step up, not by adding a shadow.",
+      "**Do** keep rose for the action and put Rose Ink (#2a0a12) on it.",
+      "**Do** show selected and current states as a plum fill with a rose icon or rose hairline.",
+      "**Do** reserve Live Gold for a live chat or a locked match.",
+      "**Do** use Lucide line icons in one muted colour (Dusk), turning rose only for the current tab or an action.",
+      "**Do** draw hearts as rose outlines, never filled.",
+      "**Do** keep phone touch targets at 44px and text at 12px or larger.",
+      "**Do** make every new animation a one-shot reply to a user action, and switch it off under prefers-reduced-motion."
+    ],
+    "donts": [
+      "**Don't** use gradients, glass, backdrop blur or glow on any surface.",
+      "**Don't** fill a selected or current state with solid rose.",
+      "**Don't** use gold as a decorative accent or a second brand colour.",
+      "**Don't** bring green or sky into the Match flow as decoration; they are Friends and Discover state colours.",
+      "**Don't** use emoji as icons.",
+      "**Don't** add ambient looping motion outside the search stage and the chat intro heart.",
+      "**Don't** animate message history; only messages that arrive while the thread is open pop in.",
+      "**Don't** put Upgrade or a plain \"Online\" in the header on any tab."
+    ]
+  }
+}

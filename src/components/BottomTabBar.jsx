@@ -1,5 +1,5 @@
-import React from 'react';
-import { MessageSquare, Compass, Users, Lock } from 'lucide-react';
+import React, { useState } from 'react';
+import { MessageSquare, Compass, Users, Lock, UserRound } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { haptic } from '../mobile/nativeShell';
@@ -26,8 +26,12 @@ export function BottomTabBar({ activeTab, setActiveTab }) {
     { id: 'profile', label: 'Profile', avatar: true },
   ];
 
+  const [tapped, setTapped] = useState(null);
+
   const select = (tab) => {
     haptic();
+    setTapped(tab.id);
+    setTimeout(() => setTapped(null), 450);
     if (tab.locked) {
       openUpgradeModal(tab.lockReason);
       return;
@@ -50,7 +54,7 @@ export function BottomTabBar({ activeTab, setActiveTab }) {
           <button
             key={tab.id}
             type="button"
-            className={`tabbar-item${active ? ' is-active' : ''}${tab.locked ? ' is-locked' : ''}`}
+            className={`tabbar-item${active ? ' is-active' : ''}${tab.locked ? ' is-locked' : ''}${tapped === tab.id ? ' just-tapped' : ''}`}
             onClick={() => select(tab)}
             aria-current={active ? 'page' : undefined}
             aria-label={tab.locked ? `${tab.label} (sign up to unlock)` : tab.label}
@@ -60,7 +64,7 @@ export function BottomTabBar({ activeTab, setActiveTab }) {
                 <span className="tabbar-avatar">
                   {user?.photoUrl
                     ? <img src={user.photoUrl} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                    : '⚡'}
+                    : <UserRound size={16} aria-hidden="true" />}
                 </span>
               ) : (
                 <tab.Icon size={22} strokeWidth={active ? 2.4 : 1.9} />
