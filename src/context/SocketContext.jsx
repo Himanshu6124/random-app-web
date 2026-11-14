@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { socketService, extractPeerName } from '../services/socketService';
+import { applyReaction } from '../components/chat/messageUtils';
 
 const SocketContext = createContext();
 
@@ -84,6 +85,8 @@ export function SocketProvider({ children }) {
   const [isPeerOnline, setIsPeerOnline] = useState(true);
   const [peerLeft, setPeerLeft] = useState(false);
   const [floatingReactions, setFloatingReactions] = useState([]);
+  // Latest Spin the Bottle round of the random chat (server-decided), or null
+  const [bottleGame, setBottleGame] = useState(null);
 
   // Connection status: 'connecting' | 'connected' | 'disconnected'
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
@@ -208,6 +211,47 @@ export function SocketProvider({ children }) {
   const handleMatchFoundRef = useRef(handleMatchFound);
   const handleMessageReceivedRef = useRef(handleMessageReceived);
   const loadFriendsRef = useRef(loadFriendsFromApi);
+
+  /**
+   * Spin the Bottle event for the random chat. SPIN starts the animation on both phones;
+   * QUESTION also drops a card into the feed so the question stays in the conversation.
+   */
+  const handleGameEvent = useCallback((event) => {
+    const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+    if (!event || !activeConvId || event.conversationId !== activeConvId) return;
+
+    setBottleGame(prev => {
+      // A late SPIN / CHOSEN must never rewind a round that has already moved on
+      const order = { SPIN: 0, CHOSEN: 1, QUESTION: 2 };
+      if (prev && prev.roundId === event.roundId && order[prev.phase] > order[event.phase]) {
+        return prev;
+      }
+      // A close for an older round (a new spin already started) must not hide the new one
+      if (event.phase === 'CLOSED' && prev && event.roundId && prev.roundId && prev.roundId !== event.roundId) {
+        return prev;
+      }
+      return { ...event, receivedAt: Date.now() };
+    });
+
+    if (event.phase === 'QUESTION' && event.question) {
+      const cardId = 'game_' + event.roundId;
+      setMessages(prev => (prev.some(m => m.id === cardId) ? prev : [...prev, {
+        id: cardId,
+        conversationId: event.conversationId,
+        senderId: 'game',
+        type: 'GAME',
+        choice: event.choice,
+        question: event.question,
+        targetId: event.targetId,
+        askerId: event.askerId,
+        custom: Boolean(event.custom),
+        text: event.question,
+        timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      }]));
+    }
+  }, []);
+  const handleGameEventRef = useRef(handleGameEvent);
+  useEffect(() => { handleGameEventRef.current = handleGameEvent; }, [handleGameEvent]);
   const loadRequestsRef = useRef(loadFriendRequests);
   const applyFriendPresenceRef = useRef(applyFriendPresence);
   const setLiveFriendRequestRef = useRef(setLiveFriendRequest);
@@ -319,9 +363,17 @@ export function SocketProvider({ children }) {
         onMessageReceived: (msg) => {
           handleMessageReceivedRef.current(msg);
         },
+        onGameEvent: (event) => {
+          handleGameEventRef.current(event);
+        },
         onDirectMessageReceived: (payload) => {
           handleIncomingDirectMessageRef.current?.(payload);
           if (soundEnabledRef.current) playChime('message');
+        },
+        onReaction: (payload) => {
+          const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+          if (!activeConvId || payload?.conversationId !== activeConvId) return;
+          setMessages(prev => prev.map(m => applyReaction(m, payload)));
         },
         onMessageSeen: (payload) => {
           const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
@@ -606,7 +658,7 @@ export function SocketProvider({ children }) {
    * Sends a random-chat message. Random chat is never persisted, so anything we
    * cannot put on the wire right now is kept locally as FAILED with a retry.
    */
-  const sendMessage = useCallback((text) => {
+  const sendMessage = useCallback((text, referredMessageId = null) => {
     if (!text || !text.trim() || !currentPeer) return false;
 
     const messageText = text.trim();
@@ -614,7 +666,7 @@ export function SocketProvider({ children }) {
     if (!conversationId) return false;
 
     const canDeliver = isPeerOnline && !peerLeft;
-    const delivered = canDeliver && socketService.sendRandomChatMessage(conversationId, messageText, 'TEXT');
+    const delivered = canDeliver && socketService.sendRandomChatMessage(conversationId, messageText, 'TEXT', null, referredMessageId);
 
     if (!delivered) {
       setMessages(prev => [...prev, {
@@ -623,6 +675,7 @@ export function SocketProvider({ children }) {
         senderId: userRef.current?.id,
         text: messageText,
         message: messageText,
+        referredMessageId,
         status: 'FAILED',
         timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
       }]);
@@ -644,7 +697,7 @@ export function SocketProvider({ children }) {
     const msg = messagesRef.current.find(m => m.id === msgId);
     if (!msg || msg.serverRefused) return false;
 
-    const sent = socketService.sendRandomChatMessage(conversationId, msg.text || msg.message, 'TEXT');
+    const sent = socketService.sendRandomChatMessage(conversationId, msg.text || msg.message, 'TEXT', null, msg.referredMessageId || null);
     if (sent) {
       setMessages(prev => prev.filter(m => m.id !== msgId));
     }
@@ -665,14 +718,14 @@ export function SocketProvider({ children }) {
    * Failure becomes a visible FAILED bubble with no retry (retrying would need the file,
    * not the text) — matching the "never look sent when it is not" rule.
    */
-  const sendMedia = useCallback(({ type, objectUri, localPreviewUrl }) => {
+  const sendMedia = useCallback(({ type, objectUri, localPreviewUrl, referredMessageId = null }) => {
     if (!currentPeer || peerLeft || !isPeerOnline) return false;
 
     const conversationId = currentPeer.conversationId || currentPeer.id;
     if (!conversationId || !objectUri) return false;
 
     const caption = type === 'IMAGE' ? '📷 Photo' : '🎤 Voice note';
-    const delivered = socketService.sendRandomChatMessage(conversationId, caption, type, objectUri);
+    const delivered = socketService.sendRandomChatMessage(conversationId, caption, type, objectUri, referredMessageId);
 
     if (!delivered) {
       setMessages(prev => [...prev, {
@@ -684,6 +737,7 @@ export function SocketProvider({ children }) {
         type,
         objectUri,
         localPreviewUrl,
+        referredMessageId,
         status: 'FAILED',
         // No retry affordance for media: a text re-send would lose the file.
         serverRefused: true,
@@ -707,11 +761,50 @@ export function SocketProvider({ children }) {
     }, 1800);
   }, [sendMessage]);
 
+  /**
+   * React to a message in the random chat (null emoji removes the reaction). Applied locally
+   * right away; the server echo carries the same change, so applying it twice is harmless.
+   */
+  const reactToMessage = useCallback((messageId, emoji) => {
+    const conversationId = currentPeer?.conversationId || currentPeer?.id;
+    if (!conversationId || !messageId || peerLeft) return false;
+    const sent = socketService.sendMessageReaction(conversationId, messageId, emoji);
+    if (sent) {
+      const reaction = { senderId: userRef.current?.id, messageId, emoji };
+      setMessages(prev => prev.map(m => applyReaction(m, reaction)));
+    }
+    return sent;
+  }, [currentPeer, peerLeft]);
+
   const sendIcebreaker = useCallback(() => {
     const questions = ICEBREAKER_QUESTIONS;
     const randomQ = questions[Math.floor(Math.random() * questions.length)];
     sendMessage(`🧊 Icebreaker: ${randomQ}`);
   }, [sendMessage]);
+
+  const spinBottle = useCallback(() => {
+    const conversationId = currentPeer?.conversationId || currentPeer?.id;
+    if (!conversationId || peerLeft) return false;
+    return socketService.spinBottle(conversationId);
+  }, [currentPeer, peerLeft]);
+
+  const askGameQuestion = useCallback((roundId, question, custom) => {
+    const conversationId = currentPeer?.conversationId || currentPeer?.id;
+    if (!conversationId || peerLeft) return false;
+    return socketService.askGameQuestion(conversationId, roundId, question, custom);
+  }, [currentPeer, peerLeft]);
+
+  const closeGame = useCallback(() => {
+    const conversationId = currentPeer?.conversationId || currentPeer?.id;
+    if (!conversationId) return false;
+    return socketService.closeGame(conversationId);
+  }, [currentPeer]);
+
+  const chooseGameOption = useCallback((roundId, choice) => {
+    const conversationId = currentPeer?.conversationId || currentPeer?.id;
+    if (!conversationId || peerLeft) return false;
+    return socketService.chooseGameOption(conversationId, roundId, choice);
+  }, [currentPeer, peerLeft]);
 
   const clearUnreadRandomCount = useCallback(() => setUnreadRandomCount(0), []);
   const dismissLiveWave = useCallback(() => setLiveWave(null), []);
@@ -740,17 +833,23 @@ export function SocketProvider({ children }) {
     sendMedia,
     retryMessage,
     sendReaction,
+    reactToMessage,
     sendIcebreaker,
     notifyTyping,
     floatingReactions,
+    bottleGame,
+    spinBottle,
+    chooseGameOption,
+    askGameQuestion,
+    closeGame,
     connectionStatus,
     isLiveConnected
   }), [
     activeTab, setActiveTab, unreadRandomCount, clearUnreadRandomCount, liveRandomMessage,
     dismissLiveRandomMessage, liveWave, dismissLiveWave, matchState, currentPeer, messages, isPeerTyping, isPeerOnline, peerLeft,
     startSearching, cancelSearch, skipStranger, disconnectChat, sendMessage,
-    retryMessage, sendMedia, sendReaction, sendIcebreaker, notifyTyping, floatingReactions,
-    connectionStatus, isLiveConnected
+    retryMessage, sendMedia, sendReaction, reactToMessage, sendIcebreaker, notifyTyping, floatingReactions,
+    bottleGame, spinBottle, chooseGameOption, askGameQuestion, closeGame, connectionStatus, isLiveConnected
   ]);
 
   return (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket, ICEBREAKER_QUESTIONS } from '../context/SocketContext';
 import { socketService, MAX_MESSAGE_LENGTH } from '../services/socketService';
@@ -11,6 +11,9 @@ import { MediaComposer } from '../components/MediaComposer';
 import { useBackHandler } from '../mobile/useBackHandler';
 import { useEdgeSwipeBack } from '../mobile/useEdgeSwipeBack';
 import { ChatMediaMessage } from '../components/ChatMediaMessage';
+import { MessageShell, ReplyQuote, ReplyComposerBar } from '../components/chat/MessageExtras';
+import { applyReaction, isInteractive, jumpToMessage } from '../components/chat/messageUtils';
+import { useMessageInteractions } from '../components/chat/useMessageInteractions';
 
 const MAX_CACHED_MESSAGES = 200;
 
@@ -59,6 +62,10 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   useEdgeSwipeBack(chatAreaRef, isMobile && mobileShowChat, () => setMobileShowChat(false));
   const messagesEndRef = useRef(null);
   const typingTimerRef = useRef(null);
+  const dmInputRef = useRef(null);
+  const [replyTarget, setReplyTarget] = useState(null);
+  const interactions = useMessageInteractions();
+  const closeInteractions = interactions.close;
 
   // Resize listener for mobile/desktop layout
   useEffect(() => {
@@ -329,6 +336,9 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             message: msg.message || msg.text || '',
             type: msg.type || (msg.objectUri ? 'IMAGE' : 'TEXT'),
             objectUri: msg.objectUri || null,
+            referredMessageId: msg.referredMessageId || null,
+            reactEmojiSender: msg.reactEmojiSender || null,
+            reactEmojiReceiver: msg.reactEmojiReceiver || null,
             status: msg.status || 'SENT',
             time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
             timestamp: rawTime
@@ -360,6 +370,13 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
           socketService.sendSeen(conversationId, msg.id);
         }
       },
+      onReaction: (payload) => {
+        setDmMessages(prev => {
+          const currentList = prev[conversationId];
+          if (!currentList) return prev;
+          return { ...prev, [conversationId]: currentList.map(m => applyReaction(m, payload)) };
+        });
+      },
       onSeen: (_payload) => {
         setDmMessages(prev => {
           const currentList = prev[conversationId] || [];
@@ -383,10 +400,44 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     });
   }, [selectedFriend, user?.id]);
 
-  // Scroll to bottom on new messages
+  const scrollKey = selectedFriend ? (selectedFriend.conversationId || selectedFriend.id) : null;
+  const scrollList = scrollKey ? (dmMessages[scrollKey] || []) : [];
+  const lastDmId = scrollList.length ? scrollList[scrollList.length - 1].id : null;
+
+  // Scroll to bottom on NEW messages only: a reaction on an old message must not jump the feed.
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [dmMessages, selectedFriend, isFriendTyping]);
+  }, [lastDmId, scrollList.length, selectedFriend, isFriendTyping]);
+
+  // A pending reply belongs to the chat it was started in.
+  useEffect(() => {
+    setReplyTarget(null);
+    closeInteractions();
+  }, [selectedFriend?.conversationId, closeInteractions]);
+
+  const friendDisplayName = selectedFriend
+    ? (selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username)
+    : '';
+  const authorLabel = (m) => (m && (m.sender === 'me' || m.senderId === user?.id) ? 'You' : friendDisplayName);
+
+  const startReply = (m) => {
+    setReplyTarget(m);
+    setTimeout(() => dmInputRef.current?.focus(), 0);
+  };
+
+  const handleReactDm = (m, emoji) => {
+    const conversationId = selectedFriend?.conversationId;
+    if (!conversationId || !m?.id) return;
+    const sent = socketService.sendMessageReaction(conversationId, m.id, emoji);
+    if (!sent) return;
+    // Applied locally right away; the server echo carries the same change.
+    const reaction = { senderId: user?.id, messageId: m.id, emoji };
+    setDmMessages(prev => {
+      const list = prev[conversationId];
+      if (!list) return prev;
+      return { ...prev, [conversationId]: list.map(x => applyReaction(x, reaction)) };
+    });
+  };
 
   const handleSendDm = (e) => {
     if (e) e.preventDefault();
@@ -396,12 +447,14 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     const conversationId = selectedFriend.conversationId;
     const friendId = selectedFriend.id || selectedFriend.friendUserId;
     const rawTime = new Date().toISOString();
+    const referredMessageId = replyTarget?.id || null;
 
     const newMsg = {
       id: 'pending_' + Date.now(),
       sender: 'me',
       senderId: user?.id || 'me',
       text: messageText,
+      referredMessageId,
       status: 'SENDING',
       time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
       timestamp: rawTime
@@ -417,11 +470,12 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     });
 
     setDmInput('');
+    setReplyTarget(null);
 
     if (!conversationId) return;
 
     socketService.sendTyping(conversationId, false);
-    const sent = socketService.sendMessage(conversationId, messageText, 'TEXT');
+    const sent = socketService.sendMessage(conversationId, messageText, 'TEXT', null, referredMessageId);
     if (!sent) {
       setDmMessages(prev => {
         const list = (prev[conversationId] || []).map(m => m.id === newMsg.id ? { ...m, status: 'FAILED' } : m);
@@ -459,6 +513,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     const conversationId = selectedFriend.conversationId;
     const caption = type === 'IMAGE' ? '📷 Photo' : '🎤 Voice note';
     const rawTime = new Date().toISOString();
+    const referredMessageId = replyTarget?.id || null;
+    setReplyTarget(null);
 
     const newMsg = {
       id: 'pending_' + Date.now(),
@@ -467,6 +523,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       text: caption,
       type,
       objectUri,
+      referredMessageId,
       status: 'SENDING',
       time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
       timestamp: rawTime
@@ -477,7 +534,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       [conversationId]: [...(prev[conversationId] || []), newMsg]
     }));
 
-    const sent = socketService.sendMessage(conversationId, caption, type, objectUri);
+    const sent = socketService.sendMessage(conversationId, caption, type, objectUri, referredMessageId);
     if (!sent) {
       setDmMessages(prev => {
         const list = (prev[conversationId] || []).map(m => m.id === newMsg.id ? { ...m, status: 'FAILED' } : m);
@@ -543,6 +600,11 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
 
   const activeKey = selectedFriend ? (selectedFriend.conversationId || selectedFriend.id) : null;
   const currentMessages = activeKey ? (dmMessages[activeKey] || []) : [];
+  const messagesById = useMemo(() => {
+    const map = new Map();
+    (activeKey ? (dmMessages[activeKey] || []) : []).forEach(m => { if (m.id) map.set(m.id, m); });
+    return map;
+  }, [activeKey, dmMessages]);
   const freshIds = useNewMessageIds(currentMessages, activeKey);
 
   if (isGuest) {
@@ -1108,8 +1170,17 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                       alignItems: isMe ? 'flex-end' : 'flex-start'
                     }}
                   >
+                    <MessageShell
+                      msg={m}
+                      isMe={isMe}
+                      myId={user?.id}
+                      interactions={interactions}
+                      enabled={isInteractive(m) && isLiveConnected}
+                      onReply={startReply}
+                      onReact={handleReactDm}
+                    >
                     <div style={{
-                      maxWidth: '75%',
+                      maxWidth: '100%',
                       padding: '12px 18px',
                       borderRadius: isMe ? 'var(--radius-bubble) var(--radius-bubble) var(--radius-xs) var(--radius-bubble)' : 'var(--radius-bubble) var(--radius-bubble) var(--radius-bubble) var(--radius-xs)',
                       background: isMe
@@ -1123,12 +1194,20 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                       wordBreak: 'break-word',
                       opacity: m.status === 'FAILED' ? 0.7 : 1
                     }}>
+                      {m.referredMessageId && (
+                        <ReplyQuote
+                          quoted={messagesById.get(m.referredMessageId)}
+                          authorLabel={authorLabel(messagesById.get(m.referredMessageId))}
+                          onJump={() => jumpToMessage(m.referredMessageId)}
+                        />
+                      )}
                       {(m.type === 'IMAGE' || m.type === 'AUDIO' || m.objectUri) ? (
                         <ChatMediaMessage msg={m} />
                       ) : (
                         m.text
                       )}
                     </div>
+                    </MessageShell>
                     <span style={{
                       fontSize: 'var(--fs-xs)',
                       color: m.status === 'FAILED' ? 'var(--danger)' : 'var(--text-muted)',
@@ -1257,6 +1336,14 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               </div>
             )}
 
+            {isLiveConnected && (
+              <ReplyComposerBar
+                target={replyTarget}
+                authorLabel={authorLabel(replyTarget)}
+                onCancel={() => setReplyTarget(null)}
+              />
+            )}
+
             {/* DM Text Input Form */}
             <form className="chat-composer" onSubmit={handleSendDm} style={{
               padding: '16px 20px',
@@ -1273,9 +1360,16 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                 onError={setMediaError}
               />
               <input
+                ref={dmInputRef}
                 type="text"
                 value={dmInput}
                 onChange={handleInputChange}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape' && replyTarget) {
+                    e.preventDefault();
+                    setReplyTarget(null);
+                  }
+                }}
                 onBlur={() => {
                   if (selectedFriend?.conversationId) {
                     socketService.sendTyping(selectedFriend.conversationId, false);

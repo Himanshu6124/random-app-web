@@ -543,6 +543,8 @@ export class SocketService {
           message: payload.message || payload.text || '',
           objectUri: payload.objectUri || null,
           referredMessageId: payload.referredMessageId || null,
+          reactEmojiSender: payload.reactEmojiSender || null,
+          reactEmojiReceiver: payload.reactEmojiReceiver || null,
           status: payload.status || 'SENT',
           type: payload.type || 'TEXT',
           timestamp: rawTime,
@@ -585,6 +587,20 @@ export class SocketService {
       case 'PEER_UPDATED': {
         this.callbacks.onPeerUpdated?.(payload);
         this._emitRoom(conversationId, 'onPeerUpdated', payload);
+        break;
+      }
+
+      case 'REACTION': {
+        // senderId is the REACTOR; clients apply it with applyReaction().
+        this.callbacks.onReaction?.(payload);
+        this._emitRoom(conversationId, 'onReaction', payload);
+        break;
+      }
+
+      case 'GAME': {
+        // Spin the Bottle: the server already decided the outcome, clients only play it.
+        this.callbacks.onGameEvent?.(payload);
+        this._emitRoom(conversationId, 'onGame', payload);
         break;
       }
 
@@ -733,14 +749,24 @@ export class SocketService {
   /**
    * Send random chat message via STOMP: /app/chat.random.send
    */
-  sendRandomChatMessage(conversationId, text, type = 'TEXT', objectUri = null) {
+  sendRandomChatMessage(conversationId, text, type = 'TEXT', objectUri = null, referredMessageId = null) {
     if (!conversationId) return false;
     return this._publish('/app/chat.random.send', {
       conversationId,
       message: text,
       type,
-      objectUri
+      objectUri,
+      referredMessageId
     });
+  }
+
+  /**
+   * React to a message (friend DM or random room): /app/chat.react.
+   * A null / empty emoji removes your reaction.
+   */
+  sendMessageReaction(conversationId, messageId, emoji) {
+    if (!conversationId || !messageId) return false;
+    return this._publish('/app/chat.react', { conversationId, messageId, emoji: emoji || null });
   }
 
   /**
@@ -797,6 +823,38 @@ export class SocketService {
       name: peerData.name,
       photoUrl: peerData.photoUrl || ''
     });
+  }
+
+  /**
+   * Spin the Bottle in a random chat: /app/chat.game.spin. The server picks who it lands on.
+   */
+  spinBottle(conversationId) {
+    if (!conversationId) return false;
+    return this._publish('/app/chat.game.spin', { conversationId });
+  }
+
+  /**
+   * The player the bottle landed on picks TRUTH | DARE | WOULD_YOU_RATHER: /app/chat.game.choose
+   */
+  chooseGameOption(conversationId, roundId, choice) {
+    if (!conversationId || !roundId || !choice) return false;
+    return this._publish('/app/chat.game.choose', { conversationId, roundId, choice });
+  }
+
+  /**
+   * The asker sends the Truth / Dare / WYR (typed, or a suggestion): /app/chat.game.ask
+   */
+  askGameQuestion(conversationId, roundId, question, custom) {
+    if (!conversationId || !roundId || !question) return false;
+    return this._publish('/app/chat.game.ask', { conversationId, roundId, question, custom: Boolean(custom) });
+  }
+
+  /**
+   * Either player closed the Truth & Dare dialog: /app/chat.game.close (closes it for both)
+   */
+  closeGame(conversationId) {
+    if (!conversationId) return false;
+    return this._publish('/app/chat.game.close', { conversationId });
   }
 
   /**

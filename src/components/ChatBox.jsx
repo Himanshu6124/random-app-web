@@ -1,13 +1,18 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
-import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Star, Hand, Lock, RefreshCw, X, Zap, Ban, UserRound, AlertTriangle, CheckCheck, Check } from 'lucide-react';
+import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Star, Hand, Lock, RefreshCw, X, Zap, Ban, UserRound, AlertTriangle, CheckCheck, Check, Wine } from 'lucide-react';
 import { extractPeerName, MAX_MESSAGE_LENGTH } from '../services/socketService';
 import { authService } from '../services/authService';
 import { MediaComposer } from './MediaComposer';
 import { ChatMediaMessage } from './ChatMediaMessage';
 import { DiscoverConfirmDialog } from './discover/DiscoverConfirmDialog';
 import { useNewMessageIds, displayTime } from '../mobile/useNewMessageIds';
+import { BottleGame, GameFeedCard } from './BottleGame';
+import { playReveal, unlockGameAudio } from '../services/gameFx';
+import { MessageShell, ReplyQuote, ReplyComposerBar } from './chat/MessageExtras';
+import { isInteractive, jumpToMessage } from './chat/messageUtils';
+import { useMessageInteractions } from './chat/useMessageInteractions';
 
 export function ChatBox() {
   const {
@@ -21,7 +26,8 @@ export function ChatBox() {
     friendRequests,
     liveFriendRequest,
     openUpgradeModal,
-    blockUser
+    blockUser,
+    soundEnabled
   } = useAuth();
   const {
     currentPeer,
@@ -34,12 +40,18 @@ export function ChatBox() {
     sendMedia,
     retryMessage,
     sendReaction,
+    reactToMessage,
     sendIcebreaker,
     skipStranger,
     startSearching,
     disconnectChat,
     floatingReactions,
-    notifyTyping
+    notifyTyping,
+    bottleGame,
+    spinBottle,
+    chooseGameOption,
+    askGameQuestion,
+    closeGame
   } = useSocket();
 
   const [inputMsg, setInputMsg] = useState('');
@@ -49,8 +61,14 @@ export function ChatBox() {
   const [blockConfirmOpen, setBlockConfirmOpen] = useState(false);
   const [blocking, setBlocking] = useState(false);
   const [blockError, setBlockError] = useState('');
+  const [gameOpen, setGameOpen] = useState(false);
+  const [replyTarget, setReplyTarget] = useState(null);
+  const interactions = useMessageInteractions();
+  const closeInteractions = interactions.close;
   const messagesEndRef = useRef(null);
   const typingTimerRef = useRef(null);
+  const inputRef = useRef(null);
+  const lastGameRoundRef = useRef(null);
 
   const peerName = extractPeerName(currentPeer);
   // Peer IDENTITY is the stable user id. currentPeer.username/name are display only.
@@ -189,10 +207,6 @@ export function ChatBox() {
     }
   };
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isPeerTyping]);
-
   const composerDisabled = peerLeft || !isLiveConnected;
   const composerPlaceholder = peerLeft
     ? 'Your chat partner left the chat'
@@ -200,11 +214,102 @@ export function ChatBox() {
 
   const freshIds = useNewMessageIds(messages, currentPeer?.id || 'random');
 
+  // Spin the Bottle belongs to this room only; a round from a previous stranger is ignored.
+  const activeConvId = currentPeer?.conversationId || currentPeer?.id || null;
+  const roomGame = bottleGame && bottleGame.conversationId === activeConvId ? bottleGame : null;
+  // CLOSED only tells us to close the dialog; the table itself starts fresh next time.
+  const game = roomGame && roomGame.phase !== 'CLOSED' ? roomGame : null;
+
+  // Either player closing the dialog closes it on both phones.
+  const lastCloseRef = useRef(null);
+  useEffect(() => {
+    if (roomGame?.phase === 'CLOSED' && roomGame.receivedAt !== lastCloseRef.current) {
+      lastCloseRef.current = roomGame.receivedAt;
+      setGameOpen(false);
+    }
+  }, [roomGame?.phase, roomGame?.receivedAt]);
+
+  const handleGameClose = () => {
+    setGameOpen(false);
+    closeGame();
+  };
+
+  // Follow NEW messages only: a reaction on an old message must not yank the feed to the bottom.
+  const lastMessageId = messages.length ? messages[messages.length - 1].id : null;
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [lastMessageId, messages.length, isPeerTyping, gameOpen, game?.phase, game?.roundId]);
+
+  const messagesById = useMemo(() => {
+    const map = new Map();
+    messages.forEach(m => { if (m.id) map.set(m.id, m); });
+    return map;
+  }, [messages]);
+
+  const authorLabel = (m) => (m && m.senderId === user?.id ? 'You' : peerName);
+
+  const startReply = (m) => {
+    setReplyTarget(m);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const handleReact = (m, emoji) => {
+    reactToMessage(m.id, emoji);
+  };
+
+  const handleSendMedia = (media) => {
+    const ok = sendMedia({ ...media, referredMessageId: replyTarget?.id || null });
+    setReplyTarget(null);
+    return ok;
+  };
+
+  // Whoever spins, both players are pulled onto the table to watch the bottle.
+  useEffect(() => {
+    if (game?.phase === 'SPIN' && game.roundId !== lastGameRoundRef.current) {
+      lastGameRoundRef.current = game.roundId;
+      setGameOpen(true);
+    }
+  }, [game?.phase, game?.roundId]);
+
+  // Once Truth / Dare / WYR is picked, the question lands in the feed as a card: fold the
+  // inline table away and put whoever answers straight into the composer.
+  const lastQuestionRoundRef = useRef(null);
+  useEffect(() => {
+    if (game?.phase === 'QUESTION' && game.roundId !== lastQuestionRoundRef.current) {
+      lastQuestionRoundRef.current = game.roundId;
+      setGameOpen(false);
+      playReveal({ sound: soundEnabled });
+      if (game.targetId === user?.id) setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [game?.phase, game?.roundId, game?.targetId, user?.id]);
+
+  // Tapping Spin spins right away: the dialog opens here now, and on the peer's phone as
+  // soon as the server's SPIN event reaches both of us.
+  const [spinPending, setSpinPending] = useState(false);
+  const handleSpinClick = () => {
+    if (peerLeft || !isLiveConnected) return;
+    unlockGameAudio();
+    const sent = spinBottle();
+    setSpinPending(Boolean(sent));
+    setGameOpen(true);
+  };
+  useEffect(() => {
+    if (!gameOpen) setSpinPending(false);
+  }, [gameOpen]);
+
+  // A new stranger (or the peer leaving) closes the table and drops a pending reply.
+  useEffect(() => {
+    setGameOpen(false);
+    setReplyTarget(null);
+    closeInteractions();
+  }, [activeConvId, peerLeft, closeInteractions]);
+
   const handleSend = (e) => {
     e.preventDefault();
     if (!inputMsg.trim() || composerDisabled) return;
-    sendMessage(inputMsg);
+    sendMessage(inputMsg, replyTarget?.id || null);
     setInputMsg('');
+    setReplyTarget(null);
     notifyTyping(false);
   };
 
@@ -467,6 +572,12 @@ export function ChatBox() {
           </div>
         )}
         {messages.map(msg => {
+          if (msg.senderId === 'game') {
+            return (
+              <GameFeedCard key={msg.id} msg={msg} myId={user?.id} peerName={peerName} />
+            );
+          }
+
           if (msg.senderId === 'system') {
             return (
               <div key={msg.id} style={{
@@ -495,8 +606,17 @@ export function ChatBox() {
                 alignItems: isMe ? 'flex-end' : 'flex-start'
               }}
             >
+              <MessageShell
+                msg={msg}
+                isMe={isMe}
+                myId={myId}
+                interactions={interactions}
+                enabled={isInteractive(msg) && !peerLeft && isLiveConnected}
+                onReply={startReply}
+                onReact={handleReact}
+              >
               <div style={{
-                maxWidth: '75%',
+                maxWidth: '100%',
                 padding: '12px 18px',
                 borderRadius: isMe ? 'var(--radius-bubble) var(--radius-bubble) var(--radius-xs) var(--radius-bubble)' : 'var(--radius-bubble) var(--radius-bubble) var(--radius-bubble) var(--radius-xs)',
                 background: isFailed
@@ -513,12 +633,20 @@ export function ChatBox() {
                 overflowWrap: 'anywhere',
                 wordBreak: 'break-word'
               }}>
+                {msg.referredMessageId && (
+                  <ReplyQuote
+                    quoted={messagesById.get(msg.referredMessageId)}
+                    authorLabel={authorLabel(messagesById.get(msg.referredMessageId))}
+                    onJump={() => jumpToMessage(msg.referredMessageId)}
+                  />
+                )}
                 {msg.type === 'IMAGE' || msg.type === 'AUDIO' ? (
                   <ChatMediaMessage msg={msg} />
                 ) : (
                   msg.text || msg.message
                 )}
               </div>
+              </MessageShell>
 
               {isFailed ? (
                 <div style={{
@@ -605,24 +733,32 @@ export function ChatBox() {
         position: 'relative',
         zIndex: 20
       }}>
-        {/* Icebreaker button */}
-        <button
-          type="button"
-          onClick={handleIcebreakerClick}
-          className="btn-secondary"
-          style={{
-            padding: '8px 16px',
-            fontSize: 'var(--fs-sm)',
-            borderRadius: 'var(--radius-full)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}
-        >
-          <HelpCircle size={15} color="var(--text-secondary)" />
-          <span style={{ fontWeight: 600 }}>Ask Icebreaker</span>
-        </button>
+        <div className="chat-subbar-actions">
+          {/* Icebreaker button */}
+          <button
+            type="button"
+            onClick={handleIcebreakerClick}
+            className="btn-secondary chat-subbar-pill"
+          >
+            <HelpCircle size={15} color="var(--text-secondary)" aria-hidden="true" />
+            <span className="label-long">Ask Icebreaker</span>
+            <span className="label-short">Icebreaker</span>
+          </button>
+
+          {/* Spin the Bottle */}
+          <button
+            id="spin-bottle-btn"
+            type="button"
+            onClick={handleSpinClick}
+            disabled={peerLeft || !isLiveConnected}
+            className="btn-secondary chat-subbar-pill chat-game-btn"
+            aria-label="Play Truth & Dare"
+          >
+            <Wine size={15} aria-hidden="true" />
+            <span className="label-long">Truth &amp; Dare</span>
+            <span className="label-short">T &amp; D</span>
+          </button>
+        </div>
 
         {/* Quick Emojis */}
         <div className="chat-subbar-reactions" style={{ display: 'flex', gap: '6px' }}>
@@ -717,6 +853,14 @@ export function ChatBox() {
         </div>
       )}
 
+      {!composerDisabled && (
+        <ReplyComposerBar
+          target={replyTarget}
+          authorLabel={authorLabel(replyTarget)}
+          onCancel={() => setReplyTarget(null)}
+        />
+      )}
+
       {/* Text Message Input */}
       <form className="chat-composer" onSubmit={handleSend} style={{
         padding: '16px 20px',
@@ -730,14 +874,21 @@ export function ChatBox() {
         <MediaComposer
           conversationId={currentPeer?.conversationId || currentPeer?.id}
           disabled={composerDisabled}
-          onSend={sendMedia}
+          onSend={handleSendMedia}
           onError={setMediaError}
         />
         <input
+          ref={inputRef}
           type="text"
           value={inputMsg}
           onChange={handleInputChange}
           onBlur={() => notifyTyping(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && replyTarget) {
+              e.preventDefault();
+              setReplyTarget(null);
+            }
+          }}
           disabled={composerDisabled}
           placeholder={composerPlaceholder}
           maxLength={MAX_MESSAGE_LENGTH}
@@ -771,6 +922,25 @@ export function ChatBox() {
           <Send size={20} />
         </button>
       </form>
+
+      {/* Truth & Dare: a dialog over this chat screen only; the chat behind it is blurred. */}
+      {gameOpen && (
+        <div className="bg-backdrop">
+          <BottleGame
+            game={game}
+            myId={user?.id}
+            me={{ name: user?.name || user?.username || 'You', photoUrl: user?.photoUrl }}
+            peer={{ name: peerName, photoUrl: currentPeer.photoUrl }}
+            disabled={peerLeft || !isLiveConnected}
+            spinPending={spinPending}
+            soundEnabled={soundEnabled}
+            onSpin={spinBottle}
+            onChoose={chooseGameOption}
+            onAsk={askGameQuestion}
+            onClose={handleGameClose}
+          />
+        </div>
+      )}
 
       <DiscoverConfirmDialog
         open={blockConfirmOpen}

@@ -586,6 +586,8 @@ export const authService = {
           message: m.message || '',
           objectUri: m.objectUri || null,
           referredMessageId: m.referredMessageId || null,
+          reactEmojiSender: m.reactEmojiSender || null,
+          reactEmojiReceiver: m.reactEmojiReceiver || null,
           status: m.status || 'SENT',
           type: m.type || 'TEXT',
           time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),

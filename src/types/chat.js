@@ -8,7 +8,7 @@
  * @typedef {'SENT' | 'SEEN' | 'DELETED'} MessageStatus
  * @typedef {'TEXT' | 'IMAGE' | 'VIDEO' | 'AUDIO'} MessageType
  * @typedef {'NONE' | 'PENDING_SENT' | 'PENDING_RECEIVED' | 'ACCEPTED' | 'BLOCKED'} FriendshipStatus
- * @typedef {'MESSAGE' | 'TYPING' | 'ONLINE_STATUS' | 'CONVERSATION_DTO' | 'DISCONNECTED_DTO' | 'SEEN'} WebSocketEventType
+ * @typedef {'MESSAGE' | 'TYPING' | 'ONLINE_STATUS' | 'CONVERSATION_DTO' | 'DISCONNECTED_DTO' | 'SEEN' | 'REACTION'} WebSocketEventType
  */
 
 /**
@@ -143,6 +143,14 @@
  * @property {string} conversationId
  * @property {string} messageId
  * @property {string} seenAt
+ */
+
+/**
+ * @typedef {Object} MessageReactionDTO
+ * @property {string} senderId        the user who reacted
+ * @property {string} conversationId
+ * @property {string} messageId
+ * @property {string | null} emoji    null = reaction removed
  */
 
 /**
