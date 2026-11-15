@@ -5,25 +5,15 @@ import 'leaflet/dist/leaflet.css';
 import { DiscoverAvatar } from './DiscoverAvatar';
 import { firstName, timeAgo, initialsOf, avatarColor } from './discoverUtils';
 
-function getZoomForRadius(km) {
-  if (km <= 1) return 15;
-  if (km <= 2) return 14;
-  if (km <= 5) return 13;
-  if (km <= 10) return 12;
-  if (km <= 25) return 10;
-  return 9;
-}
+const DEFAULT_ZOOM = 13;
+const MIN_ZOOM = 3;
+const MAX_ZOOM = 18;
 
 export function NearbyMap({
   me,
   friends = [],
-  radiusKm = 5,
-  zoom: _zoom,
-  onZoomIn,
-  onZoomOut,
   onCenter,
-  canZoomIn,
-  canZoomOut,
+  onViewChange,
   selectedId,
   onSelect,
   onMessage,
@@ -35,11 +25,14 @@ export function NearbyMap({
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const layersRef = useRef({
-    circles: L.layerGroup(),
     me: L.layerGroup(),
     friends: L.layerGroup(),
   });
   const [popoverPos, setPopoverPos] = useState(null);
+  const [zoomLevel, setZoomLevel] = useState(DEFAULT_ZOOM);
+  const centeredRef = useRef(false);
+  const onViewChangeRef = useRef(onViewChange);
+  onViewChangeRef.current = onViewChange;
 
   // Initialize Leaflet Map
   useEffect(() => {
@@ -47,14 +40,22 @@ export function NearbyMap({
 
     const initialLat = me?.latitude ?? 20.5937;
     const initialLng = me?.longitude ?? 78.9629;
-    const initialZoom = me?.latitude != null ? getZoomForRadius(radiusKm) : 4;
+    const initialZoom = me?.latitude != null ? DEFAULT_ZOOM : 4;
+    centeredRef.current = me?.latitude != null;
 
     const map = L.map(containerRef.current, {
       center: [initialLat, initialLng],
       zoom: initialZoom,
       zoomControl: false,
       attributionControl: true,
+      minZoom: MIN_ZOOM,
+      maxZoom: MAX_ZOOM,
+      scrollWheelZoom: true,
+      doubleClickZoom: true,
+      touchZoom: true,
     });
+
+    L.control.scale({ position: 'bottomright', imperial: false }).addTo(map);
 
     const cartoKey = import.meta.env.VITE_CARTO_API_KEY;
     const tileUrl = cartoKey
@@ -68,7 +69,6 @@ export function NearbyMap({
         '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
     }).addTo(map);
 
-    layersRef.current.circles.addTo(map);
     layersRef.current.me.addTo(map);
     layersRef.current.friends.addTo(map);
 
@@ -79,7 +79,14 @@ export function NearbyMap({
       }
     });
 
+    const emitView = () => {
+      setZoomLevel(map.getZoom());
+      onViewChangeRef.current?.(map.getBounds());
+    };
+    map.on('zoomend moveend', emitView);
+
     mapRef.current = map;
+    emitView();
 
     // Handle container resizing
     const resizeObserver = new ResizeObserver(() => {
@@ -94,39 +101,12 @@ export function NearbyMap({
     };
   }, []);
 
-  // Update "You" and radius circles
+  // Update "You" marker
   useEffect(() => {
-    const { circles, me: meLayer } = layersRef.current;
-    circles.clearLayers();
+    const { me: meLayer } = layersRef.current;
     meLayer.clearLayers();
 
     if (me?.latitude == null || me?.longitude == null) return;
-
-    // Outer & inner radius circles
-    const outerCircle = L.circle([me.latitude, me.longitude], {
-      radius: radiusKm * 1000,
-      color: '#f07289',
-      weight: 1.5,
-      opacity: 0.5,
-      dashArray: '6, 8',
-      fillColor: '#f07289',
-      fillOpacity: 0.06,
-      interactive: false,
-    });
-
-    const innerCircle = L.circle([me.latitude, me.longitude], {
-      radius: (radiusKm * 1000) / 2,
-      color: '#f07289',
-      weight: 1.2,
-      opacity: 0.35,
-      dashArray: '4, 6',
-      fillColor: '#f07289',
-      fillOpacity: 0.03,
-      interactive: false,
-    });
-
-    circles.addLayer(outerCircle);
-    circles.addLayer(innerCircle);
 
     // Pulse dot for "You"
     const meIcon = L.divIcon({
@@ -149,14 +129,15 @@ export function NearbyMap({
     });
 
     meLayer.addLayer(meMarker);
-  }, [me?.latitude, me?.longitude, radiusKm]);
+  }, [me?.latitude, me?.longitude]);
 
-  // Adjust center and zoom when position or radius changes
+  // Center on "You" the first time a position is known; afterwards the user owns pan/zoom.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || me?.latitude == null || me?.longitude == null) return;
-    map.setView([me.latitude, me.longitude], getZoomForRadius(radiusKm), { animate: true });
-  }, [radiusKm, me?.latitude, me?.longitude]);
+    if (!map || centeredRef.current || me?.latitude == null || me?.longitude == null) return;
+    centeredRef.current = true;
+    map.setView([me.latitude, me.longitude], DEFAULT_ZOOM, { animate: true });
+  }, [me?.latitude, me?.longitude]);
 
   // Render friend markers
   useEffect(() => {
@@ -248,20 +229,13 @@ export function NearbyMap({
   const handleCenter = () => {
     const map = mapRef.current;
     if (map && me?.latitude != null && me?.longitude != null) {
-      map.setView([me.latitude, me.longitude], getZoomForRadius(radiusKm), { animate: true });
+      map.setView([me.latitude, me.longitude], DEFAULT_ZOOM, { animate: true });
     }
     onCenter?.();
   };
 
-  const handleZoomIn = () => {
-    mapRef.current?.zoomIn();
-    onZoomIn?.();
-  };
-
-  const handleZoomOut = () => {
-    mapRef.current?.zoomOut();
-    onZoomOut?.();
-  };
+  const handleZoomIn = () => mapRef.current?.zoomIn();
+  const handleZoomOut = () => mapRef.current?.zoomOut();
 
   const popoverBelow = popoverPos && popoverPos.y < 200;
   const popoverLeft = popoverPos ? Math.max(12, popoverPos.x - 125) : 0;
@@ -330,7 +304,7 @@ export function NearbyMap({
           className="dc-icon-btn"
           aria-label="Zoom in"
           onClick={handleZoomIn}
-          disabled={!canZoomIn || !!overlay}
+          disabled={zoomLevel >= MAX_ZOOM || !!overlay}
         >
           <Plus size={18} aria-hidden="true" />
         </button>
@@ -339,7 +313,7 @@ export function NearbyMap({
           className="dc-icon-btn"
           aria-label="Zoom out"
           onClick={handleZoomOut}
-          disabled={!canZoomOut || !!overlay}
+          disabled={zoomLevel <= MIN_ZOOM || !!overlay}
         >
           <Minus size={18} aria-hidden="true" />
         </button>
@@ -360,7 +334,6 @@ export function NearbyMap({
             <ShieldCheck size={14} aria-hidden="true" />
             Approximate locations{updatedAt ? ` · updated ${timeAgo(updatedAt)}` : ''}
           </div>
-          <div className="nearby-map-scale">Radius = {radiusKm} km</div>
         </>
       )}
 

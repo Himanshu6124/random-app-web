@@ -27,6 +27,25 @@ export function initNativeShell() {
       // the status-bar area, which left a gap under the tab bar.
       if (keyboardOpen) root.style.setProperty('--app-height', `${Math.round(vv.height)}px`);
       else root.style.removeProperty('--app-height');
+
+      // iOS 26 home-screen apps: the web view only paints `innerHeight` points
+      // (screen height minus the status bar) while 100% / 100vh still resolve to
+      // the full screen, so the bottom ~60pt — the tab bar — got clipped. Size the
+      // shell to what is actually visible and drop the home-indicator padding that
+      // the lost strip already covers.
+      const portrait = window.matchMedia?.('(orientation: portrait)').matches ?? true;
+      const screenH = portrait
+        ? Math.max(window.screen.width, window.screen.height)
+        : Math.min(window.screen.width, window.screen.height);
+      const lost = isStandalone && !keyboardOpen ? Math.round(screenH - window.innerHeight) : 0;
+      root.classList.toggle('viewport-short', lost > 1);
+      if (lost > 1) {
+        root.style.setProperty('--standalone-height', `${window.innerHeight}px`);
+        root.style.setProperty('--viewport-lost', `${lost}px`);
+      } else {
+        root.style.removeProperty('--standalone-height');
+        root.style.removeProperty('--viewport-lost');
+      }
       // iOS scrolls the whole page to reveal a focused input; pin it back.
       if (window.scrollY !== 0) window.scrollTo(0, 0);
     });
@@ -48,10 +67,63 @@ export function initNativeShell() {
   document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
 }
 
-/** Light haptic tick on devices that support it (Android Chrome). */
-export function haptic(ms = 8) {
+const isIOS = typeof navigator !== 'undefined' && (
+  /iPhone|iPad|iPod/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+);
+
+let iosSwitchLabel = null;
+let iosTimers = [];
+
+/**
+ * iOS Safari has no Vibration API. Since iOS 17.4, toggling an
+ * `<input type="checkbox" switch>` plays the system haptic tick, so we keep a
+ * hidden one around and click its label. Ticks fire reliably inside a user
+ * gesture; delayed ones (patterns) are best effort.
+ */
+function iosTick() {
   try {
-    if (navigator.vibrate) navigator.vibrate(ms);
+    if (!iosSwitchLabel) {
+      const label = document.createElement('label');
+      label.setAttribute('aria-hidden', 'true');
+      label.style.display = 'none';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.setAttribute('switch', '');
+      input.tabIndex = -1;
+      label.appendChild(input);
+      document.body.appendChild(label);
+      iosSwitchLabel = label;
+    }
+    iosSwitchLabel.click();
+  } catch {
+    /* not supported */
+  }
+}
+
+/**
+ * Haptic feedback on Android (Vibration API) and iOS 17.4+ (switch-toggle tick).
+ * `pattern` is ms or a [buzz, pause, buzz, ...] array, like navigator.vibrate;
+ * 0 cancels. On iOS every buzz becomes one tick (duration can't be controlled).
+ */
+export function haptic(pattern = 8) {
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      navigator.vibrate(pattern);
+      return;
+    }
+    if (!isIOS) return;
+    iosTimers.forEach(clearTimeout);
+    iosTimers = [];
+    const steps = Array.isArray(pattern) ? pattern : [pattern];
+    let at = 0;
+    steps.forEach((ms, i) => {
+      if (i % 2 === 0 && ms > 0) {
+        if (at === 0) iosTick();
+        else iosTimers.push(setTimeout(iosTick, at));
+      }
+      at += Math.max(0, ms);
+    });
   } catch {
     /* not supported */
   }

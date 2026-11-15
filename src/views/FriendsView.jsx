@@ -1002,24 +1002,26 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               zIndex: 20
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <button
-                  className="chat-back-btn"
-                  onClick={() => setMobileShowChat(false)}
-                  aria-label="Back to Friends List"
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-primary)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '4px'
-                  }}
-                  title="Back to Friends List"
-                >
-                  <ArrowLeft size={20} />
-                </button>
+                {isMobile && (
+                  <button
+                    className="chat-back-btn"
+                    onClick={() => setMobileShowChat(false)}
+                    aria-label="Back to Friends List"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '4px'
+                    }}
+                    title="Back to Friends List"
+                  >
+                    <ArrowLeft size={20} />
+                  </button>
+                )}
 
                 <div style={{
                   width: '44px',

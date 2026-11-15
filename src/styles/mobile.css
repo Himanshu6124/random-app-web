@@ -217,7 +217,7 @@ nav,
     display: flex;
     flex-shrink: 0;
     align-items: stretch;
-    padding: 6px 4px max(6px, var(--safe-bottom));
+    padding: 6px 4px max(6px, calc(var(--safe-bottom) - var(--viewport-lost, 0px)));
     background: var(--bar-bg);
     border-top: 1px solid var(--border-color);
     z-index: 60;
@@ -527,10 +527,16 @@ nav,
 /* Installed PWA: no browser UI, so lean fully on safe areas */
 @media (display-mode: standalone) and (max-width: 768px) {
   html:not(.keyboard-open) .app-container {
-    height: 100% !important;
+    /* --standalone-height is set by nativeShell.js when iOS paints less than the full screen */
+    height: var(--standalone-height, 100%) !important;
   }
   .header-wrapper {
     padding-top: calc(var(--safe-top) + 10px) !important;
+  }
+  /* The strip iOS leaves below the shell (see nativeShell.js) shows the body
+     background; paint it like the tab bar so the two read as one bar. */
+  html.viewport-short body {
+    background-image: linear-gradient(to top, var(--bar-bg) var(--viewport-lost), transparent var(--viewport-lost));
   }
 }
 

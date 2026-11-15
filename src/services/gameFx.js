@@ -1,7 +1,8 @@
 /**
  * Truth & Dare sound + haptics. Sounds are synthesized with Web Audio (no files to load),
- * haptics use navigator.vibrate (Android / Chrome; iOS Safari ignores it silently).
+ * haptics go through the shared haptic() helper (Vibration API on Android, switch tick on iOS).
  */
+import { haptic } from '../mobile/nativeShell';
 
 let ctx = null;
 
@@ -36,7 +37,7 @@ function tone(c, { at, freq, to, type = 'sine', dur = 0.12, vol = 0.12 }) {
 }
 
 export function vibrate(pattern) {
-  try { navigator.vibrate?.(pattern); } catch { /* not supported */ }
+  haptic(pattern);
 }
 
 /**

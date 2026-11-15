@@ -6,8 +6,8 @@ import { DiscoverAvatar } from './DiscoverAvatar';
 import { NearbyMap } from './NearbyMap';
 import { presenceLabel } from './discoverUtils';
 
-const RADII = [1, 2, 5, 10, 25];
-const ZOOMS = [0.5, 1, 2, 4];
+// Fetch everyone the server will return (it caps at 50 km); the map view decides what's listed.
+const FETCH_RADIUS_KM = 50;
 const REFRESH_MS = 2 * 60 * 1000;
 
 function getDevicePosition() {
@@ -29,8 +29,7 @@ function getDevicePosition() {
 /** Nearby friends: a privacy-first map of accepted friends who share an approximate location. */
 export function NearbyFriendsPanel({ onOpenChat, focusSharingToggle }) {
   const { jwtToken } = useAuth();
-  const [radiusKm, setRadiusKm] = useState(5);
-  const [zoomIdx, setZoomIdx] = useState(1);
+  const [mapBounds, setMapBounds] = useState(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
@@ -42,9 +41,9 @@ export function NearbyFriendsPanel({ onOpenChat, focusSharingToggle }) {
 
   const sharing = Boolean(data?.me?.sharing);
 
-  const loadNearby = useCallback(async (radius = radiusKm) => {
+  const loadNearby = useCallback(async () => {
     try {
-      const res = await discoverService.getNearbyFriends(radius, jwtToken);
+      const res = await discoverService.getNearbyFriends(FETCH_RADIUS_KM, jwtToken);
       setData(res);
       setError('');
     } catch (err) {
@@ -52,7 +51,7 @@ export function NearbyFriendsPanel({ onOpenChat, focusSharingToggle }) {
     } finally {
       setLoading(false);
     }
-  }, [jwtToken, radiusKm]);
+  }, [jwtToken]);
 
   /** Pushes a fresh device position (only ever while sharing is on), then reloads. */
   const refreshPosition = useCallback(async () => {
@@ -112,12 +111,6 @@ export function NearbyFriendsPanel({ onOpenChat, focusSharingToggle }) {
     }
   };
 
-  const changeRadius = (value) => {
-    setRadiusKm(value);
-    setZoomIdx(1);
-    loadNearby(value);
-  };
-
   const wave = async (friendId) => {
     setWaveState({ id: friendId, status: 'sending' });
     try {
@@ -134,6 +127,14 @@ export function NearbyFriendsPanel({ onOpenChat, focusSharingToggle }) {
     if (!q) return friends;
     return friends.filter(n => n.friend.name?.toLowerCase().includes(q) || n.friend.username?.toLowerCase().includes(q));
   }, [friends, filter]);
+
+  // The list follows the map: zoom/pan to discover who is around.
+  const inView = useMemo(() => {
+    if (!mapBounds) return visible;
+    return visible.filter(n => n.latitude != null && n.longitude != null
+      && mapBounds.contains([n.latitude, n.longitude]));
+  }, [visible, mapBounds]);
+  const hiddenByView = visible.length - inView.length;
 
   const overlay = loading ? (
     <div className="dc-card" aria-live="polite"><span className="dc-spinner" aria-hidden="true" /><p>Loading the map…</p></div>
@@ -152,7 +153,7 @@ export function NearbyFriendsPanel({ onOpenChat, focusSharingToggle }) {
     </div>
   ) : null;
 
-  const nearbyCount = friends.length;
+  const nearbyCount = inView.length;
 
   return (
     <>
@@ -175,12 +176,6 @@ export function NearbyFriendsPanel({ onOpenChat, focusSharingToggle }) {
             <span className="dc-switch-track" aria-hidden="true" />
             Share my location
           </label>
-          <label>
-            <span className="dc-sr-only">Search radius</span>
-            <select className="dc-select" value={radiusKm} onChange={(e) => changeRadius(Number(e.target.value))}>
-              {RADII.map(r => <option key={r} value={r}>Within {r} km</option>)}
-            </select>
-          </label>
         </div>
       </div>
 
@@ -190,13 +185,8 @@ export function NearbyFriendsPanel({ onOpenChat, focusSharingToggle }) {
         <NearbyMap
           me={data?.me}
           friends={sharing ? visible : []}
-          radiusKm={data?.radiusKm || radiusKm}
-          zoom={ZOOMS[zoomIdx]}
-          canZoomIn={zoomIdx < ZOOMS.length - 1}
-          canZoomOut={zoomIdx > 0}
-          onZoomIn={() => setZoomIdx(i => Math.min(ZOOMS.length - 1, i + 1))}
-          onZoomOut={() => setZoomIdx(i => Math.max(0, i - 1))}
-          onCenter={() => { setZoomIdx(1); setSelectedId(null); refreshPosition().catch(err => setError(err.message)); }}
+          onViewChange={setMapBounds}
+          onCenter={() => { setSelectedId(null); refreshPosition().catch(err => setError(err.message)); }}
           selectedId={selectedId}
           onSelect={setSelectedId}
           onMessage={onOpenChat}
@@ -209,7 +199,7 @@ export function NearbyFriendsPanel({ onOpenChat, focusSharingToggle }) {
         <section className="dc-card nearby-list" aria-labelledby="nearby-list-title">
           <div className="nearby-list-head">
             <h2 id="nearby-list-title">
-              {sharing ? `${nearbyCount} ${nearbyCount === 1 ? 'friend' : 'friends'} nearby` : 'Friends nearby'}
+              {sharing ? `${nearbyCount} ${nearbyCount === 1 ? 'friend' : 'friends'} on the map` : 'Friends nearby'}
             </h2>
             <span className="dc-muted" style={{ fontSize: 12 }}>Closest first</span>
           </div>
@@ -225,14 +215,20 @@ export function NearbyFriendsPanel({ onOpenChat, focusSharingToggle }) {
               <EyeOff size={22} aria-hidden="true" />
               <span>Turn on location sharing to see who's around.</span>
             </div>
-          ) : visible.length === 0 ? (
+          ) : inView.length === 0 ? (
             <div className="dc-empty">
-              <strong>{filter ? 'No match' : 'No friends in range'}</strong>
-              <span>{filter ? 'No nearby friend matches that name.' : `Nobody is sharing within ${radiusKm} km right now. Try a wider radius.`}</span>
+              <strong>{filter ? 'No match' : 'No friends in this area'}</strong>
+              <span>
+                {filter
+                  ? 'No friend on the map matches that name.'
+                  : hiddenByView > 0
+                    ? `Zoom out to find ${hiddenByView} more ${hiddenByView === 1 ? 'friend' : 'friends'}.`
+                    : 'Nobody is sharing nearby right now. Zoom out to look farther.'}
+              </span>
             </div>
           ) : (
             <ul className="dc-person-list" role="listbox" aria-label="Nearby friends">
-              {visible.map(n => (
+              {inView.map(n => (
                 <li
                   key={n.friend.id}
                   className="dc-person-row"
@@ -261,10 +257,11 @@ export function NearbyFriendsPanel({ onOpenChat, focusSharingToggle }) {
             </ul>
           )}
 
-          {sharing && (data?.notSharingCount > 0 || data?.outOfRangeCount > 0) && (
+          {sharing && (hiddenByView > 0 || data?.notSharingCount > 0 || data?.outOfRangeCount > 0) && (
             <p className="nearby-list-foot">
               <EyeOff size={14} aria-hidden="true" />
               {[
+                hiddenByView > 0 && inView.length > 0 && `${hiddenByView} more outside this view — zoom out to see them.`,
                 data.notSharingCount > 0 && `${data.notSharingCount} ${data.notSharingCount === 1 ? 'friend isn’t' : 'friends aren’t'} sharing their location.`,
                 data.outOfRangeCount > 0 && `${data.outOfRangeCount} farther than ${data.radiusKm} km.`
               ].filter(Boolean).join(' ')}
