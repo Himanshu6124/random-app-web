@@ -30,11 +30,6 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
-        '/userImages': {
-          target: BACKEND,
-          changeOrigin: true,
-          secure: false,
-        },
         '/friendships': {
           target: BACKEND,
           changeOrigin: true,
