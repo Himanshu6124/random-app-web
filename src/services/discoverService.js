@@ -1,5 +1,5 @@
 /**
- * REST client for the Discover tab: Find friends, Nearby friends and Match history.
+ * REST client for the Discover tab: Find friends, Nearby and Match history.
  * Every endpoint is registered-users only (guests get 403).
  */
 import { BASE_URL, handleApiResponse, getAuthHeaders } from './authService';
@@ -45,20 +45,37 @@ export const discoverService = {
     };
   },
 
-  // ---------- Nearby friends ----------
+  // ---------- Nearby ----------
 
   getMyLocation(token) {
     return request('/location/me', { token });
   },
 
-  /** Sends the device position; the server rounds it (~1 km) and turns sharing on. */
-  updateMyLocation(latitude, longitude, token) {
-    return request('/location/me', { method: 'PUT', body: { latitude, longitude }, token });
+  /**
+   * Sends the device position; the server rounds it (~1 km) and turns sharing on.
+   * visibleToEveryone: true/false sets who can see it; undefined keeps the current choice.
+   */
+  updateMyLocation(latitude, longitude, token, visibleToEveryone) {
+    return request('/location/me', { method: 'PUT', body: { latitude, longitude, visibleToEveryone }, token });
   },
 
   /** Turning sharing off deletes the stored position server-side. */
-  setLocationSharing(enabled, token) {
-    return request('/location/sharing', { method: 'PUT', body: { enabled }, token });
+  setLocationSharing(enabled, token, visibleToEveryone) {
+    return request('/location/sharing', { method: 'PUT', body: { enabled, visibleToEveryone }, token });
+  },
+
+  /**
+   * Everyone visible in a map view (friends + strangers who share with everyone), already
+   * clustered for `zoom`, plus a page of people in view (friends first, then closest).
+   */
+  async getNearbyInView({ south, west, north, east, zoom, offset = 0, limit = 50 }, token, signal) {
+    const data = await request(`/location/nearby${qs({ south, west, north, east, zoom, offset, limit })}`, { token, signal });
+    const person = (p) => ({ ...normalizeFriend(p), friend: Boolean(p?.friend), friendshipStatus: p?.friendshipStatus || 'NONE' });
+    return {
+      ...data,
+      people: (data?.people || []).map(person),
+      markers: (data?.markers || []).map(m => (m.person ? { ...m, person: person(m.person) } : m))
+    };
   },
 
   async getNearbyFriends(radiusKm, token) {

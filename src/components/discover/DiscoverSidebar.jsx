@@ -3,7 +3,7 @@ import { Search, MapPin, History, ShieldCheck } from 'lucide-react';
 
 export const DISCOVER_SECTIONS = [
   { id: 'find', title: 'Find friends', short: 'Find', sub: 'Search by name or @username', Icon: Search },
-  { id: 'nearby', title: 'Nearby friends', short: 'Nearby', sub: 'See friends on a map', Icon: MapPin },
+  { id: 'nearby', title: 'Nearby', short: 'Nearby', sub: "See who's around you", Icon: MapPin },
   { id: 'history', title: 'Match history', short: 'History', sub: "People you've met", Icon: History }
 ];
 
@@ -32,7 +32,7 @@ export function DiscoverSidebar({ section, onSelect, onManageVisibility }) {
 
       <div className="discover-privacy">
         <div className="discover-privacy-title"><ShieldCheck size={16} aria-hidden="true" />Your privacy</div>
-        <p>Friends see your area, never your exact spot. Strangers never see your location.</p>
+        <p>People nearby see your area (about 1 km), never your exact spot. Choose friends only to hide from strangers.</p>
         <button type="button" className="dc-link" onClick={onManageVisibility}>Manage visibility</button>
       </div>
     </aside>

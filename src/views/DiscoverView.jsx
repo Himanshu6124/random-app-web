@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { DiscoverSidebar, DiscoverSegmented } from '../components/discover/DiscoverSidebar';
 import { FindFriendsPanel } from '../components/discover/FindFriendsPanel';
-import { NearbyFriendsPanel } from '../components/discover/NearbyFriendsPanel';
+import { NearbyPanel } from '../components/discover/NearbyPanel';
 import { MatchHistoryPanel } from '../components/discover/MatchHistoryPanel';
 import '../styles/discover.css';
 
 /**
- * Discover tab: Find friends (people search), Nearby friends (approximate-location map of
- * friends) and Match history (who you met in Random Match). Registered users only.
+ * Discover tab: Find friends (people search), Nearby (approximate-location map of everyone
+ * around you, friends highlighted) and Match history (who you met in Random Match). Registered users only.
  */
 export function DiscoverView({ onOpenChat }) {
   const [section, setSection] = useState('find');
@@ -24,7 +24,7 @@ export function DiscoverView({ onOpenChat }) {
         <div className="discover-main">
           <DiscoverSegmented section={section} onSelect={setSection} />
           {section === 'find' && <FindFriendsPanel onOpenChat={onOpenChat} />}
-          {section === 'nearby' && <NearbyFriendsPanel onOpenChat={onOpenChat} focusSharingToggle={focusSharing} />}
+          {section === 'nearby' && <NearbyPanel onOpenChat={onOpenChat} focusSharingToggle={focusSharing} />}
           {section === 'history' && <MatchHistoryPanel onOpenChat={onOpenChat} />}
         </div>
       </div>

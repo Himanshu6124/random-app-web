@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Discover tab: Find friends · Nearby friends · Match history
+   Discover tab: Find friends · Nearby · Match history
    Builds on theme.css tokens; the extra --dc-* tokens are the design's
    higher-contrast secondary text and status colours.
    ========================================================================== */
@@ -592,7 +592,7 @@
   margin-top: -8px;
 }
 
-/* ---------- Nearby friends ---------- */
+/* ---------- Nearby ---------- */
 
 .dc-switch {
   display: inline-flex;
@@ -860,6 +860,82 @@
 
 .nearby-marker-label {
   margin-top: 4px;
+}
+
+.nearby-marker .dc-avatar-face {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+}
+
+.nearby-marker .dc-avatar-face img {
+  position: absolute;
+  inset: 0;
+}
+
+.nearby-marker.is-selected .dc-avatar-face {
+  box-shadow: 0 0 0 4px rgba(240, 114, 137, 0.45);
+}
+
+/* Friends stand out from strangers: accent ring plus a "Friend" tag. */
+.nearby-marker--friend .dc-avatar-face {
+  border-color: var(--dc-violet);
+  box-shadow: 0 0 0 3px var(--dc-violet-tint);
+}
+
+.nearby-marker--friend.is-selected .dc-avatar-face {
+  box-shadow: 0 0 0 5px rgba(240, 114, 137, 0.5);
+}
+
+.nearby-friend-tag {
+  position: absolute;
+  top: -8px;
+  right: -14px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--dc-violet);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.nearby-friend-tag--inline {
+  position: static;
+  display: inline-block;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* A crowded spot: one bubble with the head count. */
+.nearby-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(240, 114, 137, 0.88);
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 6px rgba(240, 114, 137, 0.25), 0 6px 16px rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-family: var(--font-main);
+  font-weight: 800;
+  font-size: var(--fs-body-sm);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.nearby-cluster:hover {
+  transform: scale(1.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nearby-cluster { transition: none; }
 }
 
 .nearby-popover {
