@@ -228,37 +228,166 @@
   min-height: 100%;
 }
 
-/* Your avatar beating lub-dub, with small heart outlines drifting up around it */
+/* Radar: rings, a rotating sweep, anonymous blips that ping as it passes, your avatar at the centre */
+
 .match-search__stage {
   position: relative;
-  width: min(64vw, 280px, 32svh);
+  width: min(84vw, 340px, 40svh);
   aspect-ratio: 1;
   flex-shrink: 0;
   display: grid;
   place-items: center;
   margin-top: auto;
+  container-type: inline-size;
 }
 
-.match-search__heart {
+.radar__ring {
   position: absolute;
-  bottom: 18%;
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 1.8;
-  stroke-linejoin: round;
-  opacity: 0;
-  animation: heartFloat 5s ease-out infinite;
+  border-radius: 50%;
+  border: 1px solid var(--accent-line);
+  transition: opacity 0.4s ease;
+}
+.radar__ring--1 { width: 44%; height: 44%; opacity: 0.55; }
+.radar__ring--2 { width: 72%; height: 72%; opacity: 0.38; }
+.radar__ring--3 { width: 98%; height: 98%; opacity: 0.22; }
+
+.radar__sweep {
+  position: absolute;
+  inset: 1%;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0deg 290deg, rgba(240, 114, 137, 0.05) 300deg, rgba(240, 114, 137, 0.32) 359deg, var(--accent) 359.5deg, transparent 360deg);
+  -webkit-mask: radial-gradient(circle, transparent 15%, #000 16%);
+          mask: radial-gradient(circle, transparent 15%, #000 16%);
+  animation: radarSweep 3s linear infinite;
+  transition: opacity 0.35s ease;
+}
+@keyframes radarSweep { to { transform: rotate(1turn); } }
+
+.radar__blip {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 15%;
+  aspect-ratio: 1;
+  margin: -7.5% 0 0 -7.5%;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--plum-4);
+  border: 1.5px solid var(--accent-line);
+  color: var(--text-secondary);
+  transform: rotate(var(--c)) translateY(calc(-1 * var(--r))) rotate(calc(-1 * var(--c)));
+  opacity: 0.3;
+  animation: blipPing 3s linear infinite;
+}
+.radar__blip svg { width: 48%; height: 48%; }
+.radar__blip img { position: relative; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+/* Person icon sits underneath; it only shows if an avatar image fails to load */
+.radar__blip::before {
+  content: '';
+  position: absolute;
+  inset: 26%;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='8' r='5'/%3E%3Cpath d='M20 21a8 8 0 0 0-16 0'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='8' r='5'/%3E%3Cpath d='M20 21a8 8 0 0 0-16 0'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
-@keyframes heartFloat {
-  0%   { transform: translateY(0) scale(0.8); opacity: 0; }
-  15%  { opacity: 1; }
-  100% { transform: translateY(-150%) translateY(-90px) scale(1.1); opacity: 0; }
+/* Lit the moment the sweep's edge crosses, then fades back into the dark */
+@keyframes blipPing {
+  0%   { opacity: 1; transform: rotate(var(--c)) translateY(calc(-1 * var(--r))) rotate(calc(-1 * var(--c))) scale(1.12); border-color: var(--accent); }
+  12%  { transform: rotate(var(--c)) translateY(calc(-1 * var(--r))) rotate(calc(-1 * var(--c))) scale(1); }
+  55%  { opacity: 0.3; border-color: var(--accent-line); }
+  100% { opacity: 0.3; }
+}
+
+/* Crosshair corners, only shown when the radar locks on */
+.radar__lock {
+  position: absolute;
+  inset: -45%;
+  opacity: 0;
+  pointer-events: none;
+  --k: var(--live);
+  background:
+    linear-gradient(var(--k), var(--k)) top left / 22% 2px,
+    linear-gradient(var(--k), var(--k)) top left / 2px 22%,
+    linear-gradient(var(--k), var(--k)) top right / 22% 2px,
+    linear-gradient(var(--k), var(--k)) top right / 2px 22%,
+    linear-gradient(var(--k), var(--k)) bottom left / 22% 2px,
+    linear-gradient(var(--k), var(--k)) bottom left / 2px 22%,
+    linear-gradient(var(--k), var(--k)) bottom right / 22% 2px,
+    linear-gradient(var(--k), var(--k)) bottom right / 2px 22%;
+  background-repeat: no-repeat;
+}
+
+.radar__initial {
+  font-family: var(--font-main);
+  font-weight: 700;
+  font-size: 5.2cqw;
+  color: var(--text-primary);
+}
+
+/* Locked: sweep and the others fade, crosshairs close in, then your match glides up to you */
+.match-search.is-locked .radar__sweep { opacity: 0; animation-play-state: paused; }
+.match-search.is-locked .radar__ring { opacity: 0.18; }
+.match-search.is-locked .radar__blip {
+  animation: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+/* One transform animation (compositor-friendly, no layout): the blip arcs round the
+   rings to sit above you and scales up to full size. Its avatar crossfades into the
+   match's photo on the way. */
+.match-search.is-locked .radar__blip--target {
+  opacity: 1;
+  background: var(--plum-5);
+  border-width: 1.2px;
+  border-color: var(--live);
+  color: var(--text-primary);
+  transition: opacity 0.2s ease, border-color 0.25s ease 0.15s;
+  animation: radarPullIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+  z-index: 2;
+}
+@keyframes radarPullIn {
+  from { transform: rotate(var(--c)) translateY(calc(-1 * var(--r))) rotate(calc(-1 * var(--c))) scale(1); }
+  to   { transform: rotate(0deg) translateY(-37cqw) rotate(0deg) scale(1.733); }
+}
+
+.radar__peer {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--plum-5);
+  overflow: hidden;
+  opacity: 0;
+  animation: radarPeerIn 0.3s ease 0.3s forwards;
+}
+.radar__peer img { width: 100%; height: 100%; object-fit: cover; }
+@keyframes radarPeerIn { to { opacity: 1; } }
+
+.match-search.is-locked .radar__blip--target .radar__lock {
+  animation: radarLock 0.5s var(--ease-out) forwards;
+}
+@keyframes radarLock {
+  0%   { opacity: 0; transform: scale(1.9); }
+  40%  { opacity: 1; transform: scale(1); }
+  70%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.8); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radar__sweep { animation: none; opacity: 0.4; }
+  .radar__blip { animation: none; opacity: 0.45; }
+  .match-search.is-locked .radar__blip--target { animation-duration: 1ms; animation-delay: 0s; }
+  .radar__peer { animation-duration: 1ms; animation-delay: 0s; }
+  .match-search.is-locked .radar__blip--target .radar__lock { animation: none; }
 }
 
 .match-search__avatar {
   position: relative;
-  width: 40%;
+  z-index: 1;
+  width: 26%;
   aspect-ratio: 1;
   border-radius: 50%;
   overflow: hidden;
@@ -318,12 +447,10 @@
 }
 
 /* Matched: hearts stop, the avatar settles, gold marks the live moment */
-.match-search.is-locked .match-search__heart { display: none; }
-.match-search.is-locked .match-search__avatar { animation: none; border-color: var(--live); }
+.match-search.is-locked .match-search__avatar { border-color: var(--live); transition: border-color 0.3s ease; }
 .match-search.is-locked .match-search__timer { color: var(--live); }
 
 @media (prefers-reduced-motion: reduce) {
-  .match-search__heart { display: none; }
   .match-search__avatar { animation: none; }
 }
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { MatchRadar } from '../components/MatchRadar';
 import { ChatBox } from '../components/ChatBox';
@@ -19,13 +19,26 @@ export function MatchView() {
   const [showChat, setShowChat] = useState(false);
   const [chatMounted, setChatMounted] = useState(false);
 
+  // A match found while you watched the radar plays its lock-on first; one already
+  // standing (tab switch, rejoin) opens the chat straight away.
+  const prevMatchState = useRef(matchState);
+
   useEffect(() => {
+    const prev = prevMatchState.current;
+    prevMatchState.current = matchState;
+
     if (matchState === 'matched') {
-      // Mount first, then animate in (like Android's enter transition)
-      setChatMounted(true);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => setShowChat(true));
-      });
+      const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      const delay = prev === 'searching' ? (reduced ? 300 : 1150) : 0;
+      let raf;
+      const timer = setTimeout(() => {
+        // Mount first, then animate in (like Android's enter transition)
+        setChatMounted(true);
+        raf = requestAnimationFrame(() => {
+          raf = requestAnimationFrame(() => setShowChat(true));
+        });
+      }, delay);
+      return () => { clearTimeout(timer); cancelAnimationFrame(raf); };
     } else {
       // Animate out then unmount
       setShowChat(false);

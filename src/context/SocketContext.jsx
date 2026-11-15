@@ -165,7 +165,8 @@ export function SocketProvider({ children }) {
 
     setMessages([systemMessage(`You and ${resolvedName} are connected.`)]);
 
-    if (soundEnabledRef.current) playChime('match');
+    // On the Match tab the radar plays its own lock-on sound; elsewhere, the chime.
+    if (soundEnabledRef.current && activeTabRef.current !== 'match') playChime('match');
   }, []);
 
   const handleMessageReceived = useCallback((msg) => {
