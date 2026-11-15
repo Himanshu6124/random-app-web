@@ -133,7 +133,7 @@ export function renderSeoPage(page, allPages, site) {
 
   const head = [
     '<meta charset="UTF-8" />',
-    '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />',
+    '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover" />',
     `<title>${esc(fullTitle)}</title>`,
     `<meta name="description" content="${esc(page.description)}" />`,
     '<meta name="robots" content="index, follow, max-image-preview:large" />',

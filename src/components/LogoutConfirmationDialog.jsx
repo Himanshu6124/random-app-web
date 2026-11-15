@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { feedback } from '../mobile/feedback';
 import { LogOut } from 'lucide-react';
 
 export function LogoutConfirmationDialog({ isOpen, onClose, onConfirm }) {
+  useEffect(() => { if (isOpen) feedback('warning'); }, [isOpen]);
   if (!isOpen) return null;
 
   return (

@@ -59,7 +59,8 @@ export function MatchRadar() {
   }, [isSearching, soundEnabled]);
 
   useEffect(() => {
-    if (isLocked && soundEnabled) playLockOn();
+    if (!isLocked || !soundEnabled) return;
+    return playLockOn();
   }, [isLocked, soundEnabled]);
 
   // Elapsed time counter shown while searching

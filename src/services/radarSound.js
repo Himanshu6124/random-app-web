@@ -31,8 +31,29 @@ export function unlockRadarAudio() {
   try { getCtx(); } catch { /* audio unavailable */ }
 }
 
+// A private gain stage per sound group, so stopping it silences tones that were
+// already scheduled ahead on the audio clock (not just future scheduling).
+function createBus(c) {
+  const bus = c.createGain();
+  bus.gain.value = 1;
+  bus.connect(master);
+  let done = false;
+  const stop = () => {
+    if (done) return;
+    done = true;
+    const now = c.currentTime;
+    try {
+      bus.gain.cancelScheduledValues(now);
+      bus.gain.setValueAtTime(bus.gain.value, now);
+      bus.gain.linearRampToValueAtTime(0, now + 0.04);
+    } catch { /* ignore */ }
+    setTimeout(() => { try { bus.disconnect(); } catch { /* ignore */ } }, 80);
+  };
+  return { node: bus, stop };
+}
+
 // One enveloped tone. `to` glides the pitch; `echo` adds a couple of quieter repeats.
-function tone(c, at, { freq, to, type = 'sine', gain = 0.1, attack = 0.005, decay = 0.4, echo = 0 }) {
+function tone(c, at, { freq, to, type = 'sine', gain = 0.1, attack = 0.005, decay = 0.4, echo = 0 }, out = master) {
   const repeats = [[0, 1], ...(echo ? [[0.18, 0.35], [0.36, 0.14]] : [])];
   for (const [delay, level] of repeats) {
     const t = at + delay;
@@ -45,7 +66,7 @@ function tone(c, at, { freq, to, type = 'sine', gain = 0.1, attack = 0.005, deca
     g.gain.exponentialRampToValueAtTime(gain * level, t + attack);
     g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
     osc.connect(g);
-    g.connect(master);
+    g.connect(out);
     osc.start(t);
     osc.stop(t + decay + 0.05);
   }
@@ -56,6 +77,7 @@ export function startRadarSounds(sweepSeconds, blipAngles = []) {
   try { c = getCtx(); } catch { return () => {}; }
   if (!c) return () => {};
 
+  const bus = createBus(c);
   const start = c.currentTime + 0.02;
   let nextTurn = 0;
   let stopped = false;
@@ -66,11 +88,11 @@ export function startRadarSounds(sweepSeconds, blipAngles = []) {
     while (start + nextTurn * sweepSeconds < c.currentTime + 1.5) {
       const t0 = start + nextTurn * sweepSeconds;
       if (t0 >= c.currentTime) {
-        tone(c, t0, { freq: 1180, to: 980, gain: 0.07, attack: 0.008, decay: 0.55, echo: 1 });
+        tone(c, t0, { freq: 1180, to: 980, gain: 0.07, attack: 0.008, decay: 0.55, echo: 1 }, bus.node);
       }
       for (const angle of blipAngles) {
         const t = t0 + (angle / 360) * sweepSeconds;
-        if (t >= c.currentTime) tone(c, t, { freq: 1760, type: 'triangle', gain: 0.018, decay: 0.09 });
+        if (t >= c.currentTime) tone(c, t, { freq: 1760, type: 'triangle', gain: 0.018, decay: 0.09 }, bus.node);
       }
       nextTurn += 1;
     }
@@ -81,30 +103,37 @@ export function startRadarSounds(sweepSeconds, blipAngles = []) {
   return () => {
     stopped = true;
     clearInterval(timer);
+    bus.stop();
   };
 }
 
+// Short by design: it must finish by the time the chat slides in (~1.15s).
+// Returns a stop function that cuts it off immediately.
 export function playLockOn() {
   let c;
-  try { c = getCtx(); } catch { return; }
-  if (!c) return;
+  try { c = getCtx(); } catch { return () => {}; }
+  if (!c) return () => {};
+  const bus = createBus(c);
+  const out = bus.node;
   const t = c.currentTime + 0.02;
 
   // Crosshair lock: two crisp beeps
-  tone(c, t, { freq: 1320, type: 'square', gain: 0.035, decay: 0.07 });
-  tone(c, t + 0.08, { freq: 1760, type: 'square', gain: 0.035, decay: 0.09 });
+  tone(c, t, { freq: 1320, type: 'square', gain: 0.035, decay: 0.07 }, out);
+  tone(c, t + 0.08, { freq: 1760, type: 'square', gain: 0.035, decay: 0.09 }, out);
 
   // Sparkle with the heart burst
   [2093, 2637, 3136].forEach((f, i) => {
-    tone(c, t + 0.14 + i * 0.05, { freq: f, type: 'sine', gain: 0.025, decay: 0.25 });
+    tone(c, t + 0.14 + i * 0.05, { freq: f, type: 'sine', gain: 0.025, decay: 0.2 }, out);
   });
 
   // Avatar glides in: soft rising whoosh
-  tone(c, t + 0.2, { freq: 330, to: 660, type: 'sine', gain: 0.05, attack: 0.2, decay: 0.55 });
+  tone(c, t + 0.2, { freq: 330, to: 660, type: 'sine', gain: 0.05, attack: 0.15, decay: 0.4 }, out);
 
   // Lands next to you: warm C-major arpeggio (C5 E5 G5 C6)
   [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
-    tone(c, t + 0.7 + i * 0.07, { freq: f, type: 'sine', gain: 0.09, attack: 0.01, decay: 1.2 });
-    tone(c, t + 0.7 + i * 0.07, { freq: f * 2, type: 'triangle', gain: 0.015, decay: 0.6 });
+    tone(c, t + 0.45 + i * 0.06, { freq: f, type: 'sine', gain: 0.09, attack: 0.01, decay: 0.5 }, out);
+    tone(c, t + 0.45 + i * 0.06, { freq: f * 2, type: 'triangle', gain: 0.015, decay: 0.3 }, out);
   });
+
+  return bus.stop;
 }

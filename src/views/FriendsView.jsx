@@ -14,6 +14,7 @@ import { ChatMediaMessage } from '../components/ChatMediaMessage';
 import { MessageShell, ReplyQuote, ReplyComposerBar } from '../components/chat/MessageExtras';
 import { applyReaction, isInteractive, jumpToMessage } from '../components/chat/messageUtils';
 import { useMessageInteractions } from '../components/chat/useMessageInteractions';
+import { feedback } from '../mobile/feedback';
 
 const MAX_CACHED_MESSAGES = 200;
 
@@ -183,6 +184,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   const askConfirm = (kind, friend) => {
     setShowMenu(false);
     setActionError('');
+    feedback('warning');
     setPendingAction({ kind, friend });
   };
 
@@ -206,9 +208,11 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       } else {
         await removeFriend(targetId);
       }
+      feedback('success');
       clearSelectionIf(targetId);
       setPendingAction(null);
     } catch (err) {
+      feedback('error');
       setActionError(err?.message || 'Something went wrong. Please try again.');
     } finally {
       setActionBusy(false);
@@ -443,6 +447,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     if (e) e.preventDefault();
     if (!dmInput.trim() || !selectedFriend || !isLiveConnected) return;
 
+    feedback('send');
     const messageText = dmInput.trim();
     const conversationId = selectedFriend.conversationId;
     const friendId = selectedFriend.id || selectedFriend.friendUserId;
@@ -787,6 +792,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                 <div
                   key={friendId || friend.conversationId}
                   onClick={() => handleSelectFriend(friend)}
+                  className="friend-row"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -844,7 +850,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                           {friend.lastMessage || 'Say hi!'}
                         </span>
                         {(friend.unseenCount || 0) > 0 && (
-                          <span style={{
+                          <span key={friend.unseenCount} className="unread-pill" style={{
                             backgroundColor: 'var(--danger-fill)',
                             color: 'var(--text-primary)',
                             fontSize: 'var(--fs-xs)',

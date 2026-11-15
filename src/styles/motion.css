@@ -1,0 +1,116 @@
+/* ═════════════════════════════════════════════════════════════
+   MOTION LAYER
+   Small, quick feedback that makes taps and arrivals feel physical.
+   Uses the individual `scale` / `translate` properties where possible so it
+   composes with any inline `transform` a component already sets.
+   Everything here is switched off under prefers-reduced-motion.
+   ═════════════════════════════════════════════════════════════ */
+
+:root {
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out-quick: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ── Press: anything tappable sinks a little under the finger ──
+   (.is-pressed is toggled by initTapFeedback in mobile/feedback.js; the pill
+   buttons already have their own :active scale, so they are left alone.) */
+.is-pressed:not(.btn-primary):not(.btn-cyan):not(.btn-secondary):not(.btn-danger):not(.dc-btn):not(input):not(select) {
+  scale: 0.96;
+  transition: scale 0.08s ease-out;
+}
+/* Release springs back slightly past rest via the Web Animations API (feedback.js),
+   so no global `transition` override clobbers components' own transitions. */
+
+/* ── Lists: rows rise in, one after another ── */
+@keyframes rowIn {
+  from { opacity: 0; translate: 0 10px; }
+  to { opacity: 1; translate: 0 0; }
+}
+.friends-list > .friend-row,
+.dc-person-list > *,
+.history-row {
+  animation: rowIn 0.34s var(--ease-out-quick) both;
+}
+.friends-list > .friend-row:nth-child(1), .dc-person-list > :nth-child(1) { animation-delay: 0ms; }
+.friends-list > .friend-row:nth-child(2), .dc-person-list > :nth-child(2) { animation-delay: 35ms; }
+.friends-list > .friend-row:nth-child(3), .dc-person-list > :nth-child(3) { animation-delay: 70ms; }
+.friends-list > .friend-row:nth-child(4), .dc-person-list > :nth-child(4) { animation-delay: 105ms; }
+.friends-list > .friend-row:nth-child(5), .dc-person-list > :nth-child(5) { animation-delay: 140ms; }
+.friends-list > .friend-row:nth-child(6), .dc-person-list > :nth-child(6) { animation-delay: 175ms; }
+.friends-list > .friend-row:nth-child(7), .dc-person-list > :nth-child(7) { animation-delay: 210ms; }
+.friends-list > .friend-row:nth-child(n+8), .dc-person-list > :nth-child(n+8) { animation-delay: 240ms; }
+
+/* ── Cards: settle in when a screen opens ── */
+@keyframes cardIn {
+  from { opacity: 0; translate: 0 14px; scale: 0.985; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+.dc-card,
+.profile-card {
+  animation: cardIn 0.42s var(--ease-out-quick) both;
+}
+.dc-card:nth-of-type(2) { animation-delay: 60ms; }
+.dc-card:nth-of-type(3) { animation-delay: 120ms; }
+
+/* ── Badges: pop each time the count changes (they are keyed on the count) ── */
+@keyframes badgePop {
+  0% { scale: 0.4; opacity: 0; }
+  60% { scale: 1.25; opacity: 1; }
+  100% { scale: 1; }
+}
+.tabbar-badge,
+.unread-pill {
+  animation: badgePop 0.42s var(--ease-spring) both;
+}
+
+/* ── Send button: a quick nudge forward on every send ── */
+@keyframes sendNudge {
+  0% { translate: 0 0; }
+  40% { translate: 3px -3px; }
+  100% { translate: 0 0; }
+}
+.chat-composer button[type='submit'].is-pressed svg {
+  animation: sendNudge 0.3s var(--ease-out-quick);
+}
+
+/* ── Match CTA: a slow breathing glow invites the first tap ── */
+@keyframes ctaBreathe {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); }
+  50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+.match-home:not(.match-search) .match-home__action .btn-primary,
+.match-home:not(.match-search) .match-home__action .btn-cyan {
+  animation: ctaBreathe 2.6s ease-in-out infinite;
+}
+
+/* ── Dialog backdrops fade, sheets already slide (mobile.css) ── */
+.m-sheet-backdrop {
+  animation: backdropIn 0.22s ease-out both;
+}
+
+/* ── Inputs: focus ring grows in rather than snapping ── */
+input:not([type='checkbox']):not([type='radio']),
+textarea {
+  transition: border-color 0.18s ease, box-shadow 0.22s var(--ease-out-quick), background-color 0.18s ease;
+}
+
+/* ── Typing / online dots and other ambient motion stay; this only adds. ── */
+
+@media (prefers-reduced-motion: reduce) {
+  .is-pressed {
+    scale: none !important;
+  }
+  .friends-list > .friend-row,
+  .dc-person-list > *,
+  .history-row,
+  .dc-card,
+  .profile-card,
+  .tabbar-badge,
+  .unread-pill,
+  .chat-composer button[type='submit'].is-pressed svg,
+  .match-home__action .btn-primary,
+  .match-home__action .btn-cyan,
+  .m-sheet-backdrop {
+    animation: none !important;
+  }
+}

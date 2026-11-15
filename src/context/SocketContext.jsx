@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { useAuth } from './AuthContext';
 import { socketService, extractPeerName } from '../services/socketService';
 import { applyReaction } from '../components/chat/messageUtils';
+import { feedback } from '../mobile/feedback';
 
 const SocketContext = createContext();
 
@@ -165,6 +166,7 @@ export function SocketProvider({ children }) {
 
     setMessages([systemMessage(`You and ${resolvedName} are connected.`)]);
 
+    feedback('match');
     // On the Match tab the radar plays its own lock-on sound; elsewhere, the chime.
     if (soundEnabledRef.current && activeTabRef.current !== 'match') playChime('match');
   }, []);
@@ -203,6 +205,7 @@ export function SocketProvider({ children }) {
         }
       }
 
+      feedback('receive');
       if (soundEnabledRef.current) {
         playChime('message');
       }
@@ -475,16 +478,19 @@ export function SocketProvider({ children }) {
         onFriendRequestReceived: (sender) => {
           setLiveFriendRequestRef.current?.(sender);
           loadRequestsRef.current?.();
+          feedback('notify');
           if (soundEnabledRef.current) playChime('match');
         },
         onFriendWave: (sender) => {
           if (!sender) return;
           setLiveWave({ ...sender, receivedAt: Date.now() });
+          feedback('notify');
           if (soundEnabledRef.current) playChime('message');
         },
         onFriendRequestAccepted: () => {
           loadFriendsRef.current?.();
           loadRequestsRef.current?.();
+          feedback('success');
           if (soundEnabledRef.current) playChime('match');
         },
         onFriendRequestCancelled: (payload) => {

@@ -147,6 +147,10 @@ nav,
     width: 100%;
     height: 100%;
     overflow: hidden;
+    /* No pinch / double-tap zoom: the app is laid out to fit the phone. */
+    touch-action: pan-x pan-y;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   body {
     background-attachment: scroll;
@@ -438,6 +442,38 @@ nav,
   .friends-view {
     padding: 0 !important;
     gap: 0 !important;
+    width: 100%;
+    max-width: 100vw;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+  /* Keep the DM screen inside the viewport: without min-width:0 a wide child
+     (reaction row, long link, media) stretches the flex item past the screen edges. */
+  .friends-chat-area {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+  .friends-chat-area .chat-topbar {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+  .friends-chat-area .chat-feed {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    overflow-x: hidden;
+  }
+  .friends-chat-area .chat-feed > * {
+    max-width: 100%;
+    min-width: 0;
+  }
+  .friends-chat-area .chat-subbar,
+  .friends-chat-area .chat-composer {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+    min-width: 0;
   }
   .friends-sidebar {
     border-radius: 0 !important;

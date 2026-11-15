@@ -13,6 +13,7 @@ import { playReveal, unlockGameAudio } from '../services/gameFx';
 import { MessageShell, ReplyQuote, ReplyComposerBar } from './chat/MessageExtras';
 import { isInteractive, jumpToMessage } from './chat/messageUtils';
 import { useMessageInteractions } from './chat/useMessageInteractions';
+import { feedback } from '../mobile/feedback';
 
 export function ChatBox() {
   const {
@@ -307,6 +308,7 @@ export function ChatBox() {
   const handleSend = (e) => {
     e.preventDefault();
     if (!inputMsg.trim() || composerDisabled) return;
+    feedback('send');
     sendMessage(inputMsg, replyTarget?.id || null);
     setInputMsg('');
     setReplyTarget(null);

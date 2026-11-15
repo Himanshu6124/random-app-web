@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Reply, SmilePlus, X } from 'lucide-react';
 import { REACTION_EMOJIS, myReactionOn, previewText } from './messageUtils';
 import '../../styles/messageExtras.css';
-import { haptic } from '../../mobile/nativeShell';
+import { feedback } from '../../mobile/feedback';
 
 const LONG_PRESS_MS = 420;
 
@@ -126,7 +126,7 @@ export function MessageShell({
       longPressed.current = true;
       setActiveId(msg.id);
       setPickerId(msg.id);
-      haptic(12);
+      feedback('long');
     }, LONG_PRESS_MS);
   };
   const cancelPress = () => clearTimeout(pressTimer.current);

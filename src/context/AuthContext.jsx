@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { authService } from '../services/authService';
+import { feedback } from '../mobile/feedback';
 import {
   startGoogleSignIn, consumeGoogleRedirect, ensureAnonymousFirebaseSession, isFirebaseConfigured
 } from '../services/firebaseClient';
@@ -190,6 +191,7 @@ export function AuthProvider({ children }) {
     if (!senderId || senderId === user?.id) return;
 
     const isViewingThisFriend = activeDmFriendIdRef.current === senderId;
+    feedback(isViewingThisFriend ? 'receive' : 'notify');
     const preview = msg.type === 'IMAGE' ? '📷 Photo' : (msg.text || msg.message || 'Say hi!');
     const rawTime = msg.timestamp || msg.timeStamp || new Date().toISOString();
 
@@ -346,6 +348,7 @@ export function AuthProvider({ children }) {
     const token = jwtToken || authService.getToken();
     if (!token || !targetUserId) return;
     await authService.acceptFriendRequest(targetUserId, token);
+    feedback('success');
     setFriendRequests(prev => prev.filter(r => r.id !== targetUserId));
     await loadFriendsFromApi(token);
   }, [jwtToken, loadFriendsFromApi]);

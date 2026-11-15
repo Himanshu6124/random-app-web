@@ -73,7 +73,7 @@ export function BottomTabBar({ activeTab, setActiveTab }) {
                 <tab.Icon size={22} strokeWidth={active ? 2.4 : 1.9} />
               )}
               {tab.locked && <Lock className="tabbar-lock" size={10} strokeWidth={2.6} />}
-              {tab.badge > 0 && <span className="tabbar-badge">{tab.badge > 99 ? '99+' : tab.badge}</span>}
+              {tab.badge > 0 && <span key={tab.badge} className="tabbar-badge">{tab.badge > 99 ? '99+' : tab.badge}</span>}
             </span>
             <span className="tabbar-label">{tab.label}</span>
           </button>
