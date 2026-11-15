@@ -74,6 +74,8 @@ export function ChatBox() {
   const peerName = extractPeerName(currentPeer);
   // Peer IDENTITY is the stable user id. currentPeer.username/name are display only.
   const peerId = currentPeer ? (currentPeer.friendUserId || currentPeer.peerId || currentPeer.id || '') : '';
+  // Server-side bot partners have ids like "bot-ananya-3f9c2a1b"; they are labelled as AI.
+  const isAiPeer = typeof peerId === 'string' && peerId.startsWith('bot-');
 
   // Derive membership from stable booleans, so a refreshed list identity does not
   // re-query the friendship status endpoint.
@@ -403,6 +405,9 @@ export function ChatBox() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: '8px', rowGap: '2px' }}>
               <h3 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700 }}>{peerName}</h3>
+              {isAiPeer && (
+                <span className="ai-badge" title="AI chat companion" aria-label="AI chat companion">AI</span>
+              )}
               {isPeerOnline ? (
                 <span className="online-badge" aria-label="Online">Online</span>
               ) : (
