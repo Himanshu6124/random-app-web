@@ -1,7 +1,10 @@
 {
   "name": "RandoMeet",
   "short_name": "RandoMeet",
-  "description": "Meet strangers worldwide in anonymous real-time chat.",
+  "description": "Free random chat with strangers. Anonymous one-on-one text chat, no signup needed, and a way to keep the people you click with as friends.",
+  "id": "/",
+  "lang": "en",
+  "categories": ["social"],
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

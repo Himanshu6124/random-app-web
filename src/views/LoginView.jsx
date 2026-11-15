@@ -3,6 +3,8 @@ import { AlertTriangle, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { GuestEntryModal } from '../components/GuestEntryModal';
 import { GoogleUsernameClaimForm } from '../components/GoogleUsernameClaimForm';
+import { HERO, STEPS, SAFETY, FAQ } from '../content/landingContent';
+import { SEO_PAGES } from '../content/seoPages';
 import './LoginView.css';
 
 const GOOGLE_SVG = (
@@ -149,8 +151,9 @@ export function LoginView() {
     <div className="login-page-container">
       <div className="login-card animate-fade-in">
         <div className="login-header">
-          <h1 className="login-title">RandoMeet</h1>
-          <p className="login-subtitle">Connect instantly with people worldwide</p>
+          <div className="login-brand">RandoMeet</div>
+          <h1 className="login-title">{HERO.title}</h1>
+          <p className="login-subtitle">{HERO.lead}</p>
         </div>
 
         {localError && (
@@ -181,6 +184,56 @@ export function LoginView() {
         )}
 
       </div>
+
+      <section className="login-about" aria-labelledby="landing-steps-title">
+        <h2 id="landing-steps-title" className="login-about-title">{STEPS.title}</h2>
+        <ol className="landing-steps">
+          {STEPS.items.map((step, i) => (
+            <li key={step.title}>
+              <span className="landing-step-num" aria-hidden="true">{i + 1}</span>
+              <div>
+                <h3>{step.title}</h3>
+                <p>{step.body}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="login-about" aria-labelledby="landing-safety-title">
+        <h2 id="landing-safety-title" className="login-about-title">{SAFETY.title}</h2>
+        <ul className="login-about-list">
+          {SAFETY.items.map((item) => (
+            <li key={item.title}>
+              <h3>{item.title}</h3>
+              <p>{item.body}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="login-about" aria-labelledby="landing-faq-title">
+        <h2 id="landing-faq-title" className="login-about-title">{FAQ.title}</h2>
+        <div className="landing-faq">
+          {FAQ.items.map((item) => (
+            <details key={item.question}>
+              <summary><h3>{item.question}</h3></summary>
+              <p>{item.answer}</p>
+            </details>
+          ))}
+        </div>
+        <a className="landing-more-link" href="/faq/">See all questions</a>
+      </section>
+
+      <footer className="landing-footer">
+        <nav aria-label="More about RandoMeet">
+          <ul>
+            {SEO_PAGES.map((page) => (
+              <li key={page.slug}><a href={`/${page.slug}/`}>{page.navLabel}</a></li>
+            ))}
+          </ul>
+        </nav>
+      </footer>
 
       <GuestEntryModal
         isOpen={guestModalOpen}

@@ -246,20 +246,21 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let isMounted = true;
     async function initLandingAuth() {
+      // Avatar choices load in the background: the landing page (and search engine
+      // crawlers, which arrive logged out) must not wait on the backend to render.
+      authService.getProfilePictures()
+        .then((pics) => {
+          if (isMounted && Array.isArray(pics) && pics.length > 0) setProfilePictures(pics);
+        })
+        .catch(() => {});
+
       try {
-        const [res, pics] = await Promise.all([
-          authService.checkLandingAuth(),
-          authService.getProfilePictures().catch(() => [])
-        ]);
+        const res = await authService.checkLandingAuth();
 
         if (isMounted) {
           setIsAuthenticated(res.isAuthenticated);
           setUser(res.user);
           setJwtToken(res.jwt || null);
-
-          if (Array.isArray(pics) && pics.length > 0) {
-            setProfilePictures(pics);
-          }
 
           if (res.isAuthenticated && res.jwt && !res.user?.isGuest) {
             loadFriendsFromApi(res.jwt);

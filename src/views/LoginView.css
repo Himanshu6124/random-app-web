@@ -1,12 +1,61 @@
 .login-page-container {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* safe: when the card + intro are taller than the screen, start at the top instead of clipping it */
+  justify-content: safe center;
   min-height: 100vh;
   width: 100%;
   position: relative;
   padding: 24px;
   overflow-y: auto;
+}
+
+/* Plain-language intro below the sign-in card: what visitors (and search engines) read */
+.login-about {
+  width: 100%;
+  max-width: 480px;
+  padding: 8px 32px 40px;
+  position: relative;
+  z-index: 10;
+}
+
+.login-about-title {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.login-about-lead {
+  margin-top: 8px;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: var(--fs-body-sm);
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.login-about-list {
+  list-style: none;
+  padding: 0;
+  margin-top: 20px;
+  display: grid;
+  gap: 16px;
+}
+
+.login-about-list h3 {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.login-about-list p {
+  margin-top: 2px;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: var(--fs-body-sm);
+  line-height: 1.55;
+  color: var(--text-muted);
 }
 
 .login-card {
@@ -22,21 +71,161 @@
   margin-bottom: 32px;
 }
 
-.login-title {
-  font-size: 2.5rem;
+.login-brand {
+  font-size: var(--fs-xl);
   font-weight: 800;
-  color: var(--text-primary);
   letter-spacing: -0.02em;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
+  color: var(--accent, #f07289);
 }
 
+/* The h1 carries the main search phrase; the brand sits above it */
+.login-title {
+  margin-top: 12px;
+  font-size: clamp(1.9rem, 6vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  text-wrap: balance;
+}
 
 .login-subtitle {
   color: var(--text-secondary);
   font-size: var(--fs-body);
-  margin-top: 4px;
+  margin-top: 10px;
+}
+
+/* How it works: numbered steps */
+.landing-steps {
+  list-style: none;
+  padding: 0;
+  margin-top: 20px;
+  display: grid;
+  gap: 18px;
+}
+
+.landing-steps li {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.landing-step-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--accent, #f07289);
+  border: 1.5px solid var(--accent-line, rgba(240, 114, 137, 0.45));
+}
+
+.landing-steps h3,
+.landing-faq h3 {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.landing-steps p,
+.landing-faq p {
+  margin-top: 2px;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: var(--fs-body-sm);
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* FAQ: native disclosure, so answers stay in the page for search engines */
+.landing-faq {
+  margin-top: 12px;
+}
+
+.landing-faq details {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.landing-faq summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 14px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.landing-faq summary::-webkit-details-marker {
+  display: none;
+}
+
+.landing-faq summary::after {
+  content: '+';
+  display: inline-block;
+  flex-shrink: 0;
+  font-size: var(--fs-xl);
+  line-height: 1;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.landing-faq details[open] summary::after {
+  transform: rotate(45deg);
+}
+
+.landing-faq summary:focus-visible {
+  outline: 2px solid var(--accent, #f07289);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.landing-more-link {
+  display: inline-block;
+  margin-top: 16px;
+  font-size: var(--fs-body-sm);
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.landing-more-link:hover {
+  text-decoration: underline;
+}
+
+/* Links to the static content pages (/how-it-works/, /faq/, ...) */
+.landing-footer {
+  width: 100%;
+  max-width: 480px;
+  padding: 24px 32px 48px;
+  border-top: 1px solid var(--border-color);
+  position: relative;
+  z-index: 10;
+}
+
+.landing-footer ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+
+.landing-footer a {
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.landing-footer a:hover {
+  text-decoration: underline;
+}
+
+.landing-faq details p {
+  margin-top: 0;
+  padding-bottom: 16px;
 }
 
 /* Tab Bar */
@@ -259,8 +448,14 @@
   .login-card {
     padding: 24px 16px;
   }
+  .login-about {
+    padding: 4px 16px 32px;
+  }
+  .landing-footer {
+    padding: 20px 16px 40px;
+  }
   .login-title {
-    font-size: var(--fs-2xl);
+    font-size: 1.75rem;
   }
   .form-row {
     grid-template-columns: 1fr;
