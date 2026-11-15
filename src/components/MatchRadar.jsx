@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
-import { X, UserRound } from 'lucide-react';
+import { X, UserRound, Heart } from 'lucide-react';
 import { startRadarSounds, playLockOn, unlockRadarAudio } from '../services/radarSound';
 
 /**
@@ -30,6 +30,36 @@ const BLIPS = [
   { c: 336, r: 46, img: '/userImages/boy2.png' }
 ];
 const TARGET = 0; // the blip the radar locks onto when a match lands
+
+// Home headline: three lines per part of the user's local day, rotated slowly.
+// The first line of each set is the plain question; the others keep it warm, never cutesy.
+const DAY_PARTS = [
+  { from: 5, part: 'morning', lines: ["Who's up this morning?", 'Coffee and a new hello?', 'Start the day with someone new.'] },
+  { from: 12, part: 'afternoon', lines: ["Who's around this afternoon?", 'Take a break. Meet someone new.', 'A quick hello, maybe more.'] },
+  { from: 17, part: 'evening', lines: ["Who's out this evening?", 'Unwind with someone new.', 'Evenings are better shared.'] },
+  { from: 21, part: 'night', lines: ["Who's up tonight?", 'Late night, good company.', 'Tell a stranger about your day.'] },
+  { from: 1, part: 'late night', lines: ["Can't sleep either?", 'Quiet hours, kind company.', 'Some talks only happen at night.'] }
+];
+const HEADLINE_SECONDS = 6;
+
+function dayPartAt(date) {
+  const h = date.getHours();
+  if (h >= 21 || h === 0) return DAY_PARTS[3];
+  if (h >= 17) return DAY_PARTS[2];
+  if (h >= 12) return DAY_PARTS[1];
+  if (h >= 5) return DAY_PARTS[0];
+  return DAY_PARTS[4];
+}
+
+function prefersReducedMotion() {
+  return typeof window !== 'undefined' && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+}
+
+/** "Sunday night", "Monday morning", "Late night" (after midnight the weekday reads oddly). */
+function dayLabel(date, part) {
+  if (part.part === 'late night') return 'Late night';
+  return `${date.toLocaleDateString(undefined, { weekday: 'long' })} ${part.part}`;
+}
 
 // Heart outlines that burst up and outward once (upper half only)
 const BURST_ANGLES = [-80, -55, -30, -10, 10, 30, 55, 80];
@@ -79,6 +109,27 @@ export function MatchRadar() {
     return () => clearInterval(t);
   }, [isSearching]);
 
+  // Idle home: follow the clock (checked each minute) and rotate the headline lines.
+  const isIdle = !isSearching && !isLocked;
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    if (!isIdle) return;
+    setNow(new Date());
+    const t = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(t);
+  }, [isIdle]);
+  const dayPart = dayPartAt(now);
+
+  const [lineIdx, setLineIdx] = useState(0);
+  useEffect(() => { setLineIdx(0); }, [dayPart]);
+  useEffect(() => {
+    if (!isIdle || prefersReducedMotion()) return;
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') setLineIdx(i => (i + 1) % dayPart.lines.length);
+    }, HEADLINE_SECONDS * 1000);
+    return () => clearInterval(t);
+  }, [isIdle, dayPart]);
+
   const peerName = currentPeer?.name || 'a stranger';
   const peerInitial = (currentPeer?.name || '').trim().charAt(0).toUpperCase();
 
@@ -90,7 +141,7 @@ export function MatchRadar() {
     ? 'Someone said hello.'
     : isSearching
       ? SEARCH_PHRASES[phraseIdx]
-      : "Who's up tonight?";
+      : dayPart.lines[lineIdx % dayPart.lines.length];
 
   if (isSearching || isLocked) {
     return (
@@ -171,7 +222,17 @@ export function MatchRadar() {
   return (
     <div className="radar-container match-home">
       <div className="match-home__copy">
-        <h2 className="match-home__title">{title}</h2>
+        {/* The rotating line is decorative for screen readers; they get the plain question once. */}
+        <h2 className="match-home__title">
+          <span className="dc-sr-only">{dayPart.lines[0]}</span>
+          <span key={title} className="search-phrase match-home__line" aria-hidden="true">
+            {title.split(' ').map((word, i) => (
+              <span key={i} className="search-phrase__word" style={{ animationDelay: `${i * 70}ms` }}>
+                {word}{' '}
+              </span>
+            ))}
+          </span>
+        </h2>
         <p className="match-home__lede">
           Chat one-to-one with a random stranger. Keep the ones you click with.
         </p>
@@ -179,18 +240,21 @@ export function MatchRadar() {
 
       <p className="match-status is-idle">
         <span className="match-status__dot" aria-hidden="true" />
-        Ready when you are
+        {dayLabel(now, dayPart)} · ready when you are
       </p>
 
       <div className="match-home__action">
-        <button
-          type="button"
-          id="find-match-btn"
-          onClick={() => { unlockRadarAudio(); startSearching(); }}
-          className="btn-primary match-home__btn find-match-btn"
-        >
-          <span>Find a Match</span>
-        </button>
+        <div className="find-match">
+          <button
+            type="button"
+            id="find-match-btn"
+            onClick={() => { unlockRadarAudio(); startSearching(); }}
+            className="btn-primary match-home__btn find-match-btn"
+          >
+            <Heart className="find-match-btn__heart" size={20} strokeWidth={2} aria-hidden="true" />
+            <span>Find a Match</span>
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -60,6 +60,15 @@
   letter-spacing: -0.02em;
   color: var(--text-primary);
   text-wrap: balance;
+  /* Room for two lines, so rotating headlines never push the lede up and down;
+     the text sits at the bottom of that room so it always hugs the lede. */
+  min-height: 2.2em;
+  display: flex;
+  align-items: flex-end;
+}
+
+.match-home__line {
+  display: block;
 }
 
 .match-home__lede {

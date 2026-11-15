@@ -167,7 +167,7 @@ components:
 
 RandoMeet is a simple warm dark app, opened on a phone, late, in bed, with the lights off. There is no metaphor and no costume. Warmth comes from two things only: a stepped plum ground that every surface is cut from, and one rose colour that marks what you can do next. Everything else is quiet: warm white text, 1px hairlines, pill buttons, line icons in one muted tone.
 
-Density is low and thumb-led. The Match tab puts one question and one rose pill in reach; searching turns the whole tab into a centred stage sized to the screen, so Cancel never needs a scroll. Motion is the one place the system lets itself be tender: a beating avatar, drifting heart outlines, a phrase that rises in word by word, and a set of one-shot moments that answer the user's own taps. Nothing moves on its own outside the search stage and the chat's opening heart.
+Density is low and thumb-led. The Match tab puts one question and one rose pill in reach; searching turns the whole tab into a centred stage sized to the screen, so Cancel never needs a scroll. Motion is the one place the system lets itself be tender: a beating avatar, drifting heart outlines, a phrase that rises in word by word, and a set of one-shot moments that answer the user's own taps. Outside the search stage and the chat's opening heart, only the Match tab's idle invitation moves on its own: a headline that follows the time of day and a Find a Match heart whose beat sends outline rings out from the pill.
 
 The world refuses glassy purple-neon gradients and swipe-card dating clichés. Surfaces are flat; there is no glass, blur or glow.
 
@@ -221,7 +221,7 @@ A warm, low-light palette: plum for everything that is a place, rose for everyth
 **Character:** Outfit is the app's voice: rounded, friendly geometric letterforms that carry headings, buttons, navigation and the chat messages themselves. Plus Jakarta Sans is the quieter companion for explanatory and status text, and for the whole Discover tab. Both families are pinned by the user.
 
 ### Hierarchy
-- **Display** (Outfit 700, clamp 1.9rem to 2.5rem, line-height 1.1, tracking -0.02em): the Match tab headline ("Who's up tonight?"). Balanced wrapping.
+- **Display** (Outfit 700, clamp 1.9rem to 2.5rem, line-height 1.1, tracking -0.02em): the Match tab headline. It follows the user's local time of day (morning, afternoon, evening, night, late night), opening on the plain question ("Who's up tonight?") and rotating every 6s through two warmer lines for that part of the day, each word rising in like the search phrase. It reserves two lines and sits at their foot, so rotation never shifts the lede. Screen readers get the plain question once.
 - **Display Stage** (Outfit 700, clamp 1.4rem to 2.75rem sized against both width and screen height, line-height 1.12): the rotating phrase on the search stage. Reserves two lines on phones, one line on desktop.
 - **Title** (Outfit 600–700, 1.25rem): the wordmark and the chat intro line.
 - **Body** (Outfit 400, 0.95rem, line-height 1.4): chat messages and default interface text.
@@ -275,7 +275,8 @@ Hearts are always outlines (stroke 1.4–1.8, round joins), never filled.
 ### Buttons
 Calm, round and certain.
 - **Shape:** full pill (rounded.full).
-- **Primary:** rose fill, Rose Ink label, Outfit 600, 12px 24px padding. The Find a Match pill is full width, 56px tall, 1.125rem/700.
+- **Primary:** rose fill, Rose Ink label, Outfit 600, 12px 24px padding. The Find a Match pill is full width, 56px tall, 1.125rem/700, led by a Rose Ink heart outline.
+- **Find a Match invitation:** the heart in the pill beats lub-dub on a 2.4s loop, and each beat sends a 2px rose outline ring out from the pill (it widens slightly and grows taller, fading by three quarters of the loop), echoing the radar it opens. Outlines only, never a glow. The pill rises 12px into place once when the tab opens (movement only, never faded from invisible). The echoes stop while it is pressed. The status line under the headline names the moment ("Sunday night · ready when you are").
 - **Hover / Focus / Press:** hover steps to Rose Hover over 0.18s; press scales to 0.98 (0.96 on touch, with a slight darken); focus shows a 2px rose outline offset 2px. Disabled drops to plum-4 with Ash text.
 - **Secondary:** transparent with a plum-5 hairline and warm-white label; hover fills plum-3. Cancel on the search stage is a full-width secondary pill.
 - **Selected choice:** plum-5 fill, 1.5px rose edge, rose label (The Plum Selection Rule).
@@ -340,6 +341,6 @@ The Discover segmented control follows the Plum Selection rule: the current segm
 - **Don't** use gold as a decorative accent or a second brand colour.
 - **Don't** bring green or sky into the Match flow as decoration; they are Friends and Discover state colours.
 - **Don't** use emoji as icons.
-- **Don't** add ambient looping motion outside the search stage and the chat intro heart.
+- **Don't** add ambient looping motion outside the search stage, the chat intro heart and the Match tab's idle invitation (rotating headline, beating Find a Match heart and its echo rings), which the user asked for to make the home screen feel alive.
 - **Don't** animate message history; only messages that arrive while the thread is open pop in.
 - **Don't** put Upgrade or a plain "Online" in the header on any tab.

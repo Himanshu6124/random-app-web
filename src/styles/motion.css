@@ -73,14 +73,58 @@
   animation: sendNudge 0.3s var(--ease-out-quick);
 }
 
-/* ── Match CTA: a slow breathing glow invites the first tap ── */
-@keyframes ctaBreathe {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); }
-  50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent) 0%, transparent); }
+/* ── Match CTA: the heart inside the pill beats lub-dub, and each beat sends a
+   rose outline ring out from the pill, like the radar it opens. Outlines only:
+   no glow, no fill. The whole pill rises in once when the tab opens. ── */
+.find-match {
+  position: relative;
+  isolation: isolate;
+  animation: ctaRise 0.5s var(--ease-out-quick) 0.12s both;
 }
-.match-home:not(.match-search) .match-home__action .btn-primary,
-.match-home:not(.match-search) .match-home__action .btn-cyan {
-  animation: ctaBreathe 2.6s ease-in-out infinite;
+.find-match::before,
+.find-match::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  animation: ctaEcho 2.4s cubic-bezier(0.25, 0.6, 0.3, 1) infinite;
+}
+/* Delays line up with the two beats of the heart (10% and 30% of its loop). */
+.find-match::before { animation-delay: 0.24s; }
+.find-match::after { animation-delay: 0.72s; }
+
+@keyframes ctaEcho {
+  0% { opacity: 0.85; transform: scale(1, 1); }
+  75% { opacity: 0; }
+  100% { opacity: 0; transform: scale(1.08, 1.6); }
+}
+
+.find-match-btn__heart {
+  flex-shrink: 0;
+  animation: ctaHeart 2.4s var(--ease-out) infinite;
+}
+@keyframes ctaHeart {
+  0%, 40%, 100% { transform: scale(1); }
+  10% { transform: scale(1.22); }
+  20% { transform: scale(0.94); }
+  30% { transform: scale(1.14); }
+}
+
+/* Movement only: the pill is never invisible, even if the animation is skipped or paused. */
+@keyframes ctaRise {
+  from { translate: 0 12px; }
+  to { translate: 0 0; }
+}
+
+/* While the pill is pressed the echoes stop, so the tap itself reads clearly. */
+.find-match:has(.find-match-btn:active)::before,
+.find-match:has(.find-match-btn:active)::after {
+  animation-play-state: paused;
+  opacity: 0;
 }
 
 /* ── Dialog backdrops fade, sheets already slide (mobile.css) ── */
@@ -110,7 +154,13 @@ textarea {
   .chat-composer button[type='submit'].is-pressed svg,
   .match-home__action .btn-primary,
   .match-home__action .btn-cyan,
+  .find-match,
+  .find-match-btn__heart,
   .m-sheet-backdrop {
     animation: none !important;
+  }
+  .find-match::before,
+  .find-match::after {
+    display: none;
   }
 }
