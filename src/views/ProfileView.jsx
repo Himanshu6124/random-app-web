@@ -249,6 +249,13 @@ export function ProfileView() {
                 ))}
               </div>
             )}
+            <p id="avatar-credit" style={{ margin: '10px 0 0', textAlign: 'center', fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)' }}>
+              Avatars: “Adventurer” by{' '}
+              <a href="https://www.instagram.com/lischi_art/" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>Lisa Wischofsky</a>
+              {' '}via{' '}
+              <a href="https://www.dicebear.com/styles/adventurer/" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>DiceBear</a>,{' '}
+              <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>CC BY 4.0</a>
+            </p>
           </div>
 
           {/* Username (Editable for full accounts, locked for guests) */}
