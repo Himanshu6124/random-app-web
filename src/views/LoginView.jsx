@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { GuestEntryModal } from '../components/GuestEntryModal';
@@ -93,7 +93,8 @@ function GuestButton({ onClick }) {
 export function LoginView() {
   const {
     loginAsGuest, authError, clearAuthError,
-    signInWithGoogle, completeGoogleSignup, firebaseConfigured
+    signInWithGoogle, completeGoogleSignup, firebaseConfigured,
+    googleRedirectLogin, clearGoogleRedirectLogin
   } = useAuth();
 
   const [loading, setLoading] = useState(false);
@@ -110,13 +111,25 @@ export function LoginView() {
     clearAuthError();
   };
 
+  // Back from a Google redirect (installed iOS app): continue with the claim step or show why it failed.
+  useEffect(() => {
+    if (!googleRedirectLogin) return;
+    if (googleRedirectLogin.claim) setGoogleClaim(googleRedirectLogin.claim);
+    if (googleRedirectLogin.error) setLocalError(googleRedirectLogin.error);
+    clearGoogleRedirectLogin();
+  }, [googleRedirectLogin, clearGoogleRedirectLogin]);
+
   // ---- Google sign-in (CONTRACT: login screen has exactly two actions) ----
   const handleGoogleSignIn = async () => {
     clearErrors();
     setLoading(true);
+    let redirecting = false;
     try {
       const res = await signInWithGoogle();
-      if (res && res.status === 'NEEDS_USERNAME') {
+      if (res && res.status === 'REDIRECTING') {
+        // Installed iOS app: the page is leaving for Google, keep the spinner until it does.
+        redirecting = true;
+      } else if (res && res.status === 'NEEDS_USERNAME') {
         // Brand-new Google user: show the username-claim step before creating the account.
         setGoogleClaim(res);
       }
@@ -124,7 +137,7 @@ export function LoginView() {
     } catch (err) {
       setLocalError(err.message || 'Google sign-in failed. Please try again.');
     } finally {
-      setLoading(false);
+      if (!redirecting) setLoading(false);
     }
   };
 

@@ -479,24 +479,6 @@ export const authService = {
     };
   },
 
-  /**
-   * GET /users/profile-pictures(?gender=boy|girl)
-   */
-  async getProfilePictures(gender) {
-    try {
-      const url = gender
-        ? `${BASE_URL}/users/profile-pictures?gender=${encodeURIComponent(gender)}`
-        : `${BASE_URL}/users/profile-pictures`;
-      const response = await fetch(url, {
-        headers: { 'Accept': 'application/json' }
-      });
-      return await handleApiResponse(response);
-    } catch (e) {
-      console.warn('Could not fetch profile pictures:', e);
-      return [];
-    }
-  },
-
   // ==========================================
   // Conversations Endpoints
   // ==========================================

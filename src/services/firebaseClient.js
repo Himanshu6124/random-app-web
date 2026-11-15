@@ -9,8 +9,12 @@
  * - Never hard-code real values; they come from .env (see .env.example).
  */
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut } from 'firebase/auth';
+import {
+  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
+  signInAnonymously, signOut
+} from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
+import { isIOS } from '../mobile/nativeShell';
 
 const cfg = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -68,6 +72,9 @@ export async function ensureAnonymousFirebaseSession() {
   if (!isFirebaseConfigured()) return null;
   try {
     const auth = getFirebaseAuth();
+    // currentUser is null until persisted state loads; without this wait a guest could be
+    // signed in anonymously over a Google user who just came back from a redirect.
+    await auth.authStateReady();
     if (auth.currentUser) return auth.currentUser;
     const cred = await signInAnonymously(auth);
     return cred.user;
@@ -78,13 +85,78 @@ export async function ensureAnonymousFirebaseSession() {
   }
 }
 
-/** Google popup sign-in. Returns the Firebase User on success. */
-export async function signInWithGooglePopup() {
-  const auth = getFirebaseAuth();
+const REDIRECT_KEY = 'randomeet_google_redirect';
+const REDIRECT_MAX_AGE_MS = 15 * 60 * 1000;
+const POPUP_TIMEOUT_MS = 3 * 60 * 1000;
+
+/**
+ * True inside a web app installed to the iOS home screen. There the Google popup opens in a
+ * separate browser view that shares no storage with the app, so its result never comes back
+ * and signInWithPopup waits forever. Those users get the redirect flow instead.
+ */
+export function isInstalledIosApp() {
+  if (typeof window === 'undefined' || !isIOS) return false;
+  return window.navigator.standalone === true
+    || Boolean(window.matchMedia?.('(display-mode: standalone)').matches);
+}
+
+function googleProvider() {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  const cred = await signInWithPopup(auth, provider);
-  return cred.user;
+  return provider;
+}
+
+/**
+ * Starts Google sign-in. Returns the Firebase User (popup flow), or null when a redirect
+ * was started instead: the page then navigates to Google and the caller must just wait.
+ * After the redirect returns, consumeGoogleRedirect() hands back the user together with
+ * `purpose` and `context` (plain JSON) so the caller can resume where it left off.
+ */
+export async function startGoogleSignIn({ purpose = 'login', context = null } = {}) {
+  const auth = getFirebaseAuth();
+  if (isInstalledIosApp()) {
+    try {
+      localStorage.setItem(REDIRECT_KEY, JSON.stringify({ purpose, context, at: Date.now() }));
+    } catch {
+      /* storage blocked: the redirect result is still consumed, just without context */
+    }
+    await signInWithRedirect(auth, googleProvider());
+    return null;
+  }
+
+  // A popup that never reports back (blocked or orphaned) must not spin forever.
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(
+      'Google sign-in did not finish. Please try again.'
+    )), POPUP_TIMEOUT_MS);
+  });
+  try {
+    const cred = await Promise.race([signInWithPopup(auth, googleProvider()), timeout]);
+    return cred.user;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Finishes a Google redirect started by startGoogleSignIn. Returns null when no redirect is
+ * pending, otherwise { purpose, context, user } where user is null if the person backed out.
+ * Throws the Firebase error when the sign-in itself failed.
+ */
+export async function consumeGoogleRedirect() {
+  let pending = null;
+  try {
+    pending = JSON.parse(localStorage.getItem(REDIRECT_KEY) || 'null');
+    localStorage.removeItem(REDIRECT_KEY);
+  } catch {
+    pending = null;
+  }
+  if (!pending || !isFirebaseConfigured()) return null;
+  if (Date.now() - (pending.at || 0) > REDIRECT_MAX_AGE_MS) return null;
+
+  const cred = await getRedirectResult(getFirebaseAuth());
+  return { purpose: pending.purpose, context: pending.context, user: cred?.user || null };
 }
 
 /** Signs the Firebase user out (does not touch the app's own JWT session). */

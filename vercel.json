@@ -5,6 +5,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/__/auth/:path*", "destination": "https://random-chat-342c9.firebaseapp.com/__/auth/:path*" },
+    { "source": "/__/firebase/:path*", "destination": "https://random-chat-342c9.firebaseapp.com/__/firebase/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

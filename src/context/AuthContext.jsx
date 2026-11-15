@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { authService } from '../services/authService';
-import { signInWithGooglePopup, ensureAnonymousFirebaseSession, isFirebaseConfigured } from '../services/firebaseClient';
+import {
+  startGoogleSignIn, consumeGoogleRedirect, ensureAnonymousFirebaseSession, isFirebaseConfigured
+} from '../services/firebaseClient';
 
 const AuthContext = createContext();
 
@@ -41,7 +43,6 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState('');
-  const [profilePictures, setProfilePictures] = useState([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   // Friends & conversations lists
@@ -53,6 +54,14 @@ export function AuthProvider({ children }) {
   const [upgradeModalReason, setUpgradeModalReason] = useState('');
   const [pendingUpgradeAction, setPendingUpgradeAction] = useState(null);
   const pendingUpgradeActionRef = useRef(null);
+  // Results of a Google redirect sign-in (installed iOS app), picked up after the reload:
+  // login screen -> { claim } or { error }; guest upgrade -> { idToken, email, displayName }.
+  const [googleRedirectLogin, setGoogleRedirectLogin] = useState(null);
+  const [googleRedirectUpgrade, setGoogleRedirectUpgrade] = useState(null);
+  const clearGoogleRedirectLogin = useCallback(() => setGoogleRedirectLogin(null), []);
+  const clearGoogleRedirectUpgrade = useCallback(() => setGoogleRedirectUpgrade(null), []);
+  // applyFirebaseSession is declared further down; the mount effect reaches it through this ref.
+  const applyFirebaseSessionRef = useRef(null);
 
   const isGuest = Boolean(user?.isGuest);
 
@@ -246,14 +255,6 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let isMounted = true;
     async function initLandingAuth() {
-      // Avatar choices load in the background: the landing page (and search engine
-      // crawlers, which arrive logged out) must not wait on the backend to render.
-      authService.getProfilePictures()
-        .then((pics) => {
-          if (isMounted && Array.isArray(pics) && pics.length > 0) setProfilePictures(pics);
-        })
-        .catch(() => {});
-
       try {
         const res = await authService.checkLandingAuth();
 
@@ -267,9 +268,42 @@ export function AuthProvider({ children }) {
             loadFriendRequests(res.jwt);
           }
 
+          // Back from a Google redirect (installed iOS app): resume that sign-in. This must run
+          // before the anonymous session below, which would otherwise replace the Google user.
+          let redirect = null;
+          try {
+            redirect = await consumeGoogleRedirect();
+          } catch (err) {
+            if (isMounted) setGoogleRedirectLogin({ error: err?.message || 'Google sign-in failed. Please try again.' });
+          }
+          if (isMounted && redirect?.user) {
+            try {
+              const idToken = await redirect.user.getIdToken();
+              if (redirect.purpose === 'upgrade' && res.isAuthenticated && res.user?.isGuest) {
+                // The upgrade modal finishes linking with the guest's restored session.
+                setGoogleRedirectUpgrade({
+                  idToken,
+                  email: redirect.user.email,
+                  displayName: redirect.user.displayName
+                });
+                openUpgradeModal(redirect.context?.reason || '', redirect.context?.pendingAction || null);
+              } else {
+                const signIn = await authService.firebaseSignIn(idToken);
+                if (!isMounted) return;
+                if (signIn.status === 'NEEDS_USERNAME') {
+                  setGoogleRedirectLogin({ claim: signIn });
+                } else {
+                  applyFirebaseSessionRef.current?.(signIn);
+                }
+              }
+            } catch (err) {
+              if (isMounted) setGoogleRedirectLogin({ error: err?.message || 'Google sign-in failed. Please try again.' });
+            }
+          }
+
           // A guest reloading the page also re-ensures their anonymous Firebase identity
           // (CONTRACT B1-5). Quiet no-op when Firebase is unconfigured.
-          if (res.isAuthenticated && res.user?.isGuest) {
+          if (res.isAuthenticated && res.user?.isGuest && !redirect?.user) {
             ensureAnonymousFirebaseSession();
           }
         }
@@ -288,7 +322,7 @@ export function AuthProvider({ children }) {
 
     initLandingAuth();
     return () => { isMounted = false; };
-  }, [loadFriendsFromApi, loadFriendRequests]);
+  }, [loadFriendsFromApi, loadFriendRequests, openUpgradeModal]);
 
 
   const sendFriendRequest = useCallback(async (targetUserId) => {
@@ -497,6 +531,7 @@ export function AuthProvider({ children }) {
     loadFriendRequests(res.jwt);
     return res;
   }, [loadFriendRequests, loadFriendsFromApi]);
+  applyFirebaseSessionRef.current = applyFirebaseSession;
 
   /**
    * Google popup -> POST /auth/firebase. When the Google user is brand-new the backend
@@ -510,7 +545,10 @@ export function AuthProvider({ children }) {
       throw new Error('Google sign-in is not configured yet. Please continue as a guest for now.');
     }
     try {
-      const fbUser = await signInWithGooglePopup();
+      const fbUser = await startGoogleSignIn({ purpose: 'login' });
+      if (!fbUser) {
+        return { status: 'REDIRECTING' }; // the page is navigating to Google
+      }
       const idToken = await fbUser.getIdToken();
       const res = await authService.firebaseSignIn(idToken);
       if (res.status === 'NEEDS_USERNAME') {
@@ -713,7 +751,6 @@ export function AuthProvider({ children }) {
     jwtToken,
     user,
     sessionEpoch,
-    profilePictures,
     authLoading,
     authError,
     showLogoutModal,
@@ -735,6 +772,10 @@ export function AuthProvider({ children }) {
     pendingUpgradeAction,
     openUpgradeModal,
     closeUpgradeModal,
+    googleRedirectLogin,
+    clearGoogleRedirectLogin,
+    googleRedirectUpgrade,
+    clearGoogleRedirectUpgrade,
     logout,
     updateUserProfile,
     soundEnabled,
@@ -763,11 +804,12 @@ export function AuthProvider({ children }) {
     unblockUser,
     loadFriendsFromApi
   }), [
-    isAuthenticated, isGuest, jwtToken, user, sessionEpoch, profilePictures, authLoading,
+    isAuthenticated, isGuest, jwtToken, user, sessionEpoch, authLoading,
     authError, showLogoutModal, requestLogout, cancelLogout, performLogout, clearAuthError,
     login, signUp, loginAsGuest, upgradeGuestAccount, signInWithGoogle, completeGoogleSignup,
     linkGoogleAccount, signInToExistingGoogleAccount, upgradeModalOpen, upgradeModalReason,
-    pendingUpgradeAction, openUpgradeModal, closeUpgradeModal, logout, updateUserProfile,
+    pendingUpgradeAction, openUpgradeModal, closeUpgradeModal, googleRedirectLogin,
+    clearGoogleRedirectLogin, googleRedirectUpgrade, clearGoogleRedirectUpgrade, logout, updateUserProfile,
     soundEnabled, friends, totalUnreadFriendsCount, markFriendMessagesSeen, handleIncomingDirectMessage,
     activeDmFriendId, setActiveDmFriendId, friendRequests, friendRequestsLoading, liveFriendRequest,
     dismissLiveFriendRequest, acceptLiveFriendRequest, applyFriendPresence, addFriend,

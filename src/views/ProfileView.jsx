@@ -3,7 +3,7 @@ import { useAuth, INTEREST_TAGS } from '../context/AuthContext';
 import { User, Check, Save, Lock, AlertCircle, Download, UserRound } from 'lucide-react';
 
 export function ProfileView() {
-  const { user, isGuest, updateUserProfile, logout, profilePictures, openUpgradeModal } = useAuth();
+  const { user, isGuest, updateUserProfile, logout, openUpgradeModal } = useAuth();
 
   const [username, setUsername] = useState(user?.username || '');
   const [name, setName] = useState(user?.name || user?.username || '');

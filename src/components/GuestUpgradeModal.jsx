@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { signInWithGooglePopup } from '../services/firebaseClient';
+import { startGoogleSignIn } from '../services/firebaseClient';
 import { GoogleUsernameClaimForm } from './GoogleUsernameClaimForm';
 import { X } from 'lucide-react';
 
@@ -9,10 +9,13 @@ export function GuestUpgradeModal() {
     user,
     upgradeModalOpen,
     upgradeModalReason,
+    pendingUpgradeAction,
     closeUpgradeModal,
     linkGoogleAccount,
     signInToExistingGoogleAccount,
-    firebaseConfigured
+    firebaseConfigured,
+    googleRedirectUpgrade,
+    clearGoogleRedirectUpgrade
   } = useAuth();
 
   const [loading, setLoading] = useState(false);
@@ -21,8 +24,6 @@ export function GuestUpgradeModal() {
   const [googleClaim, setGoogleClaim] = useState(null);
   const [claimLoading, setClaimLoading] = useState(false);
   const [claimError, setClaimError] = useState('');
-
-  if (!upgradeModalOpen) return null;
 
   const handleClose = () => {
     setGoogleClaim(null);
@@ -33,42 +34,76 @@ export function GuestUpgradeModal() {
   };
 
   /**
+   * Next step once Google has authenticated the guest (popup, or redirect + reload):
+   * sign straight into an existing profile, else ask for username/name/gender/avatar.
+   */
+  const continueWithGoogle = async ({ idToken, email, displayName }) => {
+    // Existing profile for this Google account -> sign straight into it, exactly like
+    // the login page does, instead of offering to link (which the backend would reject).
+    // The server also hands the live random chat over to that profile, so it survives.
+    const existing = await signInToExistingGoogleAccount(idToken);
+    if (existing?.status !== 'NEEDS_USERNAME' && existing?.jwt) {
+      handleClose();
+      return;
+    }
+
+    setPendingIdToken(idToken);
+
+    const baseUsername = user?.name
+      ? user.name.toLowerCase().replace(/[^a-z0-9_]/g, '_').substring(0, 30)
+      : (email ? email.split('@')[0].replace(/[^a-z0-9_]/g, '_').substring(0, 30) : '');
+
+    setGoogleClaim({
+      email,
+      name: user?.name || displayName || '',
+      suggestedUsername: baseUsername || 'user_' + Math.random().toString(36).substring(2, 7),
+      gender: user?.gender || 'boy',
+      photoUrl: user?.photoUrl || ''
+    });
+  };
+
+  // Back from a Google redirect (installed iOS app): AuthContext reopened this modal with
+  // the guest's restored session, so finish the same way the popup flow would.
+  useEffect(() => {
+    if (!upgradeModalOpen || !googleRedirectUpgrade) return;
+    const google = googleRedirectUpgrade;
+    clearGoogleRedirectUpgrade();
+    setError('');
+    setLoading(true);
+    continueWithGoogle(google)
+      .catch((err) => setError(err.message || 'Google account linking failed.'))
+      .finally(() => setLoading(false));
+    // continueWithGoogle is recreated each render; run once per redirect result.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [upgradeModalOpen, googleRedirectUpgrade, clearGoogleRedirectUpgrade]);
+
+  if (!upgradeModalOpen) return null;
+
+  /**
    * Prompts the Google popup. Once authenticated, prompt the user with the same
    * username, name, gender, and avatar selection dialog as the main login page.
    */
   const handleGoogleLink = async () => {
     setError('');
     setLoading(true);
+    let redirecting = false;
     try {
-      const fbUser = await signInWithGooglePopup();
-      const idToken = await fbUser.getIdToken();
-
-      // Existing profile for this Google account -> sign straight into it, exactly like
-      // the login page does, instead of offering to link (which the backend would reject).
-      // The server also hands the live random chat over to that profile, so it survives.
-      const existing = await signInToExistingGoogleAccount(idToken);
-      if (existing?.status !== 'NEEDS_USERNAME' && existing?.jwt) {
-        handleClose();
+      // In the installed iOS app this navigates to Google and returns null; the reload is
+      // picked up by the effect above. The reason and friend action survive as plain JSON.
+      const fbUser = await startGoogleSignIn({
+        purpose: 'upgrade',
+        context: { reason: upgradeModalReason || '', pendingAction: pendingUpgradeAction || null }
+      });
+      if (!fbUser) {
+        redirecting = true;
         return;
       }
-
-      setPendingIdToken(idToken);
-
-      const baseUsername = user?.name
-        ? user.name.toLowerCase().replace(/[^a-z0-9_]/g, '_').substring(0, 30)
-        : (fbUser.email ? fbUser.email.split('@')[0].replace(/[^a-z0-9_]/g, '_').substring(0, 30) : '');
-
-      setGoogleClaim({
-        email: fbUser.email,
-        name: user?.name || fbUser.displayName || '',
-        suggestedUsername: baseUsername || 'user_' + Math.random().toString(36).substring(2, 7),
-        gender: user?.gender || 'boy',
-        photoUrl: user?.photoUrl || ''
-      });
+      const idToken = await fbUser.getIdToken();
+      await continueWithGoogle({ idToken, email: fbUser.email, displayName: fbUser.displayName });
     } catch (err) {
       setError(err.message || 'Google account linking failed.');
     } finally {
-      setLoading(false);
+      if (!redirecting) setLoading(false);
     }
   };
 
