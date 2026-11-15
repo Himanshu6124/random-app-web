@@ -6,7 +6,10 @@ import { seo } from './vite-plugin-seo.js'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const rawBackend = env.VITE_BACKEND_URL || 'http://localhost:8080';
+  // Where the dev-server proxy forwards API/WebSocket calls. DEV_PROXY_TARGET is dev-only (no VITE_
+  // prefix, so it never reaches the browser bundle): point it at the Oracle backend to test the local
+  // frontend against production while the browser stays same-origin (no CORS, no mixed content).
+  const rawBackend = env.DEV_PROXY_TARGET || env.VITE_BACKEND_URL || 'http://localhost:8080';
   const BACKEND = rawBackend.replace(/\/+$/, '');
   const WS_BACKEND = BACKEND.replace(/^http/, 'ws');
 
