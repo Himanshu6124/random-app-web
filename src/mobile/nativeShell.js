@@ -67,35 +67,45 @@ export function initNativeShell() {
   document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
 }
 
-const isIOS = typeof navigator !== 'undefined' && (
+export const isIOS = typeof navigator !== 'undefined' && (
   /iPhone|iPad|iPod/.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 );
 
-let iosSwitchLabel = null;
 let iosTimers = [];
+let lastIosTapHaptic = 0;
 
 /**
- * iOS Safari has no Vibration API. Since iOS 17.4, toggling an
- * `<input type="checkbox" switch>` plays the system haptic tick, so we keep a
- * hidden one around and click its label. Ticks fire reliably inside a user
- * gesture; delayed ones (patterns) are best effort.
+ * Called when the user's tap toggles an <IosHaptic> switch (which already
+ * ticked), so the scripted tick for the same tap is skipped. Avoids a double
+ * tick on iOS versions where scripted ticks still work.
+ */
+export function markIosTapHaptic() {
+  lastIosTapHaptic = Date.now();
+}
+
+/**
+ * iOS Safari has no Vibration API. On iOS 18+, toggling an
+ * `<input type="checkbox" switch>` plays the system haptic tick, so we click
+ * the label of a throwaway switch. The switch must be *rendered* (WebKit skips
+ * the haptic for a `display:none` control), so it is laid out off-screen and
+ * invisible instead, and a fresh one is used per tick. Ticks fire reliably
+ * inside a user gesture; delayed ones (patterns) are best effort.
  */
 function iosTick() {
   try {
-    if (!iosSwitchLabel) {
-      const label = document.createElement('label');
-      label.setAttribute('aria-hidden', 'true');
-      label.style.display = 'none';
-      const input = document.createElement('input');
-      input.type = 'checkbox';
-      input.setAttribute('switch', '');
-      input.tabIndex = -1;
-      label.appendChild(input);
-      document.body.appendChild(label);
-      iosSwitchLabel = label;
-    }
-    iosSwitchLabel.click();
+    const label = document.createElement('label');
+    label.setAttribute('aria-hidden', 'true');
+    label.style.cssText =
+      'position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.setAttribute('switch', '');
+    input.tabIndex = -1;
+    label.appendChild(input);
+    document.body.appendChild(label);
+    label.click();
+    label.remove();
   } catch {
     /* not supported */
   }
@@ -108,18 +118,23 @@ function iosTick() {
  */
 export function haptic(pattern = 8) {
   try {
-    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-      navigator.vibrate(pattern);
+    // iOS first: some iOS browsers expose a no-op navigator.vibrate, which
+    // would otherwise swallow the call before the switch fallback runs.
+    if (!isIOS) {
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(pattern);
+      }
       return;
     }
-    if (!isIOS) return;
     iosTimers.forEach(clearTimeout);
     iosTimers = [];
     const steps = Array.isArray(pattern) ? pattern : [pattern];
     let at = 0;
     steps.forEach((ms, i) => {
       if (i % 2 === 0 && ms > 0) {
-        if (at === 0) iosTick();
+        if (at === 0) {
+          if (Date.now() - lastIosTapHaptic > 250) iosTick();
+        }
         else iosTimers.push(setTimeout(iosTick, at));
       }
       at += Math.max(0, ms);

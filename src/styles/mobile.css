@@ -222,6 +222,31 @@ nav,
     border-top: 1px solid var(--border-color);
     z-index: 60;
   }
+  .tabbar-slot {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+  }
+  /* iOS haptics: invisible native switch over each tab (see BottomTabBar). */
+  .tabbar-haptic {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tabbar-haptic input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .tabbar-slot:active .tabbar-icon {
+    transform: scale(0.9);
+  }
   .tabbar-item {
     flex: 1;
     min-width: 0;
@@ -720,4 +745,25 @@ nav,
   html.is-standalone .profile-install-btn {
     display: none !important;
   }
+}
+
+/* <IosHaptic>: invisible native switch over its parent button. */
+:where(:has(> .ios-haptic)) {
+  position: relative;
+}
+.ios-haptic {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.ios-haptic input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
 }

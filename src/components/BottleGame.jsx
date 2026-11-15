@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X, RotateCw, Send, PenLine, Sparkles, Flame, Scale } from 'lucide-react';
 import '../styles/bottleGame.css';
 import { playSpin, playLand, playChoose, unlockGameAudio } from '../services/gameFx';
+import { IosHaptic } from './IosHaptic';
 
 /** How long the bottle spins. The server's spin cooldown (4s) is just above this. */
 const SPIN_MS = 3400;
@@ -235,6 +236,7 @@ export function BottleGame({ game, myId, me, peer, disabled, onSpin, onChoose, o
                 <meta.Icon size={20} aria-hidden="true" />
                 <span className="bg-choice__label">{meta.label}</span>
                 <span className="bg-choice__hint">{meta.hint}</span>
+                {!choosing && <IosHaptic />}
               </button>
             ))}
           </div>
@@ -263,6 +265,7 @@ export function BottleGame({ game, myId, me, peer, disabled, onSpin, onChoose, o
             <button type="button" className="btn-primary bg-btn" onClick={handleSpin} disabled={!canSpin}>
               <RotateCw size={16} aria-hidden="true" />
               <span>{game ? 'Spin again' : 'Spin'}</span>
+              {canSpin && <IosHaptic />}
             </button>
           </div>
         )}
@@ -351,6 +354,7 @@ function AskComposer({ tone, label, suggestions, onSend }) {
                   onClick={() => pick(q, i)}
                 >
                   {q}
+                  <IosHaptic />
                 </button>
               </li>
             ))}

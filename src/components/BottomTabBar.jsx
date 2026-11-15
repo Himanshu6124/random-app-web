@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { MessageSquare, Compass, Users, Lock, UserRound } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import { haptic } from '../mobile/nativeShell';
+import { haptic, isIOS } from '../mobile/nativeShell';
 
 /**
  * Native-style bottom tab bar, shown only on phone-sized screens (see mobile.css).
@@ -29,7 +29,9 @@ export function BottomTabBar({ activeTab, setActiveTab }) {
   const [tapped, setTapped] = useState(null);
 
   const select = (tab) => {
-    haptic();
+    // On iOS the tick comes from the finger toggling the native switch overlay
+    // below (iOS 26.5+ ignores switches toggled from script).
+    if (!isIOS) haptic();
     setTapped(tab.id);
     setTimeout(() => setTapped(null), 450);
     if (tab.locked) {
@@ -51,9 +53,10 @@ export function BottomTabBar({ activeTab, setActiveTab }) {
       {tabs.map((tab) => {
         const active = activeTab === tab.id;
         return (
+          <div key={tab.id} className="tabbar-slot">
           <button
-            key={tab.id}
             type="button"
+            tabIndex={isIOS ? -1 : undefined}
             className={`tabbar-item${active ? ' is-active' : ''}${tab.locked ? ' is-locked' : ''}${tapped === tab.id ? ' just-tapped' : ''}`}
             onClick={() => select(tab)}
             aria-current={active ? 'page' : undefined}
@@ -74,6 +77,19 @@ export function BottomTabBar({ activeTab, setActiveTab }) {
             </span>
             <span className="tabbar-label">{tab.label}</span>
           </button>
+          {isIOS && (
+            // Invisible native switch covering the tab: the user's own tap toggles
+            // it, which is the only way iOS web apps get a system haptic tick.
+            // The label forwards a second click to the input; ignore that one.
+            <label
+              className="tabbar-haptic"
+              aria-hidden="true"
+              onClick={(e) => { if (e.target === e.currentTarget) select(tab); }}
+            >
+              <input type="checkbox" switch="" tabIndex={-1} />
+            </label>
+          )}
+          </div>
         );
       })}
     </nav>
