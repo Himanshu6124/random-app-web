@@ -129,7 +129,7 @@ if [ "$DETACHED" = true ]; then
     echo "⏳ Waiting for Vite dev server to respond on port $PORT..."
     UP=0
     for _ in $(seq 1 45); do
-        if curl -sf -o /dev/null "http://localhost:${PORT}" 2>/dev/null; then
+        if curl -k -sf -o /dev/null "https://localhost:${PORT}" 2>/dev/null || curl -sf -o /dev/null "http://localhost:${PORT}" 2>/dev/null; then
             UP=1
             break
         fi
@@ -140,9 +140,9 @@ if [ "$DETACHED" = true ]; then
         echo "✅ Frontend started successfully in detached mode (PID: $SERVICE_PID)."
         echo "========================================================"
         echo "🌐 Frontend Access URLs:"
-        echo "   Localhost : http://localhost:${PORT}"
+        echo "   Localhost : https://localhost:${PORT}"
         for ip in $(hostname -I 2>/dev/null); do
-            echo "   Network   : http://${ip}:${PORT}"
+            echo "   Network   : https://${ip}:${PORT}"
         done
         echo "========================================================"
         echo "🔍 View logs: tail -f $LOG_FILE"
@@ -159,9 +159,9 @@ else
     echo "💻 Running in terminal. Press Ctrl+C to stop."
     echo "========================================================"
     echo "🌐 Frontend Access URLs:"
-    echo "   Localhost : http://localhost:${PORT}"
+    echo "   Localhost : https://localhost:${PORT}"
     for ip in $(hostname -I 2>/dev/null); do
-        echo "   Network   : http://${ip}:${PORT}"
+        echo "   Network   : https://${ip}:${PORT}"
     done
     echo "========================================================"
 

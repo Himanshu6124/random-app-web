@@ -675,6 +675,59 @@
   background: #1a1019;
 }
 
+.nearby-map-leaflet {
+  width: 100%;
+  height: 100%;
+  background: #1a1019;
+}
+
+.leaflet-nearby-me-marker,
+.leaflet-friend-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.leaflet-nearby-me-marker .nearby-me {
+  position: relative;
+  left: 0;
+  top: 0;
+}
+
+.leaflet-friend-marker .nearby-marker {
+  position: relative;
+  left: 0;
+  top: 0;
+  transform: none;
+}
+
+.nearby-map .nearby-map-controls,
+.nearby-map .nearby-map-footer,
+.nearby-map .nearby-map-scale {
+  z-index: 1000;
+}
+
+.nearby-map .nearby-popover {
+  z-index: 1001;
+}
+
+.nearby-map .nearby-map-overlay {
+  z-index: 1002;
+}
+
+.nearby-map .leaflet-control-attribution {
+  background: rgba(20, 12, 20, 0.8) !important;
+  color: var(--dc-text-3) !important;
+  font-size: 10px !important;
+  border-radius: var(--radius-sm);
+  padding: 2px 6px !important;
+  margin: 0 4px 4px 0 !important;
+}
+
+.nearby-map .leaflet-control-attribution a {
+  color: var(--dc-text-2) !important;
+  text-decoration: none;
+}
+
 .nearby-map-art {
   position: absolute;
   inset: 0;

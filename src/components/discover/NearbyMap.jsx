@@ -1,175 +1,355 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, Minus, LocateFixed, MessageCircle, Hand, ShieldCheck } from 'lucide-react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { DiscoverAvatar } from './DiscoverAvatar';
-import { firstName, timeAgo } from './discoverUtils';
+import { firstName, timeAgo, initialsOf, avatarColor } from './discoverUtils';
 
-const KM_PER_DEG_LAT = 110.574;
-const MARKER_PAD = 44;
-
-/** Decorative street-map backdrop from the design (not real geography). */
-function MapArt() {
-  return (
-    <svg className="nearby-map-art" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <rect width="800" height="600" fill="#1a1019" />
-      <rect x="70" y="60" width="150" height="110" rx="14" fill="rgba(63, 178, 127, 0.09)" />
-      <rect x="560" y="390" width="190" height="130" rx="14" fill="rgba(63, 178, 127, 0.09)" />
-      <rect x="430" y="80" width="90" height="70" rx="10" fill="rgba(63, 178, 127, 0.07)" />
-      <path d="M-20 470 C 140 420, 230 520, 380 470 S 640 380, 820 430" stroke="rgba(126, 166, 246, 0.16)" strokeWidth="30" fill="none" />
-      <g stroke="#352131" strokeWidth="5" fill="none">
-        <path d="M0 120 H800" /><path d="M0 250 H800" /><path d="M0 360 H800" /><path d="M0 540 H800" />
-        <path d="M120 0 V600" /><path d="M260 0 V600" /><path d="M540 0 V600" /><path d="M680 0 V600" />
-      </g>
-      <g stroke="#43293d" strokeWidth="12" fill="none" strokeLinecap="round">
-        <path d="M-10 600 L 820 -10" /><path d="M400 -10 V610" /><path d="M-10 300 H810" />
-      </g>
-      <g stroke="#2a1a27" strokeWidth="2.5" fill="none">
-        <path d="M0 60 H800" /><path d="M0 190 H800" /><path d="M0 420 H800" />
-        <path d="M60 0 V600" /><path d="M190 0 V600" /><path d="M330 0 V600" /><path d="M470 0 V600" /><path d="M610 0 V600" /><path d="M750 0 V600" />
-      </g>
-    </svg>
-  );
+function getZoomForRadius(km) {
+  if (km <= 1) return 15;
+  if (km <= 2) return 14;
+  if (km <= 5) return 13;
+  if (km <= 10) return 12;
+  if (km <= 25) return 10;
+  return 9;
 }
 
-/**
- * Places friends around "You" by their real bearing and distance (from the rounded positions
- * the server returns). The outer ring is the chosen radius, the inner ring half of it.
- */
 export function NearbyMap({
-  me, friends, radiusKm, zoom, onZoomIn, onZoomOut, onCenter, canZoomIn, canZoomOut,
-  selectedId, onSelect, onMessage, onWave, waveState, updatedAt, overlay
+  me,
+  friends = [],
+  radiusKm = 5,
+  zoom: _zoom,
+  onZoomIn,
+  onZoomOut,
+  onCenter,
+  canZoomIn,
+  canZoomOut,
+  selectedId,
+  onSelect,
+  onMessage,
+  onWave,
+  waveState,
+  updatedAt,
+  overlay,
 }) {
-  const boxRef = useRef(null);
-  const [box, setBox] = useState({ w: 800, h: 620 });
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const layersRef = useRef({
+    circles: L.layerGroup(),
+    me: L.layerGroup(),
+    friends: L.layerGroup(),
+  });
+  const [popoverPos, setPopoverPos] = useState(null);
 
-  useLayoutEffect(() => {
-    const el = boxRef.current;
-    if (!el) return undefined;
-    const measure = () => setBox({ w: el.clientWidth, h: el.clientHeight });
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
+  // Initialize Leaflet Map
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return undefined;
+
+    const initialLat = me?.latitude ?? 20.5937;
+    const initialLng = me?.longitude ?? 78.9629;
+    const initialZoom = me?.latitude != null ? getZoomForRadius(radiusKm) : 4;
+
+    const map = L.map(containerRef.current, {
+      center: [initialLat, initialLng],
+      zoom: initialZoom,
+      zoomControl: false,
+      attributionControl: true,
+    });
+
+    const cartoKey = import.meta.env.VITE_CARTO_API_KEY;
+    const tileUrl = cartoKey
+      ? `https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png?key=${cartoKey}`
+      : 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png';
+
+    L.tileLayer(tileUrl, {
+      subdomains: 'abcd',
+      maxZoom: 19,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
+    }).addTo(map);
+
+    layersRef.current.circles.addTo(map);
+    layersRef.current.me.addTo(map);
+    layersRef.current.friends.addTo(map);
+
+    map.on('click', (e) => {
+      const target = e.originalEvent?.target;
+      if (!target || !target.closest('.nearby-marker')) {
+        onSelect?.(null);
+      }
+    });
+
+    mapRef.current = map;
+
+    // Handle container resizing
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    resizeObserver.observe(containerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+      map.remove();
+      mapRef.current = null;
+    };
   }, []);
 
-  const cx = box.w / 2;
-  const cy = box.h / 2;
-  const ringPx = Math.max(60, Math.min(box.w, box.h) / 2 - MARKER_PAD) * zoom;
-  const pxPerKm = ringPx / radiusKm;
+  // Update "You" and radius circles
+  useEffect(() => {
+    const { circles, me: meLayer } = layersRef.current;
+    circles.clearLayers();
+    meLayer.clearLayers();
 
-  const kmPerDegLng = me?.latitude != null ? 111.32 * Math.cos((me.latitude * Math.PI) / 180) : 111.32;
+    if (me?.latitude == null || me?.longitude == null) return;
 
-  // Rounded positions often coincide or crowd: nudge each marker until it has room for its
-  // label, spiralling outwards from where it really is.
-  const MIN_GAP = 64;
-  const placed = [];
-  friends.forEach(n => {
-    let x = cx;
-    let y = cy;
-    if (me?.latitude != null) {
-      x = cx + (n.longitude - me.longitude) * kmPerDegLng * pxPerKm;
-      y = cy - (n.latitude - me.latitude) * KM_PER_DEG_LAT * pxPerKm;
-    }
-    const crowded = (px, py) => Math.hypot(px - cx, py - cy) < 56
-      || placed.some(p => Math.abs(p.x - px) < MIN_GAP * 1.3 && Math.abs(p.y - py) < MIN_GAP * 0.85);
-    let px = x;
-    let py = y;
-    for (let step = 1; crowded(px, py) && step < 40; step++) {
-      const angle = step * 2.39996;
-      const r = 18 + step * 6;
-      px = x + Math.cos(angle) * r;
-      py = y + Math.sin(angle) * r;
-    }
-    placed.push({
-      ...n,
-      x: Math.min(box.w - 30, Math.max(30, px)),
-      y: Math.min(box.h - 40, Math.max(30, py))
+    // Outer & inner radius circles
+    const outerCircle = L.circle([me.latitude, me.longitude], {
+      radius: radiusKm * 1000,
+      color: '#f07289',
+      weight: 1.5,
+      opacity: 0.5,
+      dashArray: '6, 8',
+      fillColor: '#f07289',
+      fillOpacity: 0.06,
+      interactive: false,
     });
-  });
 
-  const selected = placed.find(p => p.friend.id === selectedId);
-  const popoverBelow = selected && selected.y < 200;
-  const popoverLeft = selected ? Math.min(box.w - 262, Math.max(12, selected.x - 125)) : 0;
+    const innerCircle = L.circle([me.latitude, me.longitude], {
+      radius: (radiusKm * 1000) / 2,
+      color: '#f07289',
+      weight: 1.2,
+      opacity: 0.35,
+      dashArray: '4, 6',
+      fillColor: '#f07289',
+      fillOpacity: 0.03,
+      interactive: false,
+    });
+
+    circles.addLayer(outerCircle);
+    circles.addLayer(innerCircle);
+
+    // Pulse dot for "You"
+    const meIcon = L.divIcon({
+      className: 'leaflet-nearby-me-marker',
+      html: `
+        <div class="nearby-me" style="position:relative; width:0; height:0;">
+          <span class="nearby-me-pulse"></span>
+          <span class="nearby-me-dot"></span>
+          <span class="nearby-me-label">You</span>
+        </div>
+      `,
+      iconSize: [0, 0],
+      iconAnchor: [0, 0],
+    });
+
+    const meMarker = L.marker([me.latitude, me.longitude], {
+      icon: meIcon,
+      interactive: false,
+      zIndexOffset: 100,
+    });
+
+    meLayer.addLayer(meMarker);
+  }, [me?.latitude, me?.longitude, radiusKm]);
+
+  // Adjust center and zoom when position or radius changes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || me?.latitude == null || me?.longitude == null) return;
+    map.setView([me.latitude, me.longitude], getZoomForRadius(radiusKm), { animate: true });
+  }, [radiusKm, me?.latitude, me?.longitude]);
+
+  // Render friend markers
+  useEffect(() => {
+    const { friends: friendsLayer } = layersRef.current;
+    friendsLayer.clearLayers();
+
+    friends.forEach((n) => {
+      if (n.latitude == null || n.longitude == null) return;
+
+      const isOnline = Boolean(n.friend?.isOnline);
+      const isOnlineClass = isOnline ? 'nearby-marker--online' : '';
+      const isSelected = n.friend?.id === selectedId;
+      const isSelectedClass = isSelected ? 'is-selected' : '';
+      const label = `${firstName(n.friend?.name)} · ${n.distanceKm} km`;
+      const initials = initialsOf(n.friend?.name || '');
+      const bg = avatarColor(n.friend?.id || n.friend?.name || '');
+      const photo = n.friend?.photoUrl;
+
+      const faceHtml = photo
+        ? `<img src="${photo}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.style.display='none';this.parentElement.textContent='${initials}'"/>`
+        : initials;
+
+      const html = `
+        <div class="nearby-marker ${isOnlineClass} ${isSelectedClass}" style="position:relative;left:0;top:0;transform:none;" data-id="${n.friend?.id}">
+          <div class="dc-avatar" style="width:42px;height:42px;">
+            <div class="dc-avatar-face" style="background:${bg};font-size:15px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;">
+              ${faceHtml}
+            </div>
+          </div>
+          <span class="nearby-marker-label">${label}</span>
+        </div>
+      `;
+
+      const icon = L.divIcon({
+        className: 'leaflet-friend-marker',
+        html,
+        iconSize: [44, 60],
+        iconAnchor: [22, 21],
+      });
+
+      const marker = L.marker([n.latitude, n.longitude], {
+        icon,
+        zIndexOffset: isSelected ? 500 : 200,
+      });
+
+      marker.on('click', (e) => {
+        L.DomEvent.stopPropagation(e);
+        onSelect?.(selectedId === n.friend?.id ? null : n.friend?.id);
+      });
+
+      friendsLayer.addLayer(marker);
+    });
+  }, [friends, selectedId, onSelect]);
+
+  // Track popover position above selected friend
+  const selected = friends.find((f) => f.friend?.id === selectedId);
+
+  const updatePopover = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !selected || selected.latitude == null || selected.longitude == null) {
+      setPopoverPos(null);
+      return;
+    }
+    const pt = map.latLngToContainerPoint([selected.latitude, selected.longitude]);
+    setPopoverPos({ x: pt.x, y: pt.y });
+  }, [selected]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return undefined;
+
+    updatePopover();
+    map.on('move', updatePopover);
+    map.on('zoom', updatePopover);
+
+    return () => {
+      map.off('move', updatePopover);
+      map.off('zoom', updatePopover);
+    };
+  }, [updatePopover]);
+
+  // Smoothly center on selected friend when selected
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !selected || selected.latitude == null || selected.longitude == null) return;
+    map.panTo([selected.latitude, selected.longitude], { animate: true });
+  }, [selectedId, selected]);
+
+  const handleCenter = () => {
+    const map = mapRef.current;
+    if (map && me?.latitude != null && me?.longitude != null) {
+      map.setView([me.latitude, me.longitude], getZoomForRadius(radiusKm), { animate: true });
+    }
+    onCenter?.();
+  };
+
+  const handleZoomIn = () => {
+    mapRef.current?.zoomIn();
+    onZoomIn?.();
+  };
+
+  const handleZoomOut = () => {
+    mapRef.current?.zoomOut();
+    onZoomOut?.();
+  };
+
+  const popoverBelow = popoverPos && popoverPos.y < 200;
+  const popoverLeft = popoverPos ? Math.max(12, popoverPos.x - 125) : 0;
 
   return (
-    <div className="nearby-map" ref={boxRef}>
-      <MapArt />
+    <div className="nearby-map">
+      <div ref={containerRef} className="nearby-map-leaflet" />
 
-      {!overlay && (
-        <>
-          <span className="nearby-ring nearby-ring--outer" style={{ left: cx, top: cy, width: ringPx * 2, height: ringPx * 2 }} />
-          <span className="nearby-ring nearby-ring--inner" style={{ left: cx, top: cy, width: ringPx, height: ringPx }} />
-          {cy - ringPx > 8 && <span className="nearby-ring-label" style={{ left: cx, top: cy - ringPx - 4 }}>{radiusKm} km</span>}
-
-          <div className="nearby-me" role="img" aria-label="Your approximate location" style={{ left: cx, top: cy }}>
-            <span className="nearby-me-pulse" />
-            <span className="nearby-me-dot" />
-            <span className="nearby-me-label">You</span>
-          </div>
-
-          {placed.map(n => {
-            const label = `${firstName(n.friend.name)} · ${n.distanceKm} km`;
-            return (
-              <button
-                key={n.friend.id}
-                type="button"
-                className={`nearby-marker${n.friend.isOnline ? ' nearby-marker--online' : ''}`}
-                style={{ left: n.x, top: n.y }}
-                aria-label={label}
-                aria-pressed={selectedId === n.friend.id}
-                onClick={() => onSelect(selectedId === n.friend.id ? null : n.friend.id)}
-              >
-                <DiscoverAvatar id={n.friend.id} name={n.friend.name} photoUrl={n.friend.photoUrl} size={42} showPresence={false} />
-                <span className="nearby-marker-label">{label}</span>
-              </button>
-            );
-          })}
-
-          {selected && (
-            <div
-              className="nearby-popover"
-              style={popoverBelow
-                ? { left: popoverLeft, top: selected.y + 50 }
-                : { left: popoverLeft, top: selected.y - 34, transform: 'translateY(-100%)' }}
-            >
-              <div className="nearby-popover-head">
-                <DiscoverAvatar id={selected.friend.id} name={selected.friend.name} photoUrl={selected.friend.photoUrl} online={selected.friend.isOnline} size={40} />
-                <div>
-                  <span className="nearby-popover-name">{selected.friend.name}</span>
-                  <span className="nearby-popover-sub">
-                    {selected.distanceKm} km · {selected.friend.isOnline ? 'Online' : `Shared ${timeAgo(selected.locationUpdatedAt) || 'earlier'}`}
-                  </span>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" className="dc-btn dc-btn--primary dc-btn--sm" onClick={() => onMessage(selected.friend.id)}>
-                  <MessageCircle size={16} aria-hidden="true" />Message
-                </button>
-                <button
-                  type="button"
-                  className="dc-btn dc-btn--soft dc-btn--sm"
-                  onClick={() => onWave(selected.friend.id)}
-                  disabled={waveState?.id === selected.friend.id && waveState.status !== 'error'}
-                >
-                  <Hand size={16} aria-hidden="true" />
-                  {waveState?.id === selected.friend.id && waveState.status === 'sent' ? 'Waved' : 'Wave'}
-                </button>
-              </div>
-              {waveState?.id === selected.friend.id && waveState.status === 'error' && (
-                <span className="nearby-popover-sub" role="alert">{waveState.message}</span>
-              )}
+      {selected && popoverPos && (
+        <div
+          className="nearby-popover"
+          style={
+            popoverBelow
+              ? { left: popoverLeft, top: popoverPos.y + 36 }
+              : { left: popoverLeft, top: popoverPos.y - 34, transform: 'translateY(-100%)' }
+          }
+        >
+          <div className="nearby-popover-head">
+            <DiscoverAvatar
+              id={selected.friend.id}
+              name={selected.friend.name}
+              photoUrl={selected.friend.photoUrl}
+              online={selected.friend.isOnline}
+              size={40}
+            />
+            <div>
+              <span className="nearby-popover-name">{selected.friend.name}</span>
+              <span className="nearby-popover-sub">
+                {selected.distanceKm} km ·{' '}
+                {selected.friend.isOnline
+                  ? 'Online'
+                  : `Shared ${timeAgo(selected.locationUpdatedAt) || 'earlier'}`}
+              </span>
             </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="dc-btn dc-btn--primary dc-btn--sm"
+              onClick={() => onMessage(selected.friend.id)}
+            >
+              <MessageCircle size={16} aria-hidden="true" />
+              Message
+            </button>
+            <button
+              type="button"
+              className="dc-btn dc-btn--soft dc-btn--sm"
+              onClick={() => onWave(selected.friend.id)}
+              disabled={waveState?.id === selected.friend.id && waveState.status !== 'error'}
+            >
+              <Hand size={16} aria-hidden="true" />
+              {waveState?.id === selected.friend.id && waveState.status === 'sent' ? 'Waved' : 'Wave'}
+            </button>
+          </div>
+          {waveState?.id === selected.friend.id && waveState.status === 'error' && (
+            <span className="nearby-popover-sub" role="alert">
+              {waveState.message}
+            </span>
           )}
-        </>
+        </div>
       )}
 
       <div className="nearby-map-controls">
-        <button type="button" className="dc-icon-btn" aria-label="Zoom in" onClick={onZoomIn} disabled={!canZoomIn || !!overlay}>
+        <button
+          type="button"
+          className="dc-icon-btn"
+          aria-label="Zoom in"
+          onClick={handleZoomIn}
+          disabled={!canZoomIn || !!overlay}
+        >
           <Plus size={18} aria-hidden="true" />
         </button>
-        <button type="button" className="dc-icon-btn" aria-label="Zoom out" onClick={onZoomOut} disabled={!canZoomOut || !!overlay}>
+        <button
+          type="button"
+          className="dc-icon-btn"
+          aria-label="Zoom out"
+          onClick={handleZoomOut}
+          disabled={!canZoomOut || !!overlay}
+        >
           <Minus size={18} aria-hidden="true" />
         </button>
-        <button type="button" className="dc-icon-btn nearby-center-btn" aria-label="Center on me" onClick={onCenter} disabled={!!overlay}>
+        <button
+          type="button"
+          className="dc-icon-btn nearby-center-btn"
+          aria-label="Center on me"
+          onClick={handleCenter}
+          disabled={!!overlay}
+        >
           <LocateFixed size={18} aria-hidden="true" />
         </button>
       </div>
@@ -180,7 +360,7 @@ export function NearbyMap({
             <ShieldCheck size={14} aria-hidden="true" />
             Approximate locations{updatedAt ? ` · updated ${timeAgo(updatedAt)}` : ''}
           </div>
-          <div className="nearby-map-scale">Ring = {radiusKm} km · {zoom}×</div>
+          <div className="nearby-map-scale">Radius = {radiusKm} km</div>
         </>
       )}
 
