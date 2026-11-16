@@ -270,8 +270,7 @@ export const authService = {
       gender: payload.gender,
       bio: payload.bio,
       photoUrl: payload.photoUrl,
-      isOnline: true,
-      interests: userData.interests || []
+      isOnline: true
     };
 
     this.setSession(authResponse, savedUser);

@@ -82,6 +82,8 @@ export class SocketService {
     this._lastHandledMatchConvId = null;
     this._isSearching = false;
     this._searchRefresh = null;
+    // Topic ids sent with every search publish (see content/matchTopics.js)
+    this._searchTopics = [];
 
     this._typingState = new Map();         // conversationId -> { active, lastSent }
     this._authExpired = false;
@@ -623,6 +625,9 @@ export class SocketService {
    * Starts (or resumes) the random matchmaking search.
    */
   startMatchmaking(userProfile = {}) {
+    if (Array.isArray(userProfile?.topics)) {
+      this._searchTopics = userProfile.topics;
+    }
     this._isSearching = true;
     this._lastHandledMatchConvId = null;
 
@@ -647,7 +652,7 @@ export class SocketService {
 
   _publishSearch() {
     log('[SocketService] Publishing match search to /app/chat.random');
-    this._publish('/app/chat.random', {});
+    this._publish('/app/chat.random', { topics: this._searchTopics });
   }
 
   _handleMatchmakingEvent(frame) {
@@ -679,6 +684,7 @@ export class SocketService {
           username: payload.friendUsername || '',
           name: peerName,
           photoUrl: payload.photoUrl || '',
+          sharedTopics: Array.isArray(payload.sharedTopics) ? payload.sharedTopics : [],
           avatarBg: '#8b5cf6',
           status: 'Online'
         };

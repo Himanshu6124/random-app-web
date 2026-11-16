@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth, INTEREST_TAGS } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import { User, Check, Save, Lock, AlertCircle, Download, UserRound } from 'lucide-react';
 
 export function ProfileView() {
@@ -10,7 +10,6 @@ export function ProfileView() {
   const [avatar, setAvatar] = useState(user?.photoUrl || '/userImages/boy1.png');
   const [gender, setGender] = useState(user?.gender || 'boy');
   const [bio, setBio] = useState(user?.bio || '');
-  const [userInterests, setUserInterests] = useState(user?.interests || []);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -73,8 +72,7 @@ export function ProfileView() {
         name: name.trim(),
         gender: gender.toLowerCase(),
         bio: bio.trim(),
-        photoUrl: avatar,
-        interests: userInterests
+        photoUrl: avatar
       };
 
       await updateUserProfile(profileData);
@@ -85,12 +83,6 @@ export function ProfileView() {
     } finally {
       setSaveLoading(false);
     }
-  };
-
-  const toggleInterest = (tag) => {
-    setUserInterests(prev =>
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-    );
   };
 
   return (
@@ -379,51 +371,6 @@ export function ProfileView() {
                 cursor: isGuest ? 'pointer' : 'text'
               }}
             />
-          </div>
-
-          {/* Personal Interests Selector */}
-          <div
-            style={{ marginBottom: '32px' }}
-            onClick={() => { if (isGuest) openUpgradeModal('select personal interests'); }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <label style={{ fontSize: 'var(--fs-md)', color: 'var(--text-secondary)' }}>
-                Favorite Topics:
-              </label>
-              {isGuest && (
-                <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                  <Lock size={12} /> Upgrade to choose
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {INTEREST_TAGS.map(tag => {
-                const isSelected = !isGuest && userInterests.includes(tag);
-                return (
-                  <button
-                    key={tag}
-                    type="button"
-                    disabled={isGuest}
-                    onClick={() => !isGuest && toggleInterest(tag)}
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: 'var(--radius-full)',
-                      border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border-color)',
-                      background: isSelected ? 'var(--accent-tint)' : 'transparent',
-                      color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
-                      fontSize: 'var(--fs-md)',
-                      cursor: isGuest ? 'pointer' : 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                  >
-                    {isSelected && <Check size={12} aria-hidden="true" />}
-                    {tag}
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           {saveError && (

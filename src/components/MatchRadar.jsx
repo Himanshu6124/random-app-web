@@ -3,6 +3,7 @@ import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { X, UserRound, Heart } from 'lucide-react';
 import { startRadarSounds, playLockOn, unlockRadarAudio } from '../services/radarSound';
+import { MATCH_TOPICS, MAX_MATCH_TOPICS, TOPIC_WINDOW_SECONDS, topicById } from '../content/matchTopics';
 
 /**
  * MatchRadar — Match tab home + search.
@@ -76,7 +77,7 @@ function HeartBurst({ className = '' }) {
 }
 
 export function MatchRadar() {
-  const { matchState, startSearching, cancelSearch, currentPeer } = useSocket();
+  const { matchState, startSearching, cancelSearch, currentPeer, matchTopics, setMatchTopics } = useSocket();
   const { user, soundEnabled } = useAuth();
 
   const isSearching = matchState === 'searching';
@@ -132,6 +133,20 @@ export function MatchRadar() {
 
   const peerName = currentPeer?.name || 'a stranger';
   const peerInitial = (currentPeer?.name || '').trim().charAt(0).toUpperCase();
+
+  const toggleTopic = (id) => {
+    if (matchTopics.includes(id)) {
+      setMatchTopics(matchTopics.filter(t => t !== id));
+    } else if (matchTopics.length < MAX_MATCH_TOPICS) {
+      setMatchTopics([...matchTopics, id]);
+    }
+  };
+  const topicNames = matchTopics.map(id => topicById(id)?.label).filter(Boolean).join(', ');
+  const searchTopicLine = matchTopics.length === 0
+    ? null
+    : elapsed < TOPIC_WINDOW_SECONDS
+      ? `Looking for people into ${topicNames}…`
+      : 'Widening the search to everyone…';
 
   const formatElapsed = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
@@ -202,6 +217,9 @@ export function MatchRadar() {
         <p className="match-search__timer" role="status">
           {isLocked ? `Matched with ${peerName}` : `Searching · ${formatElapsed(elapsed)}`}
         </p>
+        {!isLocked && searchTopicLine && (
+          <p className="match-search__topics">{searchTopicLine}</p>
+        )}
         </div>
 
         <div className="match-home__action">
@@ -242,6 +260,31 @@ export function MatchRadar() {
         <span className="match-status__dot" aria-hidden="true" />
         {dayLabel(now, dayPart)} · ready when you are
       </p>
+
+      <fieldset className="topic-picker">
+        <legend className="topic-picker__label">
+          Pick up to {MAX_MATCH_TOPICS} vibes <span className="topic-picker__hint">· optional</span>
+        </legend>
+        <div className="topic-picker__chips">
+          {MATCH_TOPICS.map(t => {
+            const selected = matchTopics.includes(t.id);
+            const full = !selected && matchTopics.length >= MAX_MATCH_TOPICS;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                className={`topic-chip${selected ? ' is-selected' : ''}`}
+                aria-pressed={selected}
+                disabled={full}
+                onClick={() => toggleTopic(t.id)}
+              >
+                <span className="topic-chip__emoji" aria-hidden="true">{t.emoji}</span>
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
 
       <div className="match-home__action">
         <div className="find-match">

@@ -33,11 +33,6 @@ export const AVATAR_LIST = [
   { icon: '🔮', bg: '#584a9e', label: 'Mystic' }
 ];
 
-export const INTEREST_TAGS = [
-  'Gaming', 'Music', 'Tech', 'Anime', 'Movies',
-  'Crypto', 'Fitness', 'Art', 'Travel', 'Reading', 'Chatting'
-];
-
 export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [jwtToken, setJwtToken] = useState(null);

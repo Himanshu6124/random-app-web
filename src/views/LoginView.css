@@ -382,36 +382,6 @@
   transform: scale(1.1);
 }
 
-/* Interest pills */
-.interest-picker-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.tag-pill {
-  padding: 6px 12px;
-  background: var(--plum-3);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-full);
-  color: var(--text-secondary);
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.tag-pill:hover {
-  border-color: var(--border-strong);
-  color: var(--text-primary);
-}
-
-.tag-pill.active {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: var(--accent);
-}
-
 /* Submit and Action buttons */
 .auth-submit-btn {
   width: 100%;

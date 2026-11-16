@@ -3,6 +3,7 @@ import { useAuth } from './AuthContext';
 import { socketService, extractPeerName } from '../services/socketService';
 import { applyReaction } from '../components/chat/messageUtils';
 import { feedback } from '../mobile/feedback';
+import { cleanTopicIds, formatTopics, loadSavedTopics, saveTopics } from '../content/matchTopics';
 
 const SocketContext = createContext();
 
@@ -80,6 +81,15 @@ export function SocketProvider({ children }) {
 
   // matchState: 'idle' | 'searching' | 'matched'
   const [matchState, setMatchState] = useState('idle');
+  // Topics picked on the Match screen; sent with each search, remembered on this device.
+  const [matchTopics, setMatchTopicsState] = useState(loadSavedTopics);
+  const matchTopicsRef = useRef(matchTopics);
+  const setMatchTopics = useCallback((ids) => {
+    const clean = cleanTopicIds(ids);
+    matchTopicsRef.current = clean;
+    setMatchTopicsState(clean);
+    saveTopics(clean);
+  }, []);
   const [currentPeer, setCurrentPeer] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isPeerTyping, setIsPeerTyping] = useState(false);
@@ -164,7 +174,10 @@ export function SocketProvider({ children }) {
       socketService.subscribeRoom(conversationId);
     }
 
-    setMessages([systemMessage(`You and ${resolvedName} are connected.`)]);
+    const shared = formatTopics(peerObj.sharedTopics);
+    setMessages([systemMessage(shared
+      ? `You and ${resolvedName} both like ${shared}.`
+      : `You and ${resolvedName} are connected.`)]);
 
     feedback('match');
     // On the Match tab the radar plays its own lock-on sound; elsewhere, the chime.
@@ -593,7 +606,7 @@ export function SocketProvider({ children }) {
     setCurrentPeer(null);
     setPeerLeft(false);
     setMessages([]);
-    socketService.startMatchmaking(userRef.current);
+    socketService.startMatchmaking({ topics: matchTopicsRef.current });
   }, []);
 
   const cancelSearch = useCallback(() => {
@@ -627,7 +640,7 @@ export function SocketProvider({ children }) {
     if (skipTimerRef.current) clearTimeout(skipTimerRef.current);
     skipTimerRef.current = setTimeout(() => {
       skipTimerRef.current = null;
-      socketService.startMatchmaking(userRef.current);
+      socketService.startMatchmaking({ topics: matchTopicsRef.current });
     }, 150);
   }, []);
 
@@ -827,6 +840,8 @@ export function SocketProvider({ children }) {
     liveWave,
     dismissLiveWave,
     matchState,
+    matchTopics,
+    setMatchTopics,
     currentPeer,
     messages,
     isPeerTyping,
@@ -853,7 +868,7 @@ export function SocketProvider({ children }) {
     isLiveConnected
   }), [
     activeTab, setActiveTab, unreadRandomCount, clearUnreadRandomCount, liveRandomMessage,
-    dismissLiveRandomMessage, liveWave, dismissLiveWave, matchState, currentPeer, messages, isPeerTyping, isPeerOnline, peerLeft,
+    dismissLiveRandomMessage, liveWave, dismissLiveWave, matchState, matchTopics, setMatchTopics, currentPeer, messages, isPeerTyping, isPeerOnline, peerLeft,
     startSearching, cancelSearch, skipStranger, disconnectChat, sendMessage,
     retryMessage, sendMedia, sendReaction, reactToMessage, sendIcebreaker, notifyTyping, floatingReactions,
     bottleGame, spinBottle, chooseGameOption, askGameQuestion, closeGame, connectionStatus, isLiveConnected
