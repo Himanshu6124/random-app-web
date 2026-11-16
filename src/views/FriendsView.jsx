@@ -15,6 +15,19 @@ import { MessageShell, ReplyQuote, ReplyComposerBar } from '../components/chat/M
 import { applyReaction, isInteractive, jumpToMessage } from '../components/chat/messageUtils';
 import { useMessageInteractions } from '../components/chat/useMessageInteractions';
 import { feedback } from '../mobile/feedback';
+import { timeAgo } from '../components/discover/discoverUtils';
+
+/** "Active 5m ago" for an offline friend, re-rendered every 30s so it keeps counting. */
+function LastActiveLabel({ lastOnline }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!lastOnline) return undefined;
+    const id = setInterval(() => setTick(t => t + 1), 30000);
+    return () => clearInterval(id);
+  }, [lastOnline]);
+  const ago = timeAgo(lastOnline);
+  return ago ? `Active ${ago}` : 'Offline';
+}
 
 const MAX_CACHED_MESSAGES = 200;
 
@@ -399,7 +412,13 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       },
       onOnlineStatus: (isOnline, payload) => {
         if (payload?.senderId !== friendId) return;
-        setSelectedFriend(prev => prev ? { ...prev, isOnline: Boolean(isOnline), status: isOnline ? 'Online' : 'Offline' } : null);
+        setSelectedFriend(prev => prev ? {
+          ...prev,
+          isOnline: Boolean(isOnline),
+          status: isOnline ? 'Online' : 'Offline',
+          // They just left: start the "Active ... ago" timer from now.
+          lastOnline: !isOnline && prev.isOnline ? new Date().toISOString() : prev.lastOnline
+        } : null);
       }
     });
   }, [selectedFriend, user?.id]);
@@ -1053,7 +1072,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                     <span className="online-badge" aria-label="Online">Online</span>
                   ) : (
                     <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text-muted)' }}>
-                      Offline
+                      <LastActiveLabel lastOnline={selectedFriend.lastOnline} />
                     </span>
                   )}
                 </div>

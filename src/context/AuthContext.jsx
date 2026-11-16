@@ -162,7 +162,7 @@ export function AuthProvider({ children }) {
         const key = f.id || f.friendUserId;
         if (key !== userId || f.isOnline === online) return f;
         changed = true;
-        return { ...f, isOnline: online, status: online ? 'Online' : 'Offline' };
+        return { ...f, isOnline: online, status: online ? 'Online' : 'Offline', lastOnline: online ? f.lastOnline : new Date().toISOString() };
       });
       return changed ? next : prev;
     });
