@@ -12,7 +12,7 @@ const MORE_FAQ = [
   {
     question: 'Is there video chat?',
     answer:
-      'No. RandoMeet is text-first: you never have to turn on a camera. Words come first, which keeps chats calmer and more private.',
+      'No. RandomChatly is text-first: you never have to turn on a camera. Words come first, which keeps chats calmer and more private.',
   },
   {
     question: 'What can guests do, and what needs a Google account?',
@@ -21,12 +21,12 @@ const MORE_FAQ = [
   },
   {
     question: 'What happens when I tap Next Stranger?',
-    answer: 'Your current chat ends and RandoMeet looks for someone new who is online now.',
+    answer: 'Your current chat ends and RandomChatly looks for someone new who is online now.',
   },
   {
-    question: 'Can I install RandoMeet like an app?',
+    question: 'Can I install RandomChatly like an app?',
     answer:
-      'Yes. Open RandoMeet in your phone browser and add it to your home screen. It opens full screen like a regular app.',
+      'Yes. Open RandomChatly in your phone browser and add it to your home screen. It opens full screen like a regular app.',
   },
   {
     question: 'How do I block or report someone?',
@@ -41,12 +41,12 @@ export const SEO_PAGES = [
   {
     slug: 'how-it-works',
     navLabel: 'How it works',
-    title: 'How RandoMeet Works: Random Chat in 3 Steps',
+    title: 'How RandomChatly Works: Random Chat in 3 Steps',
     description:
       'Start a random chat in seconds: continue as a guest or with Google, get matched one-on-one, and keep the people you click with as friends.',
-    h1: 'How random chat works on RandoMeet',
+    h1: 'How random chat works on RandomChatly',
     intro:
-      'RandoMeet matches you with one random stranger for a private, real-time text chat. Here is everything from your first hello to your first friend.',
+      'RandomChatly matches you with one random stranger for a private, real-time text chat. Here is everything from your first hello to your first friend.',
     sections: [
       { heading: 'Three steps to your first chat', steps: STEPS.items },
       {
@@ -82,13 +82,13 @@ export const SEO_PAGES = [
       'Talk to strangers online in a free, anonymous one-on-one text chat. No signup needed, and if you click with someone you can keep them as a friend.',
     h1: 'Talk to strangers online, and maybe make a friend',
     intro:
-      'Some nights you just want someone new to talk to. RandoMeet connects you with one stranger who is online now, in a private text chat that starts in seconds.',
+      'Some nights you just want someone new to talk to. RandomChatly connects you with one stranger who is online now, in a private text chat that starts in seconds.',
     sections: [
       {
         heading: 'Why talk to a stranger?',
         paragraphs: [
           'A stranger has no history with you and no expectations. That makes it easier to be honest, try a new topic, or just pass the time with someone who is also awake and wants to talk.',
-          'And sometimes a random chat turns into someone you want to keep talking to. RandoMeet is built for that moment: send a friend request and the conversation can continue tomorrow.',
+          'And sometimes a random chat turns into someone you want to keep talking to. RandomChatly is built for that moment: send a friend request and the conversation can continue tomorrow.',
         ],
       },
       {
@@ -113,10 +113,10 @@ export const SEO_PAGES = [
     navLabel: 'Anonymous chat',
     title: 'Anonymous Chat with Strangers, No Signup',
     description:
-      'Chat anonymously with strangers on RandoMeet. Guests need no email, you choose your display name, and strangers never see your location.',
+      'Chat anonymously with strangers on RandomChatly. Guests need no email, you choose your display name, and strangers never see your location.',
     h1: 'Anonymous chat with strangers',
     intro:
-      'On RandoMeet you decide who you are in a chat. Start without an email, pick a display name, and share only what you want to share.',
+      'On RandomChatly you decide who you are in a chat. Start without an email, pick a display name, and share only what you want to share.',
     sections: [
       {
         heading: 'What stays private',
@@ -146,10 +146,10 @@ export const SEO_PAGES = [
     navLabel: 'Omegle alternative',
     title: 'Omegle Alternative: Text-First Random Chat',
     description:
-      'Looking for an Omegle alternative? RandoMeet is free, text-first random chat: one-on-one with strangers, no webcam, and a way to keep new friends.',
+      'Looking for an Omegle alternative? RandomChatly is free, text-first random chat: one-on-one with strangers, no webcam, and a way to keep new friends.',
     h1: 'A text-first Omegle alternative',
     intro:
-      'Omegle shut down in November 2023. If you miss meeting someone new at random, RandoMeet keeps that feeling and leaves the webcam out.',
+      'Omegle shut down in November 2023. If you miss meeting someone new at random, RandomChatly keeps that feeling and leaves the webcam out.',
     sections: [
       {
         heading: 'What feels familiar',
@@ -171,7 +171,7 @@ export const SEO_PAGES = [
       {
         heading: 'Is it right for you?',
         paragraphs: [
-          'If you want video chat, RandoMeet is not it. If you want real conversations with new people, and a chance that one of them becomes a friend, give it a try.',
+          'If you want video chat, RandomChatly is not it. If you want real conversations with new people, and a chance that one of them becomes a friend, give it a try.',
         ],
       },
     ],
@@ -186,7 +186,7 @@ export const SEO_PAGES = [
     intro:
       'Most random chats are friendly. These habits keep the rest from becoming a problem.',
     sections: [
-      { heading: 'Built into RandoMeet', steps: SAFETY.items },
+      { heading: 'Built into RandomChatly', steps: SAFETY.items },
       {
         heading: 'Good habits when you talk to strangers',
         list: [
@@ -202,11 +202,11 @@ export const SEO_PAGES = [
   {
     slug: 'faq',
     navLabel: 'FAQ',
-    title: 'Random Chat FAQ: Questions About RandoMeet',
+    title: 'Random Chat FAQ: Questions About RandomChatly',
     description:
-      'Answers about RandoMeet: is it free, do you need an account, is it anonymous, how friend requests work, and how to block or report someone.',
+      'Answers about RandomChatly: is it free, do you need an account, is it anonymous, how friend requests work, and how to block or report someone.',
     h1: 'Random chat FAQ',
-    intro: 'Quick answers about chatting with strangers on RandoMeet.',
+    intro: 'Quick answers about chatting with strangers on RandomChatly.',
     faq: ALL_FAQ,
     sections: [],
   },

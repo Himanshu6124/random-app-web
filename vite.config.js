@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
   const WS_BACKEND = BACKEND.replace(/^http/, 'ws');
 
   return {
-    // VITE_SITE_URL: the production address, e.g. https://randomeet.app (see vite-plugin-seo.js)
+    // VITE_SITE_URL: the production address, e.g. https://www.randomchatly.com (see vite-plugin-seo.js)
     plugins: [react(), basicSsl(), seo({ siteUrl: env.VITE_SITE_URL })],
     server: {
       host: true,

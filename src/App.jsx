@@ -41,8 +41,8 @@ function AppContent() {
     return (
       <div className="landing-auth-loading">
         <div className="loading-content">
-          <div className="loading-logo">RandoMeet</div>
-          <h2>Verifying RandoMeet Session...</h2>
+          <div className="loading-logo">RandomChatly</div>
+          <h2>Verifying RandomChatly Session...</h2>
           <div className="loading-spinner"></div>
         </div>
       </div>

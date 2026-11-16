@@ -5,7 +5,7 @@
 import puppeteer from 'puppeteer-core';
 import { fileURLToPath } from 'node:url';
 
-const NAME = 'RandoMeet';
+const NAME = 'RandomChatly';
 const TAGLINE = 'Random chat with strangers who could become friends.';
 const POINTS = ['Free', 'Anonymous', 'No signup'];
 

@@ -111,7 +111,7 @@ export function InstallPrompt() {
         <div className="install-head">
           <img src="/icon-192.png" alt="" className="install-icon" />
           <div>
-            <h2 id="install-title">Add RandoMeet to Home Screen</h2>
+            <h2 id="install-title">Add RandomChatly to Home Screen</h2>
             <p>Get the full-screen app experience</p>
           </div>
         </div>

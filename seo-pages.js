@@ -3,7 +3,7 @@
 // in dev. The pages need no JavaScript, so they load fast and every crawler can read them.
 // Styling mirrors the app's design tokens (src/styles/theme.css, DESIGN.md).
 
-const NAME = 'RandoMeet';
+const NAME = 'RandomChatly';
 
 const esc = (s) =>
   String(s)

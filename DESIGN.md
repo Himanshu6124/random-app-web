@@ -1,5 +1,5 @@
 ---
-name: RandoMeet
+name: RandomChatly
 description: A simple warm dark app for meeting someone late at night.
 colors:
   plum-0: "#140c14"
@@ -159,13 +159,13 @@ components:
     padding: "6px 8px"
 ---
 
-# Design System: RandoMeet
+# Design System: RandomChatly
 
 ## Overview
 
 **Creative North Star: "One Rose in a Dark Room"**
 
-RandoMeet is a simple warm dark app, opened on a phone, late, in bed, with the lights off. There is no metaphor and no costume. Warmth comes from two things only: a stepped plum ground that every surface is cut from, and one rose colour that marks what you can do next. Everything else is quiet: warm white text, 1px hairlines, pill buttons, line icons in one muted tone.
+RandomChatly is a simple warm dark app, opened on a phone, late, in bed, with the lights off. There is no metaphor and no costume. Warmth comes from two things only: a stepped plum ground that every surface is cut from, and one rose colour that marks what you can do next. Everything else is quiet: warm white text, 1px hairlines, pill buttons, line icons in one muted tone.
 
 Density is low and thumb-led. The Match tab puts one question and one rose pill in reach; searching turns the whole tab into a centred stage sized to the screen, so Cancel never needs a scroll. Motion is the one place the system lets itself be tender: a beating avatar, drifting heart outlines, a phrase that rises in word by word, and a set of one-shot moments that answer the user's own taps. Outside the search stage and the chat's opening heart, only the Match tab's idle invitation moves on its own: a headline that follows the time of day and a Find a Match heart whose beat sends outline rings out from the pill.
 

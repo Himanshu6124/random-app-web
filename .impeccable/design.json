@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-11-14T15:43:04+00:00",
-  "title": "Design System: RandoMeet",
+  "title": "Design System: RandomChatly",
   "extensions": {
     "colorMeta": {
       "plum-0": {
@@ -362,7 +362,7 @@
   ],
   "narrative": {
     "northStar": "One Rose in a Dark Room",
-    "overview": "RandoMeet is a simple warm dark app, opened on a phone, late, in bed, with the lights off. There is no metaphor and no costume. Warmth comes from two things only: a stepped plum ground that every surface is cut from, and one rose colour that marks what you can do next. Everything else is quiet: warm white text, 1px hairlines, pill buttons, line icons in one muted tone.\n\nDensity is low and thumb-led. The Match tab puts one question and one rose pill in reach; searching turns the whole tab into a centred stage sized to the screen, so Cancel never needs a scroll. Motion is the one place the system lets itself be tender: a beating avatar, drifting heart outlines, a phrase that rises in word by word, and a set of one-shot moments that answer the user's own taps. Nothing moves on its own outside the search stage and the chat's opening heart.\n\nThe world refuses glassy purple-neon gradients and swipe-card dating clichés. Surfaces are flat; there is no glass, blur or glow.",
+    "overview": "RandomChatly is a simple warm dark app, opened on a phone, late, in bed, with the lights off. There is no metaphor and no costume. Warmth comes from two things only: a stepped plum ground that every surface is cut from, and one rose colour that marks what you can do next. Everything else is quiet: warm white text, 1px hairlines, pill buttons, line icons in one muted tone.\n\nDensity is low and thumb-led. The Match tab puts one question and one rose pill in reach; searching turns the whole tab into a centred stage sized to the screen, so Cancel never needs a scroll. Motion is the one place the system lets itself be tender: a beating avatar, drifting heart outlines, a phrase that rises in word by word, and a set of one-shot moments that answer the user's own taps. Nothing moves on its own outside the search stage and the chat's opening heart.\n\nThe world refuses glassy purple-neon gradients and swipe-card dating clichés. Surfaces are flat; there is no glass, blur or glow.",
     "keyCharacteristics": [
       "One six-step plum ramp for every surface, ground plum-1.",
       "Rose is the single action colour; gold means \"live\" and nothing else.",

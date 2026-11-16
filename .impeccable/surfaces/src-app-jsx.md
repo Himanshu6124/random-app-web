@@ -5,7 +5,7 @@ primary_target: "src/App.jsx"
 related_targets: ["src/views/MatchView.jsx","src/views/LoginView.jsx"]
 ---
 
-# RandoMeet app shell (all signed-in tabs, login, dialogs)
+# RandomChatly app shell (all signed-in tabs, login, dialogs)
 
 Mode: Operate. Mobile-first PWA; used mostly late at night, in bed, in a dark room.
 Scope: full visual replacement. Product truth, flows and copy stay. Friends first, open to romance; warm and intimate, never cutesy or corporate.
@@ -19,7 +19,7 @@ OWN-WORLD: One stepped plum ramp (#140c14 → #43293d) for every surface, ground
 
 STORY: Open the app at night, see at once how to find someone, talk, and keep the people you click with as friends, and maybe more.
 
-FIRST VIEWPORT: Match tab on a phone. Header: RandoMeet wordmark left, neutral connection state right. Headline "Who's up tonight?" with a one-line explainer top-left; a quiet status line (dot + "Ready when you are" / "Searching · 0:12"). Full-width rose "Find a Match" pill in thumb reach above the bottom tab bar.
+FIRST VIEWPORT: Match tab on a phone. Header: RandomChatly wordmark left, neutral connection state right. Headline "Who's up tonight?" with a one-line explainer top-left; a quiet status line (dot + "Ready when you are" / "Searching · 0:12"). Full-width rose "Find a Match" pill in thumb reach above the bottom tab bar.
 SEARCH STATE: the Match tab becomes a centred stage sized to the screen height (no scrolling to Cancel): beating avatar with drifting hearts, large rotating phrase ("Finding a new soul…"), quiet secondary "Searching · 0:12", neutral Cancel pill. The header hides Online and Upgrade while searching.
 CHAT: LIVE badge in gold; your messages in a rose-tint bubble with a rose hairline, theirs in plum-3; before the first message a beating rose heart outline with "It's just the two of you now."; placeholder "Say something sweet…".
 

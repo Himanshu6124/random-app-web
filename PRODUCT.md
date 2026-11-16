@@ -10,11 +10,11 @@ Installable, mobile-first PWA (standalone, portrait). Phone use as an installed 
 
 ## Users
 
-People who feel lonely and want connection: new friends, and maybe more. They are open to meeting strangers to get there. They open RandoMeet on their phone, usually late at night, hoping a random chat turns into someone they keep talking to, as a friend or possibly a partner.
+People who feel lonely and want connection: new friends, and maybe more. They are open to meeting strangers to get there. They open RandomChatly on their phone, usually late at night, hoping a random chat turns into someone they keep talking to, as a friend or possibly a partner.
 
 ## Product Purpose
 
-RandoMeet matches you with a random stranger for a real-time, anonymous 1:1 text chat, and gives that chat a path to become something lasting: a friendship, and maybe more. Success is a stranger becoming someone you come back to message, not just a long chat session.
+RandomChatly matches you with a random stranger for a real-time, anonymous 1:1 text chat, and gives that chat a path to become something lasting: a friendship, and maybe more. Success is a stranger becoming someone you come back to message, not just a long chat session.
 
 ## Positioning
 
@@ -43,7 +43,7 @@ RandoMeet matches you with a random stranger for a real-time, anonymous 1:1 text
 
 - Tone (confirmed): warm and intimate romance — friends first, open to more. Grown-up and tender, never cutesy, never like a corporate tool.
 
-- Name: **RandoMeet**.
+- Name: **RandomChatly**.
 - Existing app icon and PWA icons in `public/` (not confirmed as binding).
 
 ## Evidence on Hand

@@ -9,7 +9,7 @@ export const HERO = {
 };
 
 export const STEPS = {
-  title: 'How RandoMeet works',
+  title: 'How RandomChatly works',
   items: [
     {
       title: 'Start in seconds',
@@ -17,7 +17,7 @@ export const STEPS = {
     },
     {
       title: 'Meet someone new',
-      body: 'RandoMeet connects you with one random stranger who is online now. Stuck for words? Tap an icebreaker.',
+      body: 'RandomChatly connects you with one random stranger who is online now. Stuck for words? Tap an icebreaker.',
     },
     {
       title: 'Keep the good ones',
@@ -54,10 +54,10 @@ export const FAQ = {
     {
       question: 'What is random chat?',
       answer:
-        'Random chat connects you with a stranger picked at random so you can start talking right away. On RandoMeet you are matched one-on-one with someone who is online now, and you chat by text.',
+        'Random chat connects you with a stranger picked at random so you can start talking right away. On RandomChatly you are matched one-on-one with someone who is online now, and you chat by text.',
     },
     {
-      question: 'Is RandoMeet free?',
+      question: 'Is RandomChatly free?',
       answer: 'Yes. Matching, chatting and adding friends are all free.',
     },
     {
@@ -76,9 +76,9 @@ export const FAQ = {
         'Yes. With a Google account you can send a friend request in the middle of a chat. Friends can message each other anytime, send waves, and see everyone they have met.',
     },
     {
-      question: 'Is RandoMeet an Omegle alternative?',
+      question: 'Is RandomChatly an Omegle alternative?',
       answer:
-        'Omegle shut down in November 2023. RandoMeet is a text-first alternative: no webcam, one-on-one matching, and a way to turn a good chat into a friendship.',
+        'Omegle shut down in November 2023. RandomChatly is a text-first alternative: no webcam, one-on-one matching, and a way to turn a good chat into a friendship.',
     },
   ],
 };

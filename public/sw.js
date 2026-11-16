@@ -1,4 +1,4 @@
-// Minimal service worker: makes RandoMeet installable as an app.
+// Minimal service worker: makes RandomChatly installable as an app.
 // It deliberately caches nothing — every request goes straight to the network,
 // so live chat and dev-server updates are never served stale.
 self.addEventListener('install', () => self.skipWaiting());

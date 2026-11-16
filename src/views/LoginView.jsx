@@ -164,7 +164,7 @@ export function LoginView() {
     <div className="login-page-container">
       <div className="login-card animate-fade-in">
         <div className="login-header">
-          <div className="login-brand">RandoMeet</div>
+          <div className="login-brand">RandomChatly</div>
           <h1 className="login-title">{HERO.title}</h1>
           <p className="login-subtitle">{HERO.lead}</p>
         </div>
@@ -239,7 +239,7 @@ export function LoginView() {
       </section>
 
       <footer className="landing-footer">
-        <nav aria-label="More about RandoMeet">
+        <nav aria-label="More about RandomChatly">
           <ul>
             {SEO_PAGES.map((page) => (
               <li key={page.slug}><a href={`/${page.slug}/`}>{page.navLabel}</a></li>

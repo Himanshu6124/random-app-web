@@ -1,8 +1,8 @@
-// Build-time SEO for RandoMeet.
+// Build-time SEO for RandomChatly.
 //
 // Search engines and social apps need absolute URLs (canonical link, og:url, og:image,
 // sitemap), which depend on the production domain. Set VITE_SITE_URL (for example
-// https://randomeet.app) in the build environment and this plugin adds:
+// https://www.randomchatly.com) in the build environment and this plugin adds:
 //   - <link rel="canonical">, og:url, og:image and twitter:image in index.html
 //   - JSON-LD structured data (WebSite + WebApplication + FAQPage)
 //   - robots.txt and sitemap.xml in the build output
@@ -15,7 +15,7 @@ import { FAQ } from './src/content/landingContent.js';
 import { SEO_PAGES } from './src/content/seoPages.js';
 import { renderSeoPage, pagePath, safeJson } from './seo-pages.js';
 
-const NAME = 'RandoMeet';
+const NAME = 'RandomChatly';
 const DESCRIPTION =
   'Free random chat with strangers. Talk to strangers in an anonymous one-on-one text chat, no signup needed, and turn the people you click with into friends.';
 const OG_IMAGE = '/og-image.png';
@@ -25,7 +25,7 @@ export function seo({ siteUrl } = {}) {
   let isBuild = false;
 
   return {
-    name: 'randomeet-seo',
+    name: 'randomchatly-seo',
 
     configResolved(config) {
       isBuild = config.command === 'build';

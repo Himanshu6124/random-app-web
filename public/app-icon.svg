@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- RandoMeet: plum ground, one rose heart outline. -->
+  <!-- RandomChatly: plum ground, one rose heart outline. -->
   <rect width="512" height="512" fill="#1a1019"/>
   <path d="M256 368 C 196 324, 152 284, 152 232 C 152 198, 178 172, 210 172 C 230 172, 246 182, 256 198 C 266 182, 282 172, 302 172 C 334 172, 360 198, 360 232 C 360 284, 316 324, 256 368 Z"
         fill="none" stroke="#f07289" stroke-width="22" stroke-linejoin="round"/>

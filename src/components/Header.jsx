@@ -11,7 +11,7 @@ export function Header({ activeTab, setActiveTab }) {
     <header className="glass-panel header-wrapper">
       {/* Brand Logo */}
       <div className="header-brand">
-        <h1 className="app-wordmark">RandoMeet</h1>
+        <h1 className="app-wordmark">RandomChatly</h1>
       </div>
 
       {/* Navigation Tabs */}
