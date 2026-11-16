@@ -91,6 +91,18 @@ export function matchTimeLabel(value, now = new Date()) {
   return `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })}, ${clockTime(d)}`;
 }
 
+/** WhatsApp-style chat list time: "3:42 PM" today, "Yesterday", "Monday" this week, else "16/11/2026". */
+export function chatListTime(value, now = new Date()) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const group = dayGroupOf(d, now);
+  if (group === 'Today') return clockTime(d);
+  if (group === 'Yesterday') return 'Yesterday';
+  if (group === 'Earlier this week') return d.toLocaleDateString([], { weekday: 'long' });
+  return d.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
 export function matchedLabel(value, now = new Date()) {
   const group = dayGroupOf(value, now);
   if (group === 'Today' || group === 'Yesterday') return `${group}, ${clockTime(value)}`;

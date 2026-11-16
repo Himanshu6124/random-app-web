@@ -15,7 +15,7 @@ import { MessageShell, ReplyQuote, ReplyComposerBar } from '../components/chat/M
 import { applyReaction, isInteractive, jumpToMessage } from '../components/chat/messageUtils';
 import { useMessageInteractions } from '../components/chat/useMessageInteractions';
 import { feedback } from '../mobile/feedback';
-import { timeAgo } from '../components/discover/discoverUtils';
+import { timeAgo, chatListTime } from '../components/discover/discoverUtils';
 
 /** "Active 5m ago" for an offline friend, re-rendered every 30s so it keeps counting. */
 function LastActiveLabel({ lastOnline }) {
@@ -806,6 +806,16 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                 (selectedFriend.conversationId && selectedFriend.conversationId === friend.conversationId) ||
                 (selectedFriend.id === friendId)
               );
+              // Messages sent from this screen are newer than the list's server copy.
+              const localList = dmMessages[friend.conversationId] || dmMessages[friendId] || [];
+              const localLast = localList.length ? localList[localList.length - 1] : null;
+              const localIsNewer = localLast?.timestamp && (!friend.lastMessageTime
+                || new Date(localLast.timestamp).getTime() > new Date(friend.lastMessageTime).getTime());
+              const lastTime = localIsNewer ? localLast.timestamp : friend.lastMessageTime;
+              const lastPreview = localIsNewer
+                ? (localLast.type === 'IMAGE' ? '📷 Photo' : (localLast.text || friend.lastMessage))
+                : friend.lastMessage;
+              const hasUnread = (friend.unseenCount || 0) > 0;
 
               return (
                 <div
@@ -845,17 +855,28 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                     </div>
                     <div style={{ overflow: 'hidden', flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                        <span style={{ fontSize: 'var(--fs-body)', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                          {friend.name || friend.friendUserName || friendId}
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                          <span style={{ fontSize: 'var(--fs-body)', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                            {friend.name || friend.friendUserName || friendId}
+                          </span>
+                          {friend.isOnline && (
+                            <span
+                              aria-label="Online"
+                              title="Online"
+                              style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--green-accent)', flexShrink: 0 }}
+                            />
+                          )}
                         </span>
-                        <span style={{
-                          fontSize: 'var(--fs-xs)',
-                          fontWeight: 600,
-                          color: friend.isOnline ? 'var(--green-accent)' : 'var(--text-muted)',
-                          flexShrink: 0
-                        }}>
-                          {friend.isOnline ? 'Online' : 'Offline'}
-                        </span>
+                        {lastTime && (
+                          <span style={{
+                            fontSize: 'var(--fs-xs)',
+                            fontWeight: hasUnread ? 600 : 400,
+                            color: hasUnread ? 'var(--green-accent)' : 'var(--text-muted)',
+                            flexShrink: 0
+                          }}>
+                            {chatListTime(lastTime)}
+                          </span>
+                        )}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '2px' }}>
                         <span style={{
@@ -866,7 +887,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                           textOverflow: 'ellipsis',
                           overflow: 'hidden'
                         }}>
-                          {friend.lastMessage || 'Say hi!'}
+                          {lastPreview || 'Say hi!'}
                         </span>
                         {(friend.unseenCount || 0) > 0 && (
                           <span key={friend.unseenCount} className="unread-pill" style={{
