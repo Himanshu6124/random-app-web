@@ -287,7 +287,6 @@ export function NearbyMap({
             <div style={{ display: 'flex', gap: 8 }}>
               <FriendshipButton
                 personId={selected.id}
-                guest={selected.guest}
                 name={selected.name}
                 status={selected.friendshipStatus}
                 size="sm"

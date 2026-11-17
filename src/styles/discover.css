@@ -1676,16 +1676,6 @@
     display: none;
   }
 }
-.dc-guest-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-  white-space: nowrap;
-}
 .dc-search--submit { padding-right: 6px; margin: 0; }
 .dc-search-submit {
   width: 40px;

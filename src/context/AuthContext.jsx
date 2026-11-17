@@ -47,6 +47,8 @@ export function AuthProvider({ children }) {
   const friendsRef = useRef([]);
   useEffect(() => { friendsRef.current = friends; }, [friends]);
   const [friendRequests, setFriendRequests] = useState([]);
+  const friendRequestsRef = useRef([]);
+  useEffect(() => { friendRequestsRef.current = friendRequests; }, [friendRequests]);
   const [friendRequestsLoading, setFriendRequestsLoading] = useState(false);
   const [liveFriendRequest, setLiveFriendRequest] = useState(null);
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
@@ -355,12 +357,25 @@ export function AuthProvider({ children }) {
 
   const acceptFriendRequest = useCallback(async (targetUserId) => {
     const token = jwtToken || authService.getToken();
-    if (!token || !targetUserId) return;
+    if (!token || !targetUserId) return false;
+    // Guests can receive requests, but accepting one needs an account: show the Google
+    // sign-in card, and the accept goes through automatically right after signing in.
+    if (isGuest) {
+      const req = friendRequestsRef.current.find(r => (r.id || r.friendUserId) === targetUserId);
+      const who = req?.name || req?.username || 'their';
+      setLiveFriendRequest(null);
+      openUpgradeModal(
+        who === 'their' ? 'Sign in to accept this friend request.' : `Sign in to accept ${who}'s friend request.`,
+        { action: 'ACCEPT_FRIEND', targetUserId }
+      );
+      return false;
+    }
     await authService.acceptFriendRequest(targetUserId, token);
     feedback('success');
     setFriendRequests(prev => prev.filter(r => r.id !== targetUserId));
     await loadFriendsFromApi(token);
-  }, [jwtToken, loadFriendsFromApi]);
+    return true;
+  }, [jwtToken, isGuest, openUpgradeModal, loadFriendsFromApi]);
 
   const rejectFriendRequest = useCallback(async (targetUserId) => {
     const token = jwtToken || authService.getToken();

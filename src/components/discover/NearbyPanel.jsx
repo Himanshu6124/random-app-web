@@ -36,10 +36,10 @@ const lastSeenMs = (p) => (p.isOnline ? Date.now() : new Date(p.lastOnline || p.
 
 /**
  * Nearby: All / Male / Female filter, a big map, and a horizontal strip of the people on it
- * (online first, then most recently active, then closest). Seeing others requires sharing your
- * own (rounded) location.
+ * (online first, then most recently active, then closest). The first visit asks once to turn on
+ * your own (rounded) location, since seeing others requires sharing yours; after that it stays on.
  */
-export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
+export function NearbyPanel({ onOpenChat }) {
   const { jwtToken } = useAuth();
   const [me, setMe] = useState(null);
   const [view, setView] = useState(null);
@@ -51,7 +51,6 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
   const [selected, setSelected] = useState(null);
   const [statusOverrides, setStatusOverrides] = useState({});
   const [reloadTick, setReloadTick] = useState(0);
-  const toggleRef = useRef(null);
   const stripRef = useRef(null);
 
   const sharing = Boolean(me?.sharing);
@@ -87,10 +86,6 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
     const timer = setInterval(() => { refreshPosition().catch(() => setReloadTick(t => t + 1)); }, REFRESH_MS);
     return () => clearInterval(timer);
   }, [sharing, refreshPosition]);
-
-  useEffect(() => {
-    if (focusSharingToggle) toggleRef.current?.focus();
-  }, [focusSharingToggle]);
 
   const viewQuery = useMemo(() => {
     if (!view) return null;
@@ -167,9 +162,9 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
     <div className="dc-card">
       <MapPin size={22} color="var(--dc-cyan)" aria-hidden="true" />
       <h2>See who's around you</h2>
-      <p>Turn on your location to see people nearby. Others see only your rough area (~1 km).</p>
+      <p>To see people nearby, you need to turn on your location too. Others only see your rough area (~1 km).</p>
       <button type="button" className="dc-btn dc-btn--primary dc-btn--sm" onClick={() => setSharing(true)} disabled={toggling}>
-        <MapPin size={16} aria-hidden="true" />{toggling ? 'Getting location…' : 'Enable my location'}
+        <MapPin size={16} aria-hidden="true" />{toggling ? 'Getting location…' : 'Turn on my location'}
       </button>
     </div>
   ) : null;
@@ -191,20 +186,6 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
             </button>
           ))}
         </div>
-        <label className="dc-switch nearby-share-switch" title="Share my location">
-          <input
-            ref={toggleRef}
-            type="checkbox"
-            role="switch"
-            className="dc-sr-only"
-            checked={sharing}
-            disabled={toggling || loading}
-            onChange={(e) => setSharing(e.target.checked)}
-          />
-          <span className="dc-switch-track" aria-hidden="true" />
-          <MapPin size={15} aria-hidden="true" />
-          <span className="dc-sr-only">Share my location</span>
-        </label>
       </div>
 
       {error && <div className="dc-error" role="alert">{error}</div>}
@@ -250,7 +231,6 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
                   <FriendshipButton
                     personId={p.id}
                     name={p.name}
-                    guest={p.guest}
                     status={p.friendshipStatus}
                     size="sm"
                     onStatusChange={(status) => onStatusChange(p.id, status)}

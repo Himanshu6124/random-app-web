@@ -47,7 +47,7 @@ export function Header({ activeTab, setActiveTab }) {
         >
           <Users size={18} />
           <span>Friends</span>
-          {!isGuest && totalUnreadFriendsCount + (friendRequests?.length || 0) > 0 && (
+          {totalUnreadFriendsCount + (friendRequests?.length || 0) > 0 && (
             <span className="app-count">{totalUnreadFriendsCount + (friendRequests?.length || 0)}</span>
           )}
         </button>

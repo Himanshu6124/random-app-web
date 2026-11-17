@@ -11,7 +11,6 @@ import '../styles/discover.css';
  */
 export function DiscoverView({ onOpenChat }) {
   const [section, setSection] = useState('find');
-  const [focusSharing, setFocusSharing] = useState(0);
 
   return (
     <div className="discover-view">
@@ -19,12 +18,11 @@ export function DiscoverView({ onOpenChat }) {
         <DiscoverSidebar
           section={section}
           onSelect={setSection}
-          onManageVisibility={() => { setSection('nearby'); setFocusSharing(n => n + 1); }}
         />
         <div className="discover-main">
           <DiscoverSegmented section={section} onSelect={setSection} />
           {section === 'find' && <FindFriendsPanel onOpenChat={onOpenChat} />}
-          {section === 'nearby' && <NearbyPanel onOpenChat={onOpenChat} focusSharingToggle={focusSharing} />}
+          {section === 'nearby' && <NearbyPanel onOpenChat={onOpenChat} />}
           {section === 'history' && <MatchHistoryPanel onOpenChat={onOpenChat} />}
         </div>
       </div>

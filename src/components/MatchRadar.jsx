@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { X, UserRound, Heart } from 'lucide-react';
@@ -84,8 +84,15 @@ export function MatchRadar() {
     return startRadarSounds(SWEEP_SECONDS, BLIPS.map(b => b.c));
   }, [isSearching, soundEnabled]);
 
+  // The lock-on chime only plays when a search on this screen just found someone, never when
+  // the tab is reopened during an ongoing chat.
+  const searchedHereRef = useRef(false);
   useEffect(() => {
-    if (!isLocked || !soundEnabled) return;
+    if (isSearching) searchedHereRef.current = true;
+  }, [isSearching]);
+  useEffect(() => {
+    if (!isLocked || !soundEnabled || !searchedHereRef.current) return;
+    searchedHereRef.current = false;
     return playLockOn();
   }, [isLocked, soundEnabled]);
 

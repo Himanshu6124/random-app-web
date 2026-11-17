@@ -34,8 +34,6 @@ const MAX_CACHED_MESSAGES = 200;
 export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHandled }) {
   const {
     user,
-    isGuest,
-    openUpgradeModal,
     jwtToken,
     friends,
     removeFriend,
@@ -160,10 +158,9 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
 
   // Load latest friends and pending requests from API on mount
   useEffect(() => {
-    if (isGuest) return;
     loadFriendsFromApi();
     loadFriendRequests();
-  }, [isGuest, loadFriendsFromApi, loadFriendRequests]);
+  }, [loadFriendsFromApi, loadFriendRequests]);
 
   const loadBlockedUsers = async () => {
     const token = jwtToken || authService.getToken();
@@ -176,10 +173,9 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   };
 
   useEffect(() => {
-    if (isGuest) return;
     loadBlockedUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isGuest, jwtToken]);
+  }, [jwtToken]);
 
   // Close the chat options menu on any click outside it
   useEffect(() => {
@@ -571,7 +567,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     e.preventDefault();
     if (!selectedFriend) return;
     const randomQ = ICEBREAKER_QUESTIONS[Math.floor(Math.random() * ICEBREAKER_QUESTIONS.length)];
-    setDmInput(`🧊 Icebreaker: ${randomQ}`);
+    setDmInput(randomQ);
   };
 
   const handleReactionClick = (e, emoji) => {
@@ -630,27 +626,6 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     return map;
   }, [activeKey, dmMessages]);
   const freshIds = useNewMessageIds(currentMessages, activeKey);
-
-  // Friends and direct messages need an account.
-  if (isGuest) {
-    return (
-      <div className="friends-guest">
-        <div className="friends-guest__card">
-          <Users size={28} color="var(--accent)" aria-hidden="true" />
-          <h2>Friends need an account</h2>
-          <p>Sign in to add people you meet and message them anytime.</p>
-          <button
-            type="button"
-            id="guest-friends-upgrade-btn"
-            className="btn-primary"
-            onClick={() => openUpgradeModal('Add friends and message them anytime.')}
-          >
-            Sign in
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="friends-view" style={{

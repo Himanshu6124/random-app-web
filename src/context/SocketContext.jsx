@@ -842,7 +842,7 @@ export function SocketProvider({ children }) {
   const sendIcebreaker = useCallback(() => {
     const questions = ICEBREAKER_QUESTIONS;
     const randomQ = questions[Math.floor(Math.random() * questions.length)];
-    sendMessage(`🧊 Icebreaker: ${randomQ}`);
+    sendMessage(randomQ);
   }, [sendMessage]);
 
   const spinBottle = useCallback(() => {

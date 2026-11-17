@@ -354,10 +354,16 @@
 }
 
 /* Avatar picker */
+/* Two rows that scroll sideways, so 24 avatars never turn into a tall wall */
 .avatar-picker-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, 64px);
+  grid-auto-columns: 64px;
   gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  overscroll-behavior-x: contain;
 }
 
 .avatar-pick-item {
@@ -431,7 +437,8 @@
     grid-template-columns: 1fr;
   }
   .avatar-picker-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(2, 58px);
+    grid-auto-columns: 58px;
     gap: 8px;
   }
 }

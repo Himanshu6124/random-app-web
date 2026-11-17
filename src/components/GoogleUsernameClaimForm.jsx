@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { AtSign, UserRound } from 'lucide-react';
 
-const boyAvatars = Array.from({ length: 8 }, (_, i) => `/userImages/boy${i + 1}.png`);
-const girlAvatars = Array.from({ length: 8 }, (_, i) => `/userImages/girl${i + 1}.png`);
+const boyAvatars = Array.from({ length: 24 }, (_, i) => `/userImages/boy${i + 1}.png`);
+const girlAvatars = Array.from({ length: 24 }, (_, i) => `/userImages/girl${i + 1}.png`);
 
 /**
  * Username-claim step for brand-new Google users (CONTRACT 3).

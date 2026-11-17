@@ -8,7 +8,7 @@ export const DISCOVER_SECTIONS = [
 ];
 
 /** Desktop section navigation with the privacy note. */
-export function DiscoverSidebar({ section, onSelect, onManageVisibility }) {
+export function DiscoverSidebar({ section, onSelect }) {
   return (
     <aside className="discover-sidebar">
       <span className="discover-sidebar-label">Discover</span>
@@ -33,7 +33,6 @@ export function DiscoverSidebar({ section, onSelect, onManageVisibility }) {
       <div className="discover-privacy">
         <div className="discover-privacy-title"><ShieldCheck size={16} aria-hidden="true" />Your privacy</div>
         <p>Turn on your location to see people nearby. They see only your area (about 1 km), never your exact spot.</p>
-        <button type="button" className="dc-link" onClick={onManageVisibility}>Manage visibility</button>
       </div>
     </aside>
   );

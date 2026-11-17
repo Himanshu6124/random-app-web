@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
-import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Star, Hand, RefreshCw, X, Zap, Ban, UserRound, AlertTriangle, CheckCheck, Check, Wine } from 'lucide-react';
+import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Star, Hand, RefreshCw, X, Zap, Ban, UserRound, AlertTriangle, CheckCheck, Check, Wine, Clock } from 'lucide-react';
 import { extractPeerName, MAX_MESSAGE_LENGTH } from '../services/socketService';
 import { authService } from '../services/authService';
 import { PeerAbout } from './chat/PeerAbout';
@@ -15,6 +15,12 @@ import { MessageShell, ReplyQuote, ReplyComposerBar } from './chat/MessageExtras
 import { isInteractive, jumpToMessage } from './chat/messageUtils';
 import { useMessageInteractions } from './chat/useMessageInteractions';
 import { feedback } from '../mobile/feedback';
+
+// The AI badge on bot profiles is hidden for now (bots still say they are AI when asked).
+const SHOW_AI_BADGE = false;
+
+// AI partners we "sent" a friend request to (never sent to the server), kept across tab switches.
+const botRequestsSent = new Set();
 
 export function ChatBox() {
   const {
@@ -108,6 +114,12 @@ export function ChatBox() {
       return;
     }
 
+    // AI partners are not real accounts: their friend status lives only on this screen.
+    if (isAiPeer) {
+      setFriendStatus(botRequestsSent.has(peerId) ? 'PENDING_SENT' : 'NONE');
+      return;
+    }
+
     // Query backend friendship status once per peer
     let isCancelled = false;
     const token = jwtToken || authService.getToken();
@@ -124,10 +136,19 @@ export function ChatBox() {
     return () => {
       isCancelled = true;
     };
-  }, [peerId, isFriend, isIncomingRequest, jwtToken]);
+  }, [peerId, isFriend, isIncomingRequest, jwtToken, isAiPeer]);
 
   const handleFriendActionClick = async () => {
     if (actionLoading || !peerId) return;
+
+    // AI partner: show the request as sent (or cancelled) like a real one, but never call the
+    // server, since a bot cannot receive or accept friend requests.
+    if (isAiPeer) {
+      if (botRequestsSent.has(peerId)) botRequestsSent.delete(peerId);
+      else botRequestsSent.add(peerId);
+      setFriendStatus(botRequestsSent.has(peerId) ? 'PENDING_SENT' : 'NONE');
+      return;
+    }
 
     if (friendStatus === 'ACCEPTED') {
       return;
@@ -412,7 +433,7 @@ export function ChatBox() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: '8px', rowGap: '2px' }}>
               <h3 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700 }}>{peerName}</h3>
-              {isAiPeer && (
+              {SHOW_AI_BADGE && isAiPeer && (
                 <span className="ai-badge" title="AI chat companion" aria-label="AI chat companion">AI</span>
               )}
               {isPeerOnline ? (
@@ -489,10 +510,11 @@ export function ChatBox() {
                 color: 'var(--text-secondary)',
                 cursor: 'pointer'
               }}
-              title="Click to cancel friend request"
+              title="Friend request sent. Tap to cancel"
+              aria-label="Friend request sent. Tap to cancel"
             >
-              <X size={15} />
-              <span>{actionLoading ? 'Cancelling...' : 'Pending (Cancel)'}</span>
+              <Clock size={16} aria-hidden="true" />
+              <span className="label-long">{actionLoading ? 'Cancelling...' : 'Request sent'}</span>
             </button>
           ) : friendStatus === 'PENDING_RECEIVED' ? (
             <button
@@ -518,8 +540,7 @@ export function ChatBox() {
               <UserCheck size={16} />
               <span>{actionLoading ? 'Accepting...' : 'Accept Friend'}</span>
             </button>
-          ) : currentPeer.peerGuest ? null : (
-            /* Guests (and AI partners) cannot receive friend requests, so no button for them */
+          ) : (
             <button
               id="add-friend-btn"
               type="button"
@@ -778,7 +799,7 @@ export function ChatBox() {
           >
             <HelpCircle size={15} color="var(--text-secondary)" aria-hidden="true" />
             <span className="label-long">Icebreaker</span>
-            <span className="label-short">Ice</span>
+            <span className="label-short">Icebreaker</span>
           </button>
 
           {/* Spin the Bottle */}

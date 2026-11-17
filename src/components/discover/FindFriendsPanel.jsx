@@ -152,7 +152,6 @@ export function FindFriendsPanel({ onOpenChat }) {
                   </div>
                   <FriendshipButton
                     personId={person.id}
-                    guest={person.guest}
                     name={person.name}
                     status={person.friendshipStatus}
                     onStatusChange={(s) => setStatus(person.id, s)}

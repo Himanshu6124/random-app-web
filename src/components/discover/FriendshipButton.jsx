@@ -7,7 +7,7 @@ import { authService } from '../../services/authService';
  * The relationship action for one person, driven by the backend's friendship status
  * (NONE, PENDING_SENT, PENDING_RECEIVED, ACCEPTED, BLOCKED). Reports the new status upward.
  */
-export function FriendshipButton({ personId, name, status = 'NONE', guest = false, onStatusChange, onMessage, onError, size = 'md' }) {
+export function FriendshipButton({ personId, name, status = 'NONE', onStatusChange, onMessage, onError, size = 'md' }) {
   const { jwtToken, isGuest, openUpgradeModal, sendFriendRequest, cancelFriendRequest, acceptFriendRequest, loadFriendsFromApi } = useAuth();
   const [busy, setBusy] = useState(false);
   const sm = size === 'sm' ? ' dc-btn--sm' : '';
@@ -31,11 +31,6 @@ export function FriendshipButton({ personId, name, status = 'NONE', guest = fals
       setBusy(false);
     }
   };
-
-  // The other person is a guest: they can't send or receive requests until they sign in.
-  if (guest && status !== 'ACCEPTED' && status !== 'BLOCKED') {
-    return <span className={`dc-guest-tag${sm}`} title="Guests can't receive friend requests">Guest</span>;
-  }
 
   switch (status) {
     case 'PENDING_SENT':

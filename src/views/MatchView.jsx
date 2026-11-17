@@ -15,19 +15,23 @@ import { ChatBox } from '../components/ChatBox';
 export function MatchView() {
   const { matchState } = useSocket();
 
-  // Track previous state to animate the chat screen slide-in
-  const [showChat, setShowChat] = useState(false);
-  const [chatMounted, setChatMounted] = useState(false);
+  // Track previous state to animate the chat screen slide-in. Coming back to the tab while a
+  // chat is already open shows it at once: no radar, no lock-on, no slide-in.
+  const [showChat, setShowChat] = useState(() => matchState === 'matched');
+  const [chatMounted, setChatMounted] = useState(() => matchState === 'matched');
 
   // A match found while you watched the radar plays its lock-on first; one already
   // standing (tab switch, rejoin) opens the chat straight away.
   const prevMatchState = useRef(matchState);
+  const chatMountedRef = useRef(chatMounted);
+  chatMountedRef.current = chatMounted;
 
   useEffect(() => {
     const prev = prevMatchState.current;
     prevMatchState.current = matchState;
 
     if (matchState === 'matched') {
+      if (prev === 'matched' && chatMountedRef.current) return undefined; // already showing the chat
       const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
       const delay = prev === 'searching' ? (reduced ? 200 : 600) : 0;
       let raf;
