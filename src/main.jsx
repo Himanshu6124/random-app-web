@@ -4,6 +4,7 @@ import App from './App.jsx';
 import './styles/main.css';
 import './styles/mobile.css';
 import './styles/motion.css';
+import './styles/features.css';
 import { initNativeShell } from './mobile/nativeShell';
 import { initTapFeedback } from './mobile/feedback';
 import { initAnalytics } from './services/analytics';

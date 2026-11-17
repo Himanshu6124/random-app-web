@@ -945,3 +945,47 @@
   /* Desktop has room: let the vibes wrap instead of scrolling */
   .topic-picker--row .topic-picker__chips { flex-wrap: wrap; overflow: visible; -webkit-mask-image: none; mask-image: none; }
 }
+@media (max-width: 420px) {
+  .match-gender button { padding: 7px 11px; }
+}
+
+/* "Crafted with ♥ in Bangalore" sign-off (landing + match screens) */
+.crafted-credit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin: 0;
+  padding: 20px 16px 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+  text-align: center;
+}
+.crafted-credit__heart { color: var(--accent); flex-shrink: 0; }
+
+/* Single-line text that scrolls when it is too long for its box (MarqueeText.jsx) */
+.marquee {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.marquee__text { display: inline-block; white-space: nowrap; }
+.marquee--on {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 8px, #000 calc(100% - 12px), transparent);
+  mask-image: linear-gradient(to right, transparent 0, #000 8px, #000 calc(100% - 12px), transparent);
+}
+.marquee--on .marquee__text {
+  padding: 0 8px;
+  animation: marqueeSlide var(--marquee-duration, 6s) ease-in-out infinite alternate;
+}
+@keyframes marqueeSlide {
+  0%, 15% { transform: translateX(-8px); }
+  85%, 100% { transform: translateX(calc(var(--marquee-shift, 0px) - 8px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee--on { -webkit-mask-image: none; mask-image: none; text-overflow: ellipsis; }
+  .marquee--on .marquee__text { animation: none; padding: 0; display: inline; }
+}

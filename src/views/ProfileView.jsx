@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { User, Check, Save, Lock, AlertCircle, Download, UserRound } from 'lucide-react';
 
+const GENDER_OPTIONS = [['boy', 'Male'], ['girl', 'Female'], ['other', 'Other']];
+
 export function ProfileView() {
   const { user, isGuest, updateUserProfile, logout, openUpgradeModal } = useAuth();
 
@@ -19,7 +21,7 @@ export function ProfileView() {
     if (user?.name) setName(user.name);
     if (user?.photoUrl) setAvatar(user.photoUrl);
     if (user?.gender) setGender(user.gender);
-    if (user?.bio) setBio(user.bio);
+    setBio(user?.bio || '');
   }, [user]);
 
   if (!user) return null;
@@ -29,7 +31,9 @@ export function ProfileView() {
   const girlAvatars = Array.from({ length: AVATAR_COUNT }, (_, i) => `/userImages/girl${i + 1}.png`);
 
   const currentGender = (gender || 'boy').toLowerCase();
-  const genderPictures = currentGender === 'girl' ? girlAvatars : boyAvatars;
+  const genderPictures = currentGender === 'girl' ? girlAvatars
+    : currentGender === 'other' ? [...boyAvatars, ...girlAvatars]
+    : boyAvatars;
 
   const handleGenderChange = (newGender) => {
     setGender(newGender);
@@ -40,6 +44,16 @@ export function ProfileView() {
     }
   };
 
+  // Save is only enabled once something actually differs from the saved profile.
+  const isDirty = isGuest
+    ? name.trim() !== (user.name || user.username || '').trim()
+      || currentGender !== (user.gender || 'boy').toLowerCase()
+    : username.trim() !== (user.username || '').trim()
+      || name.trim() !== (user.name || user.username || '').trim()
+      || currentGender !== (user.gender || 'boy').toLowerCase()
+      || bio.trim() !== (user.bio || '').trim()
+      || avatar !== (user.photoUrl || '/userImages/boy1.png');
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaveLoading(true);
@@ -48,11 +62,11 @@ export function ProfileView() {
     try {
       const profileData = isGuest ? {
         name: name.trim(),
-        gender: gender.toLowerCase()
+        ...(user.gender ? {} : { gender: gender.toLowerCase() })
       } : {
         username: username.trim(),
         name: name.trim(),
-        gender: gender.toLowerCase(),
+        ...(user.gender ? {} : { gender: gender.toLowerCase() }),
         bio: bio.trim(),
         photoUrl: avatar
       };
@@ -297,13 +311,31 @@ export function ProfileView() {
             />
           </div>
 
-          {/* Gender */}
+          {/* Gender: chosen once at first sign-in, then fixed */}
           <div style={{ marginBottom: '20px' }}>
             <label style={{ fontSize: 'var(--fs-md)', color: 'var(--text-secondary)', marginBottom: '8px', display: 'block' }}>
               Gender
             </label>
+            {user.gender ? (
+              <div
+                id="profile-gender-value"
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
+                  padding: '12px 14px', borderRadius: 'var(--radius-md)',
+                  background: 'var(--bg-input)', border: '1px solid var(--border-color)'
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>
+                  {(GENDER_OPTIONS.find(([g]) => g === currentGender) || [null, currentGender])[1]}
+                </span>
+                <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Lock size={12} aria-hidden="true" /> Can't be changed
+                </span>
+              </div>
+            ) : (
+              <>
             <div style={{ display: 'flex', gap: '10px' }}>
-              {['boy', 'girl'].map(g => (
+              {GENDER_OPTIONS.map(([g, label]) => (
                 <button
                   key={g}
                   id={`gender-select-${g}`}
@@ -312,10 +344,15 @@ export function ProfileView() {
                   className={currentGender === g ? 'btn-secondary is-selected' : 'btn-secondary'}
                   style={{ flex: 1, padding: '10px', fontSize: 'var(--fs-md)', textTransform: 'capitalize' }}
                 >
-                  {g === 'boy' ? 'Male' : 'Female'}
+                  {label}
                 </button>
               ))}
             </div>
+                <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', marginTop: '6px' }}>
+                  Pick carefully: you can't change your gender once it's saved.
+                </p>
+              </>
+            )}
           </div>
 
           {/* Bio Input */}
@@ -404,8 +441,9 @@ export function ProfileView() {
               <button
                 type="submit"
                 className="btn-primary"
-                style={{ padding: '12px 32px', opacity: saveLoading ? 0.7 : 1 }}
-                disabled={saveLoading}
+                style={{ padding: '12px 32px', opacity: saveLoading || !isDirty ? 0.5 : 1, cursor: saveLoading || !isDirty ? 'not-allowed' : 'pointer' }}
+                disabled={saveLoading || !isDirty}
+                title={!isDirty ? 'No changes to save' : undefined}
               >
                 {saveLoading ? <span className="btn-spinner" /> : <Save size={18} />}
                 <span>{saveLoading ? 'Saving…' : 'Save'}</span>

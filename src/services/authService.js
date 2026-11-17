@@ -218,7 +218,7 @@ export const authService = {
 
   /**
    * POST /auth/signup
-   * Body: { username, password, name, email, gender ('boy'|'girl'), bio, photoUrl }
+   * Body: { username, password, name, email, gender ('boy'|'girl'|'other'), bio, photoUrl }
    * Returns: { jwt, userId }
    */
   async signUp(userData) {
@@ -233,8 +233,8 @@ export const authService = {
     if (!email) {
       throw new Error('Email is required.');
     }
-    if (!gender || !['boy', 'girl'].includes(gender.toLowerCase())) {
-      throw new Error('Gender must be "boy" or "girl".');
+    if (!gender || !['boy', 'girl', 'other'].includes(gender.toLowerCase())) {
+      throw new Error('Gender must be "boy", "girl" or "other".');
     }
     if (!photoUrl || !photoUrl.trim()) {
       throw new Error('Profile picture is required.');
@@ -765,6 +765,39 @@ export const authService = {
   async blockUser(userId, token) {
     const response = await fetch(`${BASE_URL}/friendships/${encodeURIComponent(userId)}/block`, {
       method: 'POST',
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
+   * POST /friendships/{userId}/report -> FriendshipStatusDto. Blocks the user and files a report.
+   */
+  async reportUser(userId, reason, token) {
+    const response = await fetch(`${BASE_URL}/friendships/${encodeURIComponent(userId)}/report`, {
+      method: 'POST',
+      headers: { ...getAuthHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason || null })
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
+   * GET /random/room -> { conversationId, peerId, peerOnline, peerLastSeen }: the random room the
+   * server still has us in, used to reconcile the chat after the app was in the background.
+   */
+  async getRandomRoom(token) {
+    const response = await fetch(`${BASE_URL}/random/room`, {
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
+   * GET /location/distance/{userId} -> { distanceKm } (null when either side is not sharing).
+   */
+  async getDistanceTo(userId, token) {
+    const response = await fetch(`${BASE_URL}/location/distance/${encodeURIComponent(userId)}`, {
       headers: getAuthHeaders(token)
     });
     return await handleApiResponse(response);

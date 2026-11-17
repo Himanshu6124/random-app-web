@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { socketService, extractPeerName } from '../services/socketService';
+import { authService } from '../services/authService';
 import { applyReaction } from '../components/chat/messageUtils';
 import { feedback } from '../mobile/feedback';
-import { notify, pageInView } from '../services/notify';
+import { notify, pageInView, navigateTo } from '../services/notify';
 import { cleanTopicIds, formatTopics, loadSavedTopics, saveTopics } from '../content/matchTopics';
 
 const SocketContext = createContext();
@@ -82,13 +83,13 @@ export function SocketProvider({ children }) {
   // matchState: 'idle' | 'searching' | 'matched'
   const [matchState, setMatchState] = useState('idle');
   // Topics picked on the Match screen; sent with each search, remembered on this device.
-  // Who to meet: 'any' | 'boy' | 'girl' (remembered on this device).
+  // Who to meet: 'any' | 'boy' | 'girl' | 'other' (remembered on this device).
   const [matchGender, setMatchGenderState] = useState(() => {
     try { return localStorage.getItem('rc.matchGender') || 'any'; } catch { return 'any'; }
   });
   const matchGenderRef = useRef(matchGender);
   const setMatchGender = useCallback((g) => {
-    const next = g === 'boy' || g === 'girl' ? g : 'any';
+    const next = g === 'boy' || g === 'girl' || g === 'other' ? g : 'any';
     matchGenderRef.current = next;
     setMatchGenderState(next);
     try { localStorage.setItem('rc.matchGender', next); } catch { /* private mode */ }
@@ -105,7 +106,11 @@ export function SocketProvider({ children }) {
   const [messages, setMessages] = useState([]);
   const [isPeerTyping, setIsPeerTyping] = useState(false);
   const [isPeerOnline, setIsPeerOnline] = useState(true);
+  // When the random peer was last online (set while they are temporarily disconnected)
+  const [peerLastSeen, setPeerLastSeen] = useState(null);
   const [peerLeft, setPeerLeft] = useState(false);
+  // Bumped after every reconnect / return from the background: views refetch what they show.
+  const [resyncTick, setResyncTick] = useState(0);
   const [floatingReactions, setFloatingReactions] = useState([]);
   // Latest Spin the Bottle round of the random chat (server-decided), or null
   const [bottleGame, setBottleGame] = useState(null);
@@ -125,6 +130,8 @@ export function SocketProvider({ children }) {
   const lastProfileSentRef = useRef({ conversationId: null, signature: null });
   const handleIncomingDirectMessageRef = useRef(handleIncomingDirectMessage);
   const peerLeftRef = useRef(false);
+  const jwtTokenRef = useRef(jwtToken);
+  useEffect(() => { jwtTokenRef.current = jwtToken; }, [jwtToken]);
   // Identity the socket was last opened for, to tell a guest -> existing-account switch
   // (same sessionEpoch, new user id: the random chat must survive) from a logout/login.
   const socketIdentityRef = useRef({ userId: null, epoch: sessionEpoch });
@@ -175,6 +182,7 @@ export function SocketProvider({ children }) {
 
     setCurrentPeer(peerObj);
     setIsPeerOnline(true);
+    setPeerLastSeen(null);
     setIsPeerTyping(false);
     setPeerLeft(false);
     setMatchState('matched');
@@ -304,6 +312,52 @@ export function SocketProvider({ children }) {
   useEffect(() => { applyFriendPresenceRef.current = applyFriendPresence; }, [applyFriendPresence]);
   useEffect(() => { setLiveFriendRequestRef.current = setLiveFriendRequest; }, [setLiveFriendRequest]);
 
+  /**
+   * After a reconnect or a return from the background, ask the server which random room we are
+   * still in. The server holds a room open for a few minutes when a socket drops, so the chat
+   * usually just carries on; if the peer left (or the hold ran out) while we were away, say so
+   * instead of showing a chat that can never deliver again.
+   */
+  const reconcileRandomRoom = useCallback(async () => {
+    const peer = currentPeerRef.current;
+    if (!peer || peerLeftRef.current) return;
+    const convId = peer.conversationId || peer.id;
+    const token = jwtTokenRef.current || authService.getToken();
+    if (!convId || !token) return;
+
+    let room;
+    try {
+      room = await authService.getRandomRoom(token);
+    } catch {
+      return; // offline or server hiccup: the next resume tries again
+    }
+    const still = currentPeerRef.current;
+    if (!still || (still.conversationId || still.id) !== convId || peerLeftRef.current) return;
+
+    if (!room || room.conversationId !== convId || !room.peerId) {
+      setIsPeerOnline(false);
+      setIsPeerTyping(false);
+      setPeerLeft(true);
+      setMessages(prev => [...prev, systemMessage(`${still.name || 'Your chat partner'} left the chat while you were away.`)]);
+      return;
+    }
+    const online = Boolean(room.peerOnline);
+    setIsPeerOnline(online);
+    setPeerLastSeen(online ? null : (room.peerLastSeen || null));
+  }, []);
+
+  const resyncRef = useRef(() => {});
+  const lastResyncRef = useRef(0);
+  resyncRef.current = () => {
+    const now = Date.now();
+    if (now - lastResyncRef.current < 2000) return;
+    lastResyncRef.current = now;
+    loadFriendsRef.current?.();
+    loadRequestsRef.current?.();
+    reconcileRandomRoom();
+    setResyncTick(t => t + 1);
+  };
+
   // Seamlessly update socket token when jwtToken updates (e.g. guest upgrade)
   // without dropping the active WebSocket connection.
   useEffect(() => {
@@ -368,8 +422,9 @@ export function SocketProvider({ children }) {
             socketService.subscribeRoom(carriedRoomId);
             carriedRoomId = null;
           }
-          // Presence changes while we were disconnected were missed: resync from the server.
-          loadFriendsRef.current?.();
+          // Everything pushed while we were disconnected was missed: resync from the server
+          // (friends + presence, requests, the random room, and any open DM via resyncTick).
+          resyncRef.current();
 
           // The socket service replays every room subscription by itself; all that is
           // left here is telling the peer about a username that really changed.
@@ -390,6 +445,28 @@ export function SocketProvider({ children }) {
         },
         onDisconnect: () => {
           setConnectionStatus('disconnected');
+        },
+        onResume: ({ connected }) => {
+          // Back from the background with the socket still up: pushes may have been throttled
+          // while the page was frozen, so refresh anyway. (A dead socket resyncs on reconnect.)
+          if (connected) resyncRef.current();
+        },
+        onGameInvite: (payload) => {
+          const fromId = payload?.id || payload?.senderId;
+          notify({
+            key: `game-invite-${fromId}`,
+            kind: 'match',
+            title: payload?.name || payload?.username || 'A friend',
+            body: 'wants to play Truth & Dare with you 🎲',
+            icon: payload?.photoUrl || '',
+            target: fromId ? { tab: 'friends', friendId: fromId } : { tab: 'friends' },
+            action: fromId ? {
+              label: 'Play',
+              run: () => navigateTo({ tab: 'friends', friendId: fromId })
+            } : undefined
+          });
+          feedback('notify');
+          if (soundEnabledRef.current) playChime('match');
         },
         onAuthExpired: () => {
           setConnectionStatus('disconnected');
@@ -440,28 +517,30 @@ export function SocketProvider({ children }) {
             }, 3000);
           }
         },
-        onFriendPresence: (friendId, online) => {
-          applyFriendPresenceRef.current?.(friendId, online);
+        onFriendPresence: (friendId, online, lastSeen) => {
+          applyFriendPresenceRef.current?.(friendId, online, lastSeen);
         },
         onOnlineStatus: (isOnline, payload) => {
           // Friends list presence is pushed from the room the friend shares with us
           if (payload?.senderId) {
-            applyFriendPresenceRef.current?.(payload.senderId, Boolean(isOnline));
+            applyFriendPresenceRef.current?.(payload.senderId, Boolean(isOnline), payload.lastSeen || null);
           }
 
           const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
           if (!activeConvId || payload?.conversationId !== activeConvId) return;
 
+          if (peerLeftRef.current) return; // a chat that ended stays ended
           const wasOffline = !isPeerOnlineRef.current;
           const nowOnline = Boolean(isOnline);
           setIsPeerOnline(nowOnline);
+          setPeerLastSeen(nowOnline ? null : (payload?.lastSeen || new Date().toISOString()));
+          if (!nowOnline) setIsPeerTyping(false);
 
-          // Only announce if returning back online from an offline state
+          const peerName = currentPeerRef.current?.name || 'Your chat partner';
           if (wasOffline && nowOnline) {
-            setMessages(prev => [
-              ...prev,
-              systemMessage(`${currentPeerRef.current?.name || 'Your chat partner'} is back online! You can now send messages.`)
-            ]);
+            setMessages(prev => [...prev, systemMessage(`${peerName} is back. You can keep chatting.`)]);
+          } else if (!wasOffline && !nowOnline) {
+            setMessages(prev => [...prev, systemMessage(`${peerName} got disconnected. They can come back to this chat in a few minutes.`)]);
           }
         },
         onPeerUpdated: (payload) => {
@@ -509,7 +588,7 @@ export function SocketProvider({ children }) {
           setPeerLeft(true);
           setMessages(prev => [
             ...prev,
-            systemMessage('Your chat partner left the chat.')
+            systemMessage(`${currentPeerRef.current?.name || 'Your chat partner'} left the chat.`)
           ]);
         },
         onFriendRequestReceived: (sender) => {
@@ -625,6 +704,7 @@ export function SocketProvider({ children }) {
     setMessages([]);
     setIsPeerTyping(false);
     setIsPeerOnline(true);
+    setPeerLastSeen(null);
     setPeerLeft(false);
     setFloatingReactions([]);
     previousUsernameRef.current = null;
@@ -811,6 +891,7 @@ export function SocketProvider({ children }) {
   }, [currentPeer, isPeerOnline, peerLeft]);
 
   const sendReaction = useCallback((emoji) => {
+    if (peerLeftRef.current || !isPeerOnlineRef.current) return;
     const reactionObj = {
       id: 'react_' + Date.now() + Math.random(),
       emoji,
@@ -830,16 +911,17 @@ export function SocketProvider({ children }) {
    */
   const reactToMessage = useCallback((messageId, emoji) => {
     const conversationId = currentPeer?.conversationId || currentPeer?.id;
-    if (!conversationId || !messageId || peerLeft) return false;
+    if (!conversationId || !messageId || peerLeft || !isPeerOnline) return false;
     const sent = socketService.sendMessageReaction(conversationId, messageId, emoji);
     if (sent) {
       const reaction = { senderId: userRef.current?.id, messageId, emoji };
       setMessages(prev => prev.map(m => applyReaction(m, reaction)));
     }
     return sent;
-  }, [currentPeer, peerLeft]);
+  }, [currentPeer, peerLeft, isPeerOnline]);
 
   const sendIcebreaker = useCallback(() => {
+    if (peerLeftRef.current || !isPeerOnlineRef.current) return false;
     const questions = ICEBREAKER_QUESTIONS;
     const randomQ = questions[Math.floor(Math.random() * questions.length)];
     sendMessage(randomQ);
@@ -847,9 +929,9 @@ export function SocketProvider({ children }) {
 
   const spinBottle = useCallback(() => {
     const conversationId = currentPeer?.conversationId || currentPeer?.id;
-    if (!conversationId || peerLeft) return false;
+    if (!conversationId || peerLeft || !isPeerOnline) return false;
     return socketService.spinBottle(conversationId);
-  }, [currentPeer, peerLeft]);
+  }, [currentPeer, peerLeft, isPeerOnline]);
 
   const askGameQuestion = useCallback((roundId, question, custom) => {
     const conversationId = currentPeer?.conversationId || currentPeer?.id;
@@ -888,7 +970,9 @@ export function SocketProvider({ children }) {
     messages,
     isPeerTyping,
     isPeerOnline,
+    peerLastSeen,
     peerLeft,
+    resyncTick,
     startSearching,
     cancelSearch,
     skipStranger,
@@ -910,7 +994,7 @@ export function SocketProvider({ children }) {
     isLiveConnected
   }), [
     activeTab, setActiveTab, unreadRandomCount, clearUnreadRandomCount, liveRandomMessage,
-    dismissLiveRandomMessage, matchState, matchTopics, setMatchTopics, matchGender, setMatchGender, currentPeer, messages, isPeerTyping, isPeerOnline, peerLeft,
+    dismissLiveRandomMessage, matchState, matchTopics, setMatchTopics, matchGender, setMatchGender, currentPeer, messages, isPeerTyping, isPeerOnline, peerLastSeen, peerLeft, resyncTick,
     startSearching, cancelSearch, skipStranger, disconnectChat, sendMessage,
     retryMessage, sendMedia, sendReaction, reactToMessage, sendIcebreaker, notifyTyping, floatingReactions,
     bottleGame, spinBottle, chooseGameOption, askGameQuestion, closeGame, connectionStatus, isLiveConnected

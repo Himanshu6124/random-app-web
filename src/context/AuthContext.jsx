@@ -154,7 +154,7 @@ export function AuthProvider({ children }) {
    * Applies a presence event pushed over the socket to the friends list, so a
    * friend does not stay "Offline" until the next poll.
    */
-  const applyFriendPresence = useCallback((userId, online) => {
+  const applyFriendPresence = useCallback((userId, online, lastSeen = null) => {
     if (!userId) return;
     setFriends(prev => {
       let changed = false;
@@ -162,7 +162,9 @@ export function AuthProvider({ children }) {
         const key = f.id || f.friendUserId;
         if (key !== userId || f.isOnline === online) return f;
         changed = true;
-        return { ...f, isOnline: online, status: online ? 'Online' : 'Offline', lastOnline: online ? f.lastOnline : new Date().toISOString() };
+        // Going online also counts as "seen now", so the recent-first sort stays right.
+        const seen = online ? new Date().toISOString() : (lastSeen || new Date().toISOString());
+        return { ...f, isOnline: online, status: online ? 'Online' : 'Offline', lastOnline: seen };
       });
       return changed ? next : prev;
     });

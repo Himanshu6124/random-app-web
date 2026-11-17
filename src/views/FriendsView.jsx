@@ -1,13 +1,17 @@
+import { MarqueeText } from '../components/MarqueeText';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket, ICEBREAKER_QUESTIONS } from '../context/SocketContext';
-import { socketService, MAX_MESSAGE_LENGTH } from '../services/socketService';
+import { socketService } from '../services/socketService';
 import { authService } from '../services/authService';
-import { Users, UserMinus, UserPlus, Send, MessageCircle, ArrowLeft, HelpCircle, Heart, Flame, Star, Smile, Hand, MoreVertical, Loader2, Ban, ChevronDown, ChevronRight, UserRound, AlertTriangle, CheckCheck, Check, X } from 'lucide-react';
+import { Users, UserMinus, UserPlus, MessageCircle, ArrowLeft, HelpCircle, Heart, Flame, Star, Smile, Hand, MoreVertical, Loader2, Ban, ChevronDown, ChevronRight, UserRound, AlertTriangle, CheckCheck, Check, X, Wine } from 'lucide-react';
 import { useNewMessageIds, displayTime } from '../mobile/useNewMessageIds';
 import { DiscoverConfirmDialog } from '../components/discover/DiscoverConfirmDialog';
 import { FriendRequestDialog } from '../components/FriendRequestDialog';
-import { MediaComposer } from '../components/MediaComposer';
+import { ChatComposer } from '../components/ChatComposer';
+import { useProfileCard } from '../components/ProfileCard';
+import { BottleGame, GameFeedCard } from '../components/BottleGame';
+import { playReveal, unlockGameAudio } from '../services/gameFx';
 import { useBackHandler } from '../mobile/useBackHandler';
 import { useEdgeSwipeBack } from '../mobile/useEdgeSwipeBack';
 import { ChatMediaMessage } from '../components/ChatMediaMessage';
@@ -46,10 +50,16 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     rejectFriendRequest,
     loadFriendsFromApi,
     markFriendMessagesSeen,
-    setActiveDmFriendId
+    setActiveDmFriendId,
+    soundEnabled
   } = useAuth();
 
-  const { isLiveConnected } = useSocket();
+  const { isLiveConnected, resyncTick } = useSocket();
+  const { openProfile } = useProfileCard();
+  // Truth & Dare in this DM: the latest server event of the open conversation
+  const [dmGame, setDmGame] = useState(null);
+  const [dmGameOpen, setDmGameOpen] = useState(false);
+  const [dmSpinPending, setDmSpinPending] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [mobileShowChat, setMobileShowChat] = useState(false);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
@@ -256,7 +266,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       // history is capped so a quota error cannot take the whole app down.
       const persistable = {};
       Object.entries(dmMessages).forEach(([key, list]) => {
-        const settled = (list || []).filter(m => m.status !== 'SENDING' && m.status !== 'FAILED');
+        const settled = (list || []).filter(m => m.status !== 'SENDING' && m.status !== 'FAILED'
+          && m.senderId !== 'system' && m.senderId !== 'game');
         if (settled.length > 0) persistable[key] = settled.slice(-MAX_CACHED_MESSAGES);
       });
       localStorage.setItem('randomeet_dms', JSON.stringify(persistable));
@@ -264,6 +275,43 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       console.warn('[FriendsView] Could not cache direct messages locally:', e);
     }
   }, [dmMessages]);
+
+  // Server history merged into the local cache (local-only entries such as pending sends survive).
+  const mergeApiMessages = (conversationId, friendId, apiMessages) => {
+    if (!Array.isArray(apiMessages) || apiMessages.length === 0) return;
+    const lastPeerMsg = [...apiMessages].reverse().find(m => m.senderId !== user?.id);
+    if (lastPeerMsg?.id) {
+      socketService.sendSeen(conversationId, lastPeerMsg.id);
+    }
+    setDmMessages(prev => {
+      const existingLocal = prev[conversationId] || prev[friendId] || [];
+      const mergedMap = new Map();
+      apiMessages.forEach(m => mergedMap.set(m.id, m));
+      existingLocal.forEach(m => {
+        if (!mergedMap.has(m.id)) mergedMap.set(m.id, m);
+      });
+      const mergedList = Array.from(mergedMap.values());
+      mergedList.sort((a, b) => {
+        const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return tA - tB;
+      });
+      return { ...prev, [conversationId]: mergedList, [friendId]: mergedList };
+    });
+  };
+
+  // Back from the background / reconnected: messages pushed meanwhile were missed, refetch.
+  useEffect(() => {
+    if (!resyncTick || !selectedFriend?.conversationId) return undefined;
+    const conversationId = selectedFriend.conversationId;
+    const friendId = selectedFriend.id || selectedFriend.friendUserId;
+    let alive = true;
+    authService.fetchConversationMessages(conversationId, jwtToken || authService.getToken(), 0, 40)
+      .then(apiMessages => { if (alive) mergeApiMessages(conversationId, friendId, apiMessages); })
+      .catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resyncTick]);
 
   // Subscribe to room and fetch messages when selectedFriend changes
   useEffect(() => {
@@ -283,32 +331,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     authService.fetchConversationMessages(conversationId, token, 0, 40)
       .then(apiMessages => {
         if (!isSubscribed) return;
-        if (Array.isArray(apiMessages) && apiMessages.length > 0) {
-          const lastPeerMsg = [...apiMessages].reverse().find(m => m.senderId !== user?.id);
-          if (lastPeerMsg?.id) {
-            socketService.sendSeen(conversationId, lastPeerMsg.id);
-          }
-
-          setDmMessages(prev => {
-            const existingLocal = prev[conversationId] || prev[friendId] || [];
-            const mergedMap = new Map();
-            apiMessages.forEach(m => mergedMap.set(m.id, m));
-            existingLocal.forEach(m => {
-              if (!mergedMap.has(m.id)) mergedMap.set(m.id, m);
-            });
-            const mergedList = Array.from(mergedMap.values());
-            mergedList.sort((a, b) => {
-              const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-              const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-              return tA - tB;
-            });
-            return {
-              ...prev,
-              [conversationId]: mergedList,
-              [friendId]: mergedList
-            };
-          });
-        }
+        mergeApiMessages(conversationId, friendId, apiMessages);
       })
       .catch(err => {
         console.warn('[FriendsView] Failed to fetch conversation messages:', err);
@@ -412,9 +435,51 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
           ...prev,
           isOnline: Boolean(isOnline),
           status: isOnline ? 'Online' : 'Offline',
-          // They just left: start the "Active ... ago" timer from now.
-          lastOnline: !isOnline && prev.isOnline ? new Date().toISOString() : prev.lastOnline
+          // They just left: start the "Active ... ago" timer from when the server last saw them.
+          lastOnline: !isOnline && prev.isOnline ? (payload?.lastSeen || new Date().toISOString()) : prev.lastOnline
         } : null);
+      },
+      onGame: (event) => {
+        if (!event || event.conversationId !== conversationId) return;
+        if (event.phase === 'INVITED') {
+          // The friend is not in this chat: the server sent them an invite instead of spinning.
+          setDmGameOpen(false);
+          if (event.spinnerId === myId) {
+            const name = selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username || 'Your friend';
+            setDmMessages(prev => ({
+              ...prev,
+              [conversationId]: [...(prev[conversationId] || []), {
+                id: 'sys_invite_' + Date.now(),
+                senderId: 'system',
+                text: `${name} isn't in this chat right now. We let them know you want to play Truth & Dare.`,
+                timestamp: new Date().toISOString()
+              }]
+            }));
+          }
+          return;
+        }
+        setDmGame(prev => {
+          const order = { SPIN: 0, CHOSEN: 1, QUESTION: 2 };
+          if (prev && prev.roundId === event.roundId && order[prev.phase] > order[event.phase]) return prev;
+          if (event.phase === 'CLOSED' && prev && event.roundId && prev.roundId && prev.roundId !== event.roundId) return prev;
+          return { ...event, receivedAt: Date.now() };
+        });
+        if (event.phase === 'QUESTION' && event.question) {
+          const cardId = 'game_' + event.roundId;
+          setDmMessages(prev => {
+            const list = prev[conversationId] || [];
+            if (list.some(m => m.id === cardId)) return prev;
+            return {
+              ...prev,
+              [conversationId]: [...list, {
+                id: cardId, conversationId, senderId: 'game', type: 'GAME',
+                choice: event.choice, question: event.question, targetId: event.targetId,
+                askerId: event.askerId, custom: Boolean(event.custom), text: event.question,
+                timestamp: new Date().toISOString()
+              }]
+            };
+          });
+        }
       }
     });
   }, [selectedFriend, user?.id]);
@@ -433,6 +498,57 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     setReplyTarget(null);
     closeInteractions();
   }, [selectedFriend?.conversationId, closeInteractions]);
+
+  // ---- Truth & Dare (same rules as the random chat, played in this DM) ----
+  const dmConvId = selectedFriend?.conversationId || null;
+  const roomDmGame = dmGame && dmGame.conversationId === dmConvId ? dmGame : null;
+  const activeDmGame = roomDmGame && roomDmGame.phase !== 'CLOSED' ? roomDmGame : null;
+
+  useEffect(() => {
+    setDmGame(null);
+    setDmGameOpen(false);
+  }, [dmConvId]);
+  useEffect(() => { if (!dmGameOpen) setDmSpinPending(false); }, [dmGameOpen]);
+
+  const lastDmSpinRef = useRef(null);
+  const lastDmQuestionRef = useRef(null);
+  const lastDmCloseRef = useRef(null);
+  useEffect(() => {
+    if (!roomDmGame) return;
+    if (roomDmGame.phase === 'SPIN' && roomDmGame.roundId !== lastDmSpinRef.current) {
+      lastDmSpinRef.current = roomDmGame.roundId;
+      setDmGameOpen(true);
+    } else if (roomDmGame.phase === 'QUESTION' && roomDmGame.roundId !== lastDmQuestionRef.current) {
+      lastDmQuestionRef.current = roomDmGame.roundId;
+      setDmGameOpen(false);
+      playReveal({ sound: soundEnabled });
+      if (roomDmGame.targetId === user?.id) setTimeout(() => dmInputRef.current?.focus(), 50);
+    } else if (roomDmGame.phase === 'CLOSED' && roomDmGame.receivedAt !== lastDmCloseRef.current) {
+      lastDmCloseRef.current = roomDmGame.receivedAt;
+      setDmGameOpen(false);
+    }
+  }, [roomDmGame?.phase, roomDmGame?.roundId, roomDmGame?.receivedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDmSpinClick = () => {
+    if (!dmConvId || !isLiveConnected) return;
+    unlockGameAudio();
+    const sent = socketService.spinBottle(dmConvId);
+    setDmSpinPending(Boolean(sent));
+    setDmGameOpen(true);
+  };
+  const handleDmGameClose = () => {
+    setDmGameOpen(false);
+    if (dmConvId) socketService.closeGame(dmConvId);
+  };
+
+  const openFriendProfile = (friend, inChat = false) => {
+    if (!friend) return;
+    openProfile({ ...friend, id: friend.id || friend.friendUserId }, {
+      inChat,
+      onRemoved: (id) => clearSelectionIf(id),
+      onBlocked: (id) => { clearSelectionIf(id); loadBlockedUsers(); }
+    });
+  };
 
   const friendDisplayName = selectedFriend
     ? (selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username)
@@ -459,7 +575,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   };
 
   const handleSendDm = (e) => {
-    if (e) e.preventDefault();
+    if (e?.preventDefault) e.preventDefault();
     if (!dmInput.trim() || !selectedFriend || !isLiveConnected) return;
 
     feedback('send');
@@ -774,8 +890,15 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                     transition: 'all 0.2s ease'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
-                    <div style={{
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden', flex: 1, minWidth: 0 }}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`View ${friendLabel(friend)}'s profile`}
+                      onClick={(e) => { e.stopPropagation(); openFriendProfile(friend); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openFriendProfile(friend); } }}
+                      style={{
+                      cursor: 'pointer',
                       width: '42px',
                       height: '42px',
                       borderRadius: '50%',
@@ -851,23 +974,6 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                     </div>
                   </div>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      askConfirm('remove', friend);
-                    }}
-                    aria-label={`Remove ${friendLabel(friend)} from friends`}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                      padding: '6px'
-                    }}
-                    title="Remove Friend"
-                  >
-                    <UserMinus size={16} />
-                  </button>
                 </div>
               );
             })}
@@ -987,7 +1093,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               position: 'relative',
               zIndex: 20
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: '1 1 auto', minWidth: 0 }}>
                 {isMobile && (
                   <button
                     className="chat-back-btn"
@@ -1009,6 +1115,13 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                   </button>
                 )}
 
+                <button
+                  type="button"
+                  className="chat-peer-info"
+                  onClick={() => openFriendProfile(selectedFriend, true)}
+                  aria-label={`View ${friendDisplayName}'s profile`}
+                  style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0, textAlign: 'left' }}
+                >
                 <div style={{
                   width: '44px',
                   height: '44px',
@@ -1018,7 +1131,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: 'var(--fs-2xl)',
-                  overflow: 'hidden'
+                  overflow: 'hidden',
+                  flexShrink: 0
                 }}>
                   {selectedFriend.photoUrl ? (
                     <img src={selectedFriend.photoUrl} alt={selectedFriend.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
@@ -1027,8 +1141,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                   )}
                 </div>
 
-                <div>
-                  <h3 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700 }}>{selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username}</h3>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <MarqueeText as="h3" style={{ fontSize: 'var(--fs-lg)', fontWeight: 700 }}>{selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username}</MarqueeText>
                   {selectedFriend.isOnline ? (
                     <span className="online-badge" aria-label="Online">Online</span>
                   ) : (
@@ -1037,6 +1151,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                     </span>
                   )}
                 </div>
+                </button>
               </div>
 
               {/* Options Menu */}
@@ -1147,6 +1262,16 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               )}
 
               {currentMessages.map(m => {
+                if (m.senderId === 'game') {
+                  return <GameFeedCard key={m.id} msg={m} myId={user?.id} peerName={friendDisplayName} />;
+                }
+                if (m.senderId === 'system') {
+                  return (
+                    <div key={m.id} style={{ textAlign: 'center', margin: '8px 0', color: 'var(--text-secondary)', fontSize: 'var(--fs-sm)' }}>
+                      {m.text}
+                    </div>
+                  );
+                }
                 const isMe = m.sender === 'me' || m.senderId === user?.id;
                 return (
                   <div
@@ -1248,6 +1373,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               background: 'rgba(26, 16, 25, 0.5)',
               zIndex: 20
             }}>
+              <div className="chat-subbar-actions" style={{ display: 'flex', gap: '6px' }}>
               <button
                 type="button"
                 onClick={handleIcebreakerClick}
@@ -1265,6 +1391,27 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                 <HelpCircle size={14} color="var(--text-secondary)" />
                 <span style={{ fontWeight: 600 }}>Icebreaker</span>
               </button>
+              <button
+                type="button"
+                id="dm-spin-bottle-btn"
+                onClick={handleDmSpinClick}
+                disabled={!isLiveConnected}
+                className="btn-secondary chat-game-btn"
+                aria-label="Play Truth & Dare"
+                style={{
+                  padding: '6px 14px',
+                  fontSize: 'var(--fs-sm)',
+                  borderRadius: 'var(--radius-full)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Wine size={14} aria-hidden="true" />
+                <span style={{ fontWeight: 600 }}>Truth &amp; Dare</span>
+              </button>
+              </div>
 
               <div style={{ display: 'flex', gap: '6px' }}>
                 {[
@@ -1332,72 +1479,48 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               />
             )}
 
-            {/* DM Text Input Form */}
-            <form className="chat-composer" onSubmit={handleSendDm} style={{
-              padding: '16px 20px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              background: 'rgba(20, 12, 20, 0.8)',
-              zIndex: 20
-            }}>
-              <MediaComposer
-                conversationId={selectedFriend?.conversationId}
-                disabled={!isLiveConnected}
-                onSend={handleSendMediaDm}
-                onError={setMediaError}
-              />
-              <input
-                ref={dmInputRef}
-                type="text"
-                value={dmInput}
-                onChange={handleInputChange}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape' && replyTarget) {
-                    e.preventDefault();
-                    setReplyTarget(null);
-                  }
-                }}
-                onBlur={() => {
-                  if (selectedFriend?.conversationId) {
-                    socketService.sendTyping(selectedFriend.conversationId, false);
-                  }
-                }}
-                disabled={!isLiveConnected}
-                maxLength={MAX_MESSAGE_LENGTH}
-                placeholder={isLiveConnected
-                  ? `Message ${selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username}...`
-                  : 'Reconnecting…'}
-                style={{
-                  flex: 1,
-                  padding: '14px 20px',
-                  borderRadius: 'var(--radius-full)',
-                  background: 'var(--bg-input)',
-                  border: '1px solid var(--border-color)',
-                  color: 'var(--text-primary)',
-                  fontSize: 'var(--fs-body)',
-                  outline: 'none',
-                  opacity: isLiveConnected ? 1 : 0.6
-                }}
-              />
-              <button
-                type="submit"
-                className="btn-cyan"
-                disabled={!isLiveConnected}
-                style={{
-                  width: '46px',
-                  height: '46px',
-                  borderRadius: '50%',
-                  padding: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: isLiveConnected ? 'pointer' : 'not-allowed'
-                }}
-              >
-                <Send size={18} />
-              </button>
-            </form>
+            {/* DM message bar: message field (image inside), then mic / send */}
+            <ChatComposer
+              value={dmInput}
+              onChange={handleInputChange}
+              onSubmit={() => handleSendDm()}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' && replyTarget) {
+                  e.preventDefault();
+                  setReplyTarget(null);
+                }
+              }}
+              onBlur={() => {
+                if (selectedFriend?.conversationId) {
+                  socketService.sendTyping(selectedFriend.conversationId, false);
+                }
+              }}
+              inputRef={dmInputRef}
+              disabled={!isLiveConnected}
+              placeholder={isLiveConnected ? `Message ${friendDisplayName}...` : 'Reconnecting…'}
+              conversationId={selectedFriend?.conversationId}
+              onSendMedia={handleSendMediaDm}
+              onMediaError={setMediaError}
+              sendClassName="btn-cyan"
+            />
+
+            {dmGameOpen && (
+              <div className="bg-backdrop">
+                <BottleGame
+                  game={activeDmGame}
+                  myId={user?.id}
+                  me={{ name: user?.name || user?.username || 'You', photoUrl: user?.photoUrl }}
+                  peer={{ name: friendDisplayName, photoUrl: selectedFriend.photoUrl }}
+                  disabled={!isLiveConnected}
+                  spinPending={dmSpinPending}
+                  soundEnabled={soundEnabled}
+                  onSpin={() => (dmConvId ? socketService.spinBottle(dmConvId) : false)}
+                  onChoose={(roundId, choice) => socketService.chooseGameOption(dmConvId, roundId, choice)}
+                  onAsk={(roundId, question, custom) => socketService.askGameQuestion(dmConvId, roundId, question, custom)}
+                  onClose={handleDmGameClose}
+                />
+              </div>
+            )}
           </>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--text-muted)' }}>

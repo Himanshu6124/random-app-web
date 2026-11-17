@@ -293,14 +293,14 @@
 }
 .bg-ask__box {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
   padding: 8px 8px 8px 12px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-strong);
   background: var(--plum-2);
 }
-.bg-ask__box:focus-within { border-color: var(--accent); }
+.bg-ask__box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint); }
 .bg-ask__input {
   flex: 1;
   min-width: 0;
@@ -327,6 +327,31 @@
   cursor: pointer;
 }
 .bg-ask__send:disabled { opacity: 0.5; cursor: default; }
+
+/* This file loads before the global styles (main.css), so the generic .btn-primary padding and
+   the global :focus-visible ring would otherwise win: the padding crushed the send icon to zero
+   width and the ring drew a stray outline inside the box. The box's own border is the focus cue. */
+.bg-ask .bg-ask__input,
+.bg-ask .bg-ask__input:focus,
+.bg-ask .bg-ask__input:focus-visible {
+  outline: none;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  padding: 6px 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.bg-ask .bg-ask__send {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  padding: 0;
+  gap: 0;
+  border-radius: 50%;
+}
+.bg-ask .bg-ask__send svg { flex-shrink: 0; display: block; }
+.bg-ask .bg-ask__send:disabled { background: var(--plum-4); color: var(--text-secondary); }
 .bg-ask__count {
   min-height: 1em;
   margin-top: -4px;

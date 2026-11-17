@@ -12,6 +12,7 @@ import { LoginView } from './views/LoginView';
 import { LogoutConfirmationDialog } from './components/LogoutConfirmationDialog';
 import { GuestUpgradeModal } from './components/GuestUpgradeModal';
 import { NotificationToasts, NotificationPermissionPrompt } from './components/NotificationToasts';
+import { ProfileCardProvider } from './components/ProfileCard';
 import { subscribeNavigate } from './services/notify';
 import { setScreen } from './services/analytics';
 import { checkAnalyticsAdmin } from './views/admin/adminApi';
@@ -129,8 +130,10 @@ export default function App() {
   return (
     <AuthProvider>
       <SocketProvider>
-        <AppContent />
-        <InstallPrompt />
+        <ProfileCardProvider>
+          <AppContent />
+          <InstallPrompt />
+        </ProfileCardProvider>
       </SocketProvider>
     </AuthProvider>
   );

@@ -14,6 +14,7 @@ const GENDERS = [
   { id: 'all', label: 'All' },
   { id: 'boy', label: 'Male' },
   { id: 'girl', label: 'Female' },
+  { id: 'other', label: 'Other' },
 ];
 
 function getDevicePosition() {
@@ -35,7 +36,7 @@ function getDevicePosition() {
 const lastSeenMs = (p) => (p.isOnline ? Date.now() : new Date(p.lastOnline || p.locationUpdatedAt || 0).getTime());
 
 /**
- * Nearby: All / Male / Female filter, a big map, and a horizontal strip of the people on it
+ * Nearby: All / Male / Female / Other filter, a big map, and a horizontal strip of the people on it
  * (online first, then most recently active, then closest). The first visit asks once to turn on
  * your own (rounded) location, since seeing others requires sharing yours; after that it stays on.
  */

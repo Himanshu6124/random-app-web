@@ -153,63 +153,42 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
             <label style={{ display: 'block', fontSize: 'var(--fs-md)', fontWeight: 600, color: '#f5ecef', marginBottom: '8px' }}>
               Select Gender *
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <button
-                type="button"
-                id="guest-gender-male"
-                onClick={() => setGender('boy')}
-                style={{
-                  padding: '12px',
-                  borderRadius: 'var(--radius-md)',
-                  border: gender === 'boy'
-                    ? '1.5px solid var(--accent)'
-                    : '1px solid rgba(255, 255, 255, 0.1)',
-                  backgroundColor: gender === 'boy'
-                    ? 'var(--plum-5)'
-                    : 'var(--plum-3)',
-                  color: gender === 'boy' ? 'var(--accent)' : 'var(--text-primary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  fontWeight: 600,
-                  fontSize: 'var(--fs-body)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-              >
-                Male
-              </button>
-
-              <button
-                type="button"
-                id="guest-gender-female"
-                onClick={() => setGender('girl')}
-                style={{
-                  padding: '12px',
-                  borderRadius: 'var(--radius-md)',
-                  border: gender === 'girl'
-                    ? '1.5px solid var(--accent)'
-                    : '1px solid rgba(255, 255, 255, 0.1)',
-                  backgroundColor: gender === 'girl'
-                    ? 'var(--plum-5)'
-                    : 'var(--plum-3)',
-                  color: gender === 'girl' ? 'var(--accent)' : 'var(--text-primary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  fontWeight: 600,
-                  fontSize: 'var(--fs-body)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-              >
-                Female
-              </button>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+              {[['boy', 'Male', 'male'], ['girl', 'Female', 'female'], ['other', 'Other', 'other']].map(([value, label, idPart]) => (
+                <button
+                  key={value}
+                  type="button"
+                  id={`guest-gender-${idPart}`}
+                  onClick={() => setGender(value)}
+                  style={{
+                    padding: '12px',
+                    borderRadius: 'var(--radius-md)',
+                    border: gender === value
+                      ? '1.5px solid var(--accent)'
+                      : '1px solid rgba(255, 255, 255, 0.1)',
+                    backgroundColor: gender === value
+                      ? 'var(--plum-5)'
+                      : 'var(--plum-3)',
+                    color: gender === value ? 'var(--accent)' : 'var(--text-primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    fontWeight: 600,
+                    fontSize: 'var(--fs-body)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
             <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)', margin: '6px 0 0' }}>
               An avatar will be automatically assigned for you.
+            </p>
+            <p id="guest-gender-warning" style={{ fontSize: 'var(--fs-sm)', color: 'var(--accent)', margin: '4px 0 0' }}>
+              Heads up: you can't change your gender once it's set.
             </p>
           </div>
 

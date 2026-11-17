@@ -3,6 +3,7 @@ import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { X, UserRound, Heart } from 'lucide-react';
 import { startRadarSounds, playLockOn, unlockRadarAudio } from '../services/radarSound';
+import { CraftedCredit } from './CraftedCredit';
 import { MATCH_TOPICS, MAX_MATCH_TOPICS, TOPIC_WINDOW_SECONDS, topicById } from '../content/matchTopics';
 
 /**
@@ -136,13 +137,42 @@ export function MatchRadar() {
   const peerName = currentPeer?.name || 'a stranger';
   const peerInitial = (currentPeer?.name || '').trim().charAt(0).toUpperCase();
 
+  // No "up to 3" hint by default: the limit is only explained when someone tries a 4th.
+  const [topicLimitHit, setTopicLimitHit] = useState(false);
+  const limitTimerRef = useRef(null);
+  useEffect(() => () => clearTimeout(limitTimerRef.current), []);
   const toggleTopic = (id) => {
     if (matchTopics.includes(id)) {
       setMatchTopics(matchTopics.filter(t => t !== id));
+      setTopicLimitHit(false);
     } else if (matchTopics.length < MAX_MATCH_TOPICS) {
       setMatchTopics([...matchTopics, id]);
+    } else {
+      setTopicLimitHit(true);
+      clearTimeout(limitTimerRef.current);
+      limitTimerRef.current = setTimeout(() => setTopicLimitHit(false), 2600);
     }
   };
+  const renderChip = (t, decorative = false) => {
+    const selected = matchTopics.includes(t.id);
+    const full = !selected && matchTopics.length >= MAX_MATCH_TOPICS;
+    return (
+      <button
+        key={decorative ? `${t.id}-loop` : t.id}
+        type="button"
+        className={`topic-chip${selected ? ' is-selected' : ''}${full ? ' is-full' : ''}`}
+        aria-pressed={selected}
+        aria-hidden={decorative || undefined}
+        tabIndex={decorative ? -1 : undefined}
+        onClick={() => toggleTopic(t.id)}
+      >
+        <span className="topic-chip__emoji" aria-hidden="true">{t.emoji}</span>
+        {t.label}
+      </button>
+    );
+  };
+  // Phones: three rows that drift slowly (alternating direction) so it's obvious there are more.
+  const topicRows = [0, 1, 2].map(r => MATCH_TOPICS.filter((_, i) => i % 3 === r));
   const topicNames = matchTopics.map(id => topicById(id)?.label).filter(Boolean).join(', ');
   const searchTopicLine = matchTopics.length === 0
     ? null
@@ -263,7 +293,7 @@ export function MatchRadar() {
         <div className="match-filter-row">
           <span className="match-filter-row__label" id="meet-label">Meet</span>
           <div className="match-gender" role="radiogroup" aria-labelledby="meet-label">
-            {[['any', 'Anyone'], ['boy', 'Male'], ['girl', 'Female']].map(([id, label]) => (
+            {[['any', 'Anyone'], ['boy', 'Male'], ['girl', 'Female'], ['other', 'Other']].map(([id, label]) => (
               <button
                 key={id}
                 type="button"
@@ -279,28 +309,25 @@ export function MatchRadar() {
         </div>
 
         <fieldset className="topic-picker topic-picker--row">
-          <legend className="topic-picker__label">
-            Vibes <span className="topic-picker__hint">· up to {MAX_MATCH_TOPICS}, optional</span>
-          </legend>
-        <div className="topic-picker__chips">
-          {MATCH_TOPICS.map(t => {
-            const selected = matchTopics.includes(t.id);
-            const full = !selected && matchTopics.length >= MAX_MATCH_TOPICS;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                className={`topic-chip${selected ? ' is-selected' : ''}`}
-                aria-pressed={selected}
-                disabled={full}
-                onClick={() => toggleTopic(t.id)}
-              >
-                <span className="topic-chip__emoji" aria-hidden="true">{t.emoji}</span>
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
+          <legend className="topic-picker__label">Vibes</legend>
+          <div className="topic-picker__chips topic-picker__chips--wrap">
+            {MATCH_TOPICS.map(t => renderChip(t))}
+          </div>
+          <div className="topic-marquee">
+            {topicRows.map((row, r) => (
+              <div key={r} className={`topic-marquee__row topic-marquee__row--${r}`}>
+                <div className="topic-marquee__track">
+                  {row.map(t => renderChip(t))}
+                  {row.map(t => renderChip(t, true))}
+                </div>
+              </div>
+            ))}
+          </div>
+          {topicLimitHit && (
+            <p className="topic-picker__limit" role="alert">
+              You can pick up to {MAX_MATCH_TOPICS} vibes. Tap one you've picked to swap it.
+            </p>
+          )}
       </fieldset>
       </div>
 
@@ -317,6 +344,8 @@ export function MatchRadar() {
           </button>
         </div>
       </div>
+
+      <CraftedCredit className="match-home__credit" />
     </div>
   );
 }

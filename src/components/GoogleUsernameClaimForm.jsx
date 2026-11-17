@@ -17,7 +17,7 @@ const girlAvatars = Array.from({ length: 24 }, (_, i) => `/userImages/girl${i + 
  * - onSubmit:    ({ username, name, gender }) => Promise
  * - onCancel:    optional back/cancel affordance
  */
-export function GoogleUsernameClaimForm({ suggestion, loading, error, onSubmit, onCancel }) {
+export function GoogleUsernameClaimForm({ suggestion, loading, error, onSubmit, onCancel, genderLocked = false }) {
   const [username, setUsername] = useState(suggestion?.suggestedUsername || '');
   const [name, setName] = useState(suggestion?.name || suggestion?.suggestedUsername || '');
   const [gender, setGender] = useState(suggestion?.gender || 'boy');
@@ -103,20 +103,26 @@ export function GoogleUsernameClaimForm({ suggestion, loading, error, onSubmit, 
             id="google-claim-gender"
             value={gender}
             onChange={(e) => handleGenderChange(e.target.value)}
-            disabled={loading}
+            disabled={loading || genderLocked}
             style={{ background: 'transparent', color: 'var(--text-primary)', border: 'none', outline: 'none', flex: 1 }}
           >
             <option value="boy" style={{ background: '#21141f' }}>Boy</option>
             <option value="girl" style={{ background: '#21141f' }}>Girl</option>
+            <option value="other" style={{ background: '#21141f' }}>Other</option>
           </select>
         </div>
+        <p style={{ fontSize: 'var(--fs-sm)', color: genderLocked ? 'var(--text-muted)' : 'var(--accent)', margin: '6px 0 0' }}>
+          {genderLocked
+            ? 'Your gender was set when you joined and can\'t be changed.'
+            : 'Heads up: you can\'t change your gender once it\'s set.'}
+        </p>
       </div>
 
       {/* Avatar selector */}
       <div className="form-group">
         <label>Choose Avatar *</label>
         <div className="avatar-picker-grid">
-          {(gender === 'girl' ? girlAvatars : boyAvatars).map((picUrl, idx) => {
+          {(gender === 'girl' ? girlAvatars : gender === 'other' ? [...boyAvatars, ...girlAvatars] : boyAvatars).map((picUrl, idx) => {
             const isSelected = photoUrl === picUrl;
             return (
               <button

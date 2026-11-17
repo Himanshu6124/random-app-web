@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
-import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Star, Hand, RefreshCw, X, Zap, Ban, UserRound, AlertTriangle, CheckCheck, Check, Wine, Clock } from 'lucide-react';
-import { extractPeerName, MAX_MESSAGE_LENGTH } from '../services/socketService';
+import { SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Star, Hand, RefreshCw, X, Zap, UserRound, AlertTriangle, CheckCheck, Check, Wine, Clock, WifiOff } from 'lucide-react';
+import { extractPeerName } from '../services/socketService';
 import { authService } from '../services/authService';
 import { PeerAbout } from './chat/PeerAbout';
-import { MediaComposer } from './MediaComposer';
+import { ChatComposer } from './ChatComposer';
 import { ChatMediaMessage } from './ChatMediaMessage';
-import { DiscoverConfirmDialog } from './discover/DiscoverConfirmDialog';
+import { useProfileCard } from './ProfileCard';
+import { timeAgo } from './discover/discoverUtils';
 import { useNewMessageIds, displayTime } from '../mobile/useNewMessageIds';
 import { BottleGame, GameFeedCard } from './BottleGame';
 import { playReveal, unlockGameAudio } from '../services/gameFx';
@@ -15,9 +16,21 @@ import { MessageShell, ReplyQuote, ReplyComposerBar } from './chat/MessageExtras
 import { isInteractive, jumpToMessage } from './chat/messageUtils';
 import { useMessageInteractions } from './chat/useMessageInteractions';
 import { feedback } from '../mobile/feedback';
+import { MarqueeText } from './MarqueeText';
 
 // AI partners we "sent" a friend request to (never sent to the server), kept across tab switches.
 const botRequestsSent = new Set();
+
+/** "last seen 3m ago", re-rendered every 30s so it keeps counting. */
+function LastSeen({ value, prefix = 'last seen' }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
+  const ago = timeAgo(value);
+  return ago ? `${prefix} ${ago}` : null;
+}
 
 export function ChatBox() {
   const {
@@ -31,14 +44,15 @@ export function ChatBox() {
     friends,
     friendRequests,
     liveFriendRequest,
-    blockUser,
     soundEnabled
   } = useAuth();
+  const { openProfile } = useProfileCard();
   const {
     currentPeer,
     messages,
     isPeerTyping,
     isPeerOnline,
+    peerLastSeen,
     peerLeft,
     isLiveConnected,
     sendMessage,
@@ -63,11 +77,7 @@ export function ChatBox() {
   const [friendStatus, setFriendStatus] = useState('NONE'); // 'NONE' | 'PENDING_SENT' | 'PENDING_RECEIVED' | 'ACCEPTED'
   const [actionLoading, setActionLoading] = useState(false);
   const [mediaError, setMediaError] = useState('');
-  const [blockConfirmOpen, setBlockConfirmOpen] = useState(false);
-  const [blocking, setBlocking] = useState(false);
-  const [blockError, setBlockError] = useState('');
   const [gameOpen, setGameOpen] = useState(false);
-  const [aboutOpen, setAboutOpen] = useState(false);
   const [replyTarget, setReplyTarget] = useState(null);
   const interactions = useMessageInteractions();
   const closeInteractions = interactions.close;
@@ -206,32 +216,34 @@ export function ChatBox() {
     }
   };
 
-  const openBlockConfirm = () => {
-    setBlockError('');
-    setBlockConfirmOpen(true);
+  // Tapping the peer opens the shared profile card. Blocking from it ends this room server-side
+  // (the stranger just sees "left the chat"), so move straight on to the next stranger.
+  const openPeerProfile = () => {
+    if (!peerId) return;
+    openProfile({
+      id: peerId,
+      name: peerName,
+      username: currentPeer.username,
+      photoUrl: currentPeer.photoUrl,
+      bio: currentPeer.peerBio,
+      isGuest: currentPeer.peerGuest
+    }, {
+      isAi: isAiPeer,
+      topics: currentPeer.peerTopics,
+      sharedTopics: currentPeer.sharedTopics,
+      presence: { online: isPeerOnline && !peerLeft, lastSeen: peerLastSeen },
+      inChat: true,
+      onBlocked: () => skipStranger()
+    });
   };
 
-  // Block ends this room server-side (the stranger just sees "left the chat"), and the
-  // matchmaker never pairs the two again. Then move straight on to the next stranger.
-  const handleConfirmBlock = async () => {
-    if (!peerId || blocking) return;
-    setBlocking(true);
-    setBlockError('');
-    try {
-      await blockUser(peerId);
-      setBlockConfirmOpen(false);
-      skipStranger();
-    } catch (err) {
-      setBlockError(err?.message || 'Could not block this user. Please try again.');
-    } finally {
-      setBlocking(false);
-    }
-  };
-
-  const composerDisabled = peerLeft || !isLiveConnected;
+  // Nothing can reach a peer who left, or one who is temporarily disconnected: every action
+  // that talks to them is switched off (Next / Exit stay available).
+  const peerAway = !peerLeft && !isPeerOnline;
+  const composerDisabled = peerLeft || !isLiveConnected || peerAway;
   const composerPlaceholder = peerLeft
-    ? 'Your chat partner left the chat'
-    : (!isLiveConnected ? 'Reconnecting…' : 'Say something sweet…');
+    ? `${peerName} left the chat`
+    : (!isLiveConnected ? 'Reconnecting…' : (peerAway ? `Waiting for ${peerName} to reconnect…` : 'Say something sweet…'));
 
   const freshIds = useNewMessageIds(messages, currentPeer?.id || 'random');
 
@@ -308,7 +320,7 @@ export function ChatBox() {
   // soon as the server's SPIN event reaches both of us.
   const [spinPending, setSpinPending] = useState(false);
   const handleSpinClick = () => {
-    if (peerLeft || !isLiveConnected) return;
+    if (composerDisabled) return;
     unlockGameAudio();
     const sent = spinBottle();
     setSpinPending(Boolean(sent));
@@ -325,8 +337,7 @@ export function ChatBox() {
     closeInteractions();
   }, [activeConvId, peerLeft, closeInteractions]);
 
-  const handleSend = (e) => {
-    e.preventDefault();
+  const handleSend = () => {
     if (!inputMsg.trim() || composerDisabled) return;
     feedback('send');
     sendMessage(inputMsg, replyTarget?.id || null);
@@ -352,12 +363,14 @@ export function ChatBox() {
   const handleIcebreakerClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (composerDisabled) return;
     sendIcebreaker();
   };
 
   const handleReactionClick = (e, emoji) => {
     e.preventDefault();
     e.stopPropagation();
+    if (composerDisabled) return;
     sendReaction(emoji);
   };
 
@@ -384,7 +397,7 @@ export function ChatBox() {
         </div>
       ))}
 
-      {/* Top Header Bar */}
+      {/* Top Header Bar: who you're talking to (tap for their profile), Friend + Exit */}
       <div className="chat-topbar" style={{
         padding: '16px 20px',
         borderBottom: '1px solid var(--border-color)',
@@ -393,16 +406,14 @@ export function ChatBox() {
         justifyContent: 'space-between',
         background: 'rgba(26, 16, 25, 0.4)',
         position: 'relative',
-        zIndex: aboutOpen ? 60 : 10
+        zIndex: 10
       }}>
-        {/* Peer Profile Info: tap to see their bio and interests */}
         <button
           type="button"
           className="chat-peer-info"
-          onClick={() => setAboutOpen(o => !o)}
-          aria-expanded={aboutOpen}
-          aria-label={`About ${peerName}`}
-          style={{ display: 'flex', alignItems: 'center', gap: '14px' }}
+          onClick={openPeerProfile}
+          aria-label={`View ${peerName}'s profile`}
+          style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1 1 auto', minWidth: 0 }}
         >
           <div style={{
             width: '46px',
@@ -427,63 +438,32 @@ export function ChatBox() {
               <UserRound size={18} aria-hidden="true" />
             )}
           </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: '8px', rowGap: '2px' }}>
-              <h3 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700 }}>{peerName}</h3>
-              {isPeerOnline ? (
-                <span className="online-badge" aria-label="Online">Online</span>
-              ) : (
-                <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)' }}>Offline</span>
-              )}
-            </div>
-            {currentPeer.peerBio && (
-              <p className="chat-peer-bio" style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)' }}>
-                {currentPeer.peerBio}
-              </p>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <MarqueeText as="h3" style={{ fontSize: 'var(--fs-lg)', fontWeight: 700 }}>{peerName}</MarqueeText>
+            {peerLeft ? (
+              <span className="chat-peer-status chat-peer-status--left">Left the chat</span>
+            ) : isPeerOnline ? (
+              <span className="online-badge" aria-label="Online">Online</span>
+            ) : (
+              <span className="chat-peer-status">
+                Offline{peerLastSeen ? <> · <LastSeen value={peerLastSeen} /></> : null}
+              </span>
             )}
           </div>
         </button>
-        {aboutOpen && (
-          <>
-            <div className="peer-about-backdrop" onClick={() => setAboutOpen(false)} aria-hidden="true" />
-            <div className="peer-about-popover" role="dialog" aria-label={`About ${peerName}`}>
-              <div className="peer-about-popover__name">{peerName}</div>
-              <PeerAbout
-                bio={currentPeer.peerBio}
-                topics={currentPeer.peerTopics}
-                sharedTopics={currentPeer.sharedTopics}
-              />
-              {!currentPeer.peerBio && !(currentPeer.peerTopics || []).length && (
-                <p className="peer-about-popover__empty">{peerName} hasn't added a bio or interests yet.</p>
-              )}
-            </div>
-          </>
-        )}
 
-        {/* Action Controls */}
+        {/* Action Controls: friend request + exit only; block/report live on the profile card */}
         <div className="chat-header-actions">
           {friendStatus === 'ACCEPTED' ? (
             <button
               id="friend-status-btn"
               type="button"
               disabled
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 14px',
-                fontSize: 'var(--fs-md)',
-                fontWeight: 600,
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid rgba(63, 178, 127, 0.4)',
-                background: 'rgba(63, 178, 127, 0.15)',
-                color: '#3fb27f',
-                cursor: 'default'
-              }}
+              className="chat-friend-btn chat-friend-btn--friends"
               title="You are friends!"
             >
-              <UserCheck size={16} />
-              <span>Friends</span>
+              <UserCheck size={16} aria-hidden="true" />
+              <span className="label-long">Friends</span>
             </button>
           ) : friendStatus === 'PENDING_SENT' ? (
             <button
@@ -491,24 +471,12 @@ export function ChatBox() {
               type="button"
               onClick={handleFriendActionClick}
               disabled={actionLoading}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 14px',
-                fontSize: 'var(--fs-md)',
-                fontWeight: 600,
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border-strong)',
-                background: 'transparent',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer'
-              }}
+              className="chat-friend-btn chat-friend-btn--sent"
               title="Friend request sent. Tap to cancel"
               aria-label="Friend request sent. Tap to cancel"
             >
               <Clock size={16} aria-hidden="true" />
-              <span className="label-long">{actionLoading ? 'Cancelling...' : 'Request sent'}</span>
+              <span className="label-long">{actionLoading ? 'Cancelling...' : 'Requested'}</span>
             </button>
           ) : friendStatus === 'PENDING_RECEIVED' ? (
             <button
@@ -516,23 +484,12 @@ export function ChatBox() {
               type="button"
               onClick={handleFriendActionClick}
               disabled={actionLoading}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 14px',
-                fontSize: 'var(--fs-md)',
-                fontWeight: 600,
-                borderRadius: 'var(--radius-md)',
-                border: 'none',
-                background: 'var(--accent)',
-                color: 'var(--accent-ink)',
-                cursor: 'pointer'
-              }}
-              title="Click to accept friend request"
+              className="btn-primary chat-friend-btn"
+              title="Accept friend request"
+              aria-label="Accept friend request"
             >
-              <UserCheck size={16} />
-              <span>{actionLoading ? 'Accepting...' : 'Accept Friend'}</span>
+              <UserCheck size={16} aria-hidden="true" />
+              <span className="label-long">{actionLoading ? 'Accepting...' : 'Accept'}</span>
             </button>
           ) : (
             <button
@@ -540,59 +497,24 @@ export function ChatBox() {
               type="button"
               onClick={handleFriendActionClick}
               disabled={actionLoading}
-              className="btn-primary"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 14px',
-                fontSize: 'var(--fs-md)',
-                cursor: 'pointer'
-              }}
+              className="btn-primary chat-friend-btn"
               title="Add to Friends"
               aria-label="Add Friend"
             >
               <UserPlus size={16} aria-hidden="true" />
               <span className="label-long">{actionLoading ? 'Sending...' : 'Add Friend'}</span>
-              <span className="label-short">Add</span>
             </button>
           )}
-
-          <button
-            id="next-stranger-btn"
-            type="button"
-            onClick={skipStranger}
-            className="btn-secondary"
-            style={{ padding: '8px 16px', fontSize: 'var(--fs-md)', cursor: 'pointer' }}
-          >
-            <SkipForward size={16} aria-hidden="true" />
-            <span className="label-long">Next Stranger</span>
-            <span className="label-short">Next</span>
-          </button>
-
-          <button
-            id="block-stranger-btn"
-            type="button"
-            onClick={openBlockConfirm}
-            disabled={!peerId || blocking}
-            className="btn-secondary chat-tool-btn"
-            style={{ padding: '8px 12px', cursor: 'pointer' }}
-            title={`Block ${peerName}`}
-            aria-label={`Block ${peerName}`}
-          >
-            <Ban size={16} />
-          </button>
 
           <button
             id="disconnect-chat-btn"
             type="button"
             onClick={disconnectChat}
             className="btn-secondary chat-tool-btn"
-            style={{ padding: '8px 12px', cursor: 'pointer' }}
-            title="Leave Chat"
-            aria-label="Leave Chat"
+            title="Leave chat"
+            aria-label="Leave chat"
           >
-            <LogOut size={16} />
+            <LogOut size={16} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -662,7 +584,7 @@ export function ChatBox() {
                 isMe={isMe}
                 myId={myId}
                 interactions={interactions}
-                enabled={isInteractive(msg) && !peerLeft && isLiveConnected}
+                enabled={isInteractive(msg) && !composerDisabled}
                 onReply={startReply}
                 onReact={handleReact}
               >
@@ -789,6 +711,7 @@ export function ChatBox() {
           <button
             type="button"
             onClick={handleIcebreakerClick}
+            disabled={composerDisabled}
             className="btn-secondary chat-subbar-pill"
           >
             <HelpCircle size={15} color="var(--text-secondary)" aria-hidden="true" />
@@ -801,7 +724,7 @@ export function ChatBox() {
             id="spin-bottle-btn"
             type="button"
             onClick={handleSpinClick}
-            disabled={peerLeft || !isLiveConnected}
+            disabled={composerDisabled}
             className="btn-secondary chat-subbar-pill chat-game-btn"
             aria-label="Play Truth & Dare"
           >
@@ -824,6 +747,7 @@ export function ChatBox() {
               key={item.emoji}
               type="button"
               onClick={(e) => handleReactionClick(e, item.emoji)}
+              disabled={composerDisabled}
               className="reaction-chip"
               aria-label={`Send ${item.emoji}`}
             >
@@ -833,22 +757,11 @@ export function ChatBox() {
         </div>
       </div>
 
-      {/* Peer left the chat — a retry can never work, so offer a new match instead */}
+      {/* Peer left on purpose (Next / Exit / blocked) or never came back: this chat is over */}
       {peerLeft && (
-        <div style={{
-          padding: '14px 20px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
-          flexWrap: 'wrap',
-          background: 'var(--danger-tint)',
-          borderTop: '1px solid var(--danger-line)',
-          position: 'relative',
-          zIndex: 20
-        }}>
-          <span style={{ fontSize: 'var(--fs-md)', color: 'var(--danger)' }}>
-            Your chat partner left the chat.
+        <div className="chat-state-banner chat-state-banner--left" role="status">
+          <span>
+            <strong>{peerName} left the chat.</strong> Nothing more can be sent here.
           </span>
           <button
             id="find-new-match-btn"
@@ -857,13 +770,34 @@ export function ChatBox() {
             className="btn-primary"
             style={{ padding: '8px 16px', fontSize: 'var(--fs-md)', cursor: 'pointer' }}
           >
-            <Zap size={16} />
+            <Zap size={16} aria-hidden="true" />
             <span>Find a new match</span>
           </button>
         </div>
       )}
 
-      {/* Connection is down — say so instead of silently swallowing messages */}
+      {/* Peer's connection dropped (phone locked, app in background): they can still come back */}
+      {peerAway && isLiveConnected && (
+        <div className="chat-state-banner chat-state-banner--away" role="status">
+          <WifiOff size={16} aria-hidden="true" />
+          <span>
+            <strong>{peerName} is temporarily disconnected</strong>
+            {peerLastSeen ? <> · <LastSeen value={peerLastSeen} prefix="last active" /></> : null}
+            . They can rejoin in a few minutes, or you can move on.
+          </span>
+          <button
+            type="button"
+            onClick={skipStranger}
+            className="btn-secondary"
+            style={{ padding: '8px 14px', fontSize: 'var(--fs-md)', cursor: 'pointer', flexShrink: 0 }}
+          >
+            <SkipForward size={16} aria-hidden="true" />
+            <span>Next match</span>
+          </button>
+        </div>
+      )}
+
+      {/* Our own connection is down — say so instead of silently swallowing messages */}
       {!isLiveConnected && !peerLeft && (
         <div style={{
           padding: '10px 20px',
@@ -874,7 +808,7 @@ export function ChatBox() {
           position: 'relative',
           zIndex: 20
         }}>
-          Reconnecting… messages cannot be delivered right now.
+          Reconnecting… you'll be put back into this chat as soon as you're online.
         </div>
       )}
 
@@ -912,67 +846,38 @@ export function ChatBox() {
         />
       )}
 
-      {/* Text Message Input */}
-      <form className="chat-composer" onSubmit={handleSend} style={{
-        padding: '16px 20px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        background: 'rgba(20, 12, 20, 0.8)',
-        position: 'relative',
-        zIndex: 20
-      }}>
-        <MediaComposer
-          conversationId={currentPeer?.conversationId || currentPeer?.id}
-          disabled={composerDisabled}
-          onSend={handleSendMedia}
-          onError={setMediaError}
-        />
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputMsg}
-          onChange={handleInputChange}
-          onBlur={() => notifyTyping(false)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape' && replyTarget) {
-              e.preventDefault();
-              setReplyTarget(null);
-            }
-          }}
-          disabled={composerDisabled}
-          placeholder={composerPlaceholder}
-          maxLength={MAX_MESSAGE_LENGTH}
-          style={{
-            flex: 1,
-            padding: '14px 20px',
-            borderRadius: 'var(--radius-full)',
-            background: 'var(--bg-input)',
-            border: '1px solid var(--border-color)',
-            color: 'var(--text-primary)',
-            fontSize: 'var(--fs-body)',
-            outline: 'none',
-            opacity: composerDisabled ? 0.6 : 1
-          }}
-        />
-        <button
-          type="submit"
-          className="btn-primary send-btn"
-          disabled={composerDisabled}
-          style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '50%',
-            padding: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: composerDisabled ? 'not-allowed' : 'pointer'
-          }}
-        >
-          <Send size={20} />
-        </button>
-      </form>
+      {/* Message bar: Next match on the left, then the message field (image inside), then mic / send */}
+      <ChatComposer
+        value={inputMsg}
+        onChange={handleInputChange}
+        onSubmit={handleSend}
+        onBlur={() => notifyTyping(false)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && replyTarget) {
+            e.preventDefault();
+            setReplyTarget(null);
+          }
+        }}
+        inputRef={inputRef}
+        disabled={composerDisabled}
+        placeholder={composerPlaceholder}
+        conversationId={currentPeer?.conversationId || currentPeer?.id}
+        onSendMedia={handleSendMedia}
+        onMediaError={setMediaError}
+        leading={(
+          <button
+            id="next-stranger-btn"
+            type="button"
+            onClick={skipStranger}
+            className="btn-secondary wa-next-btn"
+            title="Next match"
+            aria-label="Next match"
+          >
+            <SkipForward size={18} aria-hidden="true" />
+            <span className="wa-next-btn__label">Next</span>
+          </button>
+        )}
+      />
 
       {/* Truth & Dare: a dialog over this chat screen only; the chat behind it is blurred. */}
       {gameOpen && (
@@ -982,7 +887,7 @@ export function ChatBox() {
             myId={user?.id}
             me={{ name: user?.name || user?.username || 'You', photoUrl: user?.photoUrl }}
             peer={{ name: peerName, photoUrl: currentPeer.photoUrl }}
-            disabled={peerLeft || !isLiveConnected}
+            disabled={composerDisabled}
             spinPending={spinPending}
             soundEnabled={soundEnabled}
             onSpin={spinBottle}
@@ -993,17 +898,6 @@ export function ChatBox() {
         </div>
       )}
 
-      <DiscoverConfirmDialog
-        open={blockConfirmOpen}
-        title={`Block ${peerName}?`}
-        body="This ends the chat now. You will never be matched with them again, they cannot find you or send you friend requests, and any friendship and chat history with them is removed. You can unblock them later from the Friends tab."
-        confirmLabel={blocking ? 'Blocking…' : 'Block & skip'}
-        danger
-        busy={blocking}
-        error={blockError}
-        onConfirm={handleConfirmBlock}
-        onCancel={() => setBlockConfirmOpen(false)}
-      />
     </div>
   );
 }

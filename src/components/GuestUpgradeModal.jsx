@@ -229,6 +229,7 @@ export function GuestUpgradeModal() {
             loading={claimLoading}
             error={claimError}
             onSubmit={handleClaimSubmit}
+            genderLocked={Boolean(user?.gender)}
             onCancel={() => { setGoogleClaim(null); setPendingIdToken(null); setClaimError(''); }}
           />
         ) : (

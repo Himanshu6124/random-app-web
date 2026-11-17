@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import '../../styles/discover.css';
+import { Portal } from '../Portal';
 
 /** Small confirm dialog for destructive actions (clear history, block, report, unfriend). */
 export function DiscoverConfirmDialog({ open, title, body, confirmLabel, danger = false, busy = false, error = '', onConfirm, onCancel }) {
@@ -16,6 +17,7 @@ export function DiscoverConfirmDialog({ open, title, body, confirmLabel, danger 
   if (!open) return null;
 
   return (
+    <Portal>
     <div className="dc-dialog-backdrop" onClick={onCancel}>
       <div
         className="dc-dialog"
@@ -42,5 +44,6 @@ export function DiscoverConfirmDialog({ open, title, body, confirmLabel, danger 
         </div>
       </div>
     </div>
+    </Portal>
   );
 }

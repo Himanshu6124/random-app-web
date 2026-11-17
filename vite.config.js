@@ -55,6 +55,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
+        // Random-room status, read when the app comes back from the background
+        '/random': {
+          target: BACKEND,
+          changeOrigin: true,
+          secure: false,
+        },
         // Analytics collection + admin dashboard API
         '/public': {
           target: BACKEND,

@@ -326,8 +326,25 @@ export class SocketService {
       } catch (e) {}
     };
 
+    // Coming back from the background (phone unlocked, tab re-focused, page restored from the
+    // back/forward cache): reconnect NOW instead of waiting out the exponential backoff, and let
+    // the app resync whatever it may have missed.
+    this._onPageResume = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (this._lastResumeAt && now - this._lastResumeAt < 1500) return;
+      this._lastResumeAt = now;
+      if (this.client && !this.client.connected && !this._authExpired) {
+        this._onWindowOnline?.();
+      }
+      this.callbacks.onResume?.({ connected: Boolean(this.client?.connected) });
+    };
+
     window.addEventListener('offline', this._onWindowOffline);
     window.addEventListener('online', this._onWindowOnline);
+    document.addEventListener('visibilitychange', this._onPageResume);
+    window.addEventListener('pageshow', this._onPageResume);
+    window.addEventListener('focus', this._onPageResume);
     this._networkListenersBound = true;
   }
 
@@ -335,6 +352,11 @@ export class SocketService {
     if (!this._networkListenersBound || typeof window === 'undefined') return;
     window.removeEventListener('offline', this._onWindowOffline);
     window.removeEventListener('online', this._onWindowOnline);
+    if (this._onPageResume) {
+      document.removeEventListener('visibilitychange', this._onPageResume);
+      window.removeEventListener('pageshow', this._onPageResume);
+      window.removeEventListener('focus', this._onPageResume);
+    }
     this._networkListenersBound = false;
   }
 
@@ -405,12 +427,14 @@ export class SocketService {
           this.callbacks.onFriendRequestCancelled?.(event.payload);
         } else if (event.type === 'FRIEND_WAVE') {
           this.callbacks.onFriendWave?.(event.payload);
+        } else if (event.type === 'GAME_INVITE') {
+          this.callbacks.onGameInvite?.(event.payload);
         } else if (event.type === 'MESSAGE') {
           this.callbacks.onDirectMessageReceived?.(event.payload);
         } else if (event.type === 'ONLINE_STATUS') {
           // A friend came online / went offline (pushed to every friend, chat open or not)
           const p = event.payload || {};
-          if (p.senderId) this.callbacks.onFriendPresence?.(p.senderId, Boolean(p.online));
+          if (p.senderId) this.callbacks.onFriendPresence?.(p.senderId, Boolean(p.online), p.lastSeen || null);
         }
       } catch (e) {
         console.warn('[SocketService] Failed to parse notification frame:', e);

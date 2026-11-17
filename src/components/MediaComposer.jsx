@@ -1,5 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { Image as ImageIcon, Mic, X, Square } from 'lucide-react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import {
   isMediaSupported,
   prepareImage,
@@ -7,37 +6,21 @@ import {
   startVoiceRecording,
   newMessageId
 } from '../services/mediaService';
-import { VoiceWaveform } from './VoiceWaveform';
 
-const formatMs = (ms) => {
+export const formatMs = (ms) => {
   const total = Math.floor(ms / 1000);
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 };
 
-const btnStyle = {
-  width: '42px',
-  height: '42px',
-  borderRadius: '50%',
-  padding: 0,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  flexShrink: 0,
-  border: '1px solid var(--border-color)',
-  background: 'var(--bg-input)',
-  cursor: 'pointer'
-};
-
 /**
- * Attach-image + voice-note controls shared by the random chat and friend DMs (B2-3).
+ * Image + voice-note sending shared by the random chat and friend DMs (B2-3): upload state,
+ * the hidden file picker and the recorder. The composer decides where the buttons go.
  *
- * Props:
  * - conversationId: current conversation (uploads are namespaced under it)
- * - disabled:       composer is closed (peer left / reconnecting)
  * - onSend:         ({ type, objectUri, localPreviewUrl }) => void, fired after upload
  * - onError:        (message) => void, inline error surfacing (never silent)
  */
-export function MediaComposer({ conversationId, disabled, onSend, onError }) {
+export function useMediaComposer({ conversationId, onSend, onError }) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [recording, setRecording] = useState(false);
@@ -46,6 +29,10 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
   const fileInputRef = useRef(null);
   const recorderRef = useRef(null);
   const tickRef = useRef(null);
+  const onSendRef = useRef(onSend);
+  const onErrorRef = useRef(onError);
+  onSendRef.current = onSend;
+  onErrorRef.current = onError;
 
   useEffect(() => () => {
     // Unmount mid-recording must never leak the mic.
@@ -55,37 +42,9 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
 
   const configured = isMediaSupported();
 
-  if (!configured) {
-    // Firebase web config missing: the controls stay VISIBLE but disabled, with a visible
-    // explanation (CONTRACT B2-3: "hide or disable with an explanation" — disabled beats
-    // hidden for discoverability). Text chat behaves exactly as it does today.
-    return (
-      <div id="media-controls-not-configured" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-        <button
-          type="button"
-          id="attach-image-btn"
-          disabled
-          title="Image sharing is disabled: Cloudinary is not configured yet (add VITE_CLOUDINARY_* to .env)"
-          style={{ ...btnStyle, opacity: 0.35, cursor: 'not-allowed' }}
-        >
-          <ImageIcon size={18} color="var(--text-muted)" />
-        </button>
-        <button
-          type="button"
-          id="voice-record-btn"
-          disabled
-          title="Voice notes are disabled: Cloudinary is not configured yet (add VITE_CLOUDINARY_* to .env)"
-          style={{ ...btnStyle, opacity: 0.35, cursor: 'not-allowed' }}
-        >
-          <Mic size={18} color="var(--text-muted)" />
-        </button>
-      </div>
-    );
-  }
+  const pickImage = useCallback(() => fileInputRef.current?.click(), []);
 
-  const handlePickImage = () => fileInputRef.current?.click();
-
-  const handleFileChange = async (e) => {
+  const onFileChange = useCallback(async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !conversationId) return;
@@ -97,17 +56,17 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
       const messageId = newMessageId();
       const localPreviewUrl = URL.createObjectURL(blob);
       const objectUri = await uploadChatMedia(blob, conversationId, messageId, { onProgress: setProgress });
-      onSend({ type: 'IMAGE', objectUri, localPreviewUrl });
+      onSendRef.current?.({ type: 'IMAGE', objectUri, localPreviewUrl });
     } catch (err) {
-      onError(err?.message || 'Image upload failed.');
+      onErrorRef.current?.(err?.message || 'Image upload failed.');
     } finally {
       setUploading(false);
       setProgress(0);
     }
-  };
+  }, [conversationId]);
 
-  const handleStartRecording = async () => {
-    if (!conversationId) return;
+  const startRecording = useCallback(async () => {
+    if (!conversationId || recorderRef.current) return;
     try {
       const controller = await startVoiceRecording();
       recorderRef.current = controller;
@@ -117,14 +76,14 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
       tickRef.current = setInterval(() => setElapsed(controller.elapsedMs()), 200);
     } catch (err) {
       if (err?.name === 'NotAllowedError' || /denied|permission/i.test(err?.message || '')) {
-        onError('Microphone permission was denied. Allow mic access to record voice notes.');
+        onErrorRef.current?.('Microphone permission was denied. Allow mic access to record voice notes.');
       } else {
-        onError(err?.message || 'Voice recording is unavailable.');
+        onErrorRef.current?.(err?.message || 'Voice recording is unavailable.');
       }
     }
-  };
+  }, [conversationId]);
 
-  const handleStopRecording = async () => {
+  const stopRecording = useCallback(async () => {
     const controller = recorderRef.current;
     if (!controller) return;
     recorderRef.current = null;
@@ -138,105 +97,38 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
       const { blob } = await controller.stop();
       const messageId = newMessageId();
       const objectUri = await uploadChatMedia(blob, conversationId, messageId, { onProgress: setProgress });
-      onSend({ type: 'AUDIO', objectUri, localPreviewUrl: null });
+      onSendRef.current?.({ type: 'AUDIO', objectUri, localPreviewUrl: null });
     } catch (err) {
       if (err?.message !== 'cancelled') {
-        onError(err?.message || 'Voice note upload failed.');
+        onErrorRef.current?.(err?.message || 'Voice note upload failed.');
       }
     } finally {
       setUploading(false);
       setProgress(0);
     }
-  };
+  }, [conversationId]);
 
-  const handleCancelRecording = () => {
+  const cancelRecording = useCallback(() => {
     const controller = recorderRef.current;
     recorderRef.current = null;
     if (tickRef.current) clearInterval(tickRef.current);
     setRecording(false);
     setMicStream(null);
     controller?.cancel();
+  }, []);
+
+  return {
+    configured,
+    uploading,
+    progress,
+    recording,
+    elapsed,
+    micStream,
+    fileInputRef,
+    pickImage,
+    onFileChange,
+    startRecording,
+    stopRecording,
+    cancelRecording
   };
-
-  const busy = uploading || recording;
-
-  return (
-    <div
-      className={`media-composer${recording ? ' is-recording' : ''}`}
-      style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}
-    >
-      {uploading && (
-        <span id="media-upload-progress" style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-          {progress}%
-        </span>
-      )}
-
-      {recording ? (
-        <>
-          <span id="voice-recording-timer" style={{
-            fontSize: 'var(--fs-sm)', color: 'var(--danger)', fontWeight: 700, whiteSpace: 'nowrap',
-            display: 'flex', alignItems: 'center', gap: '6px'
-          }}>
-            <span style={{
-              width: '8px', height: '8px', borderRadius: '50%', background: 'var(--danger-fill)',
-              display: 'inline-block'
-            }} />
-            {formatMs(elapsed)}
-          </span>
-          <VoiceWaveform stream={micStream} />
-          {/* Cancel affordance: discard before sending */}
-          <button
-            type="button"
-            id="voice-cancel-btn"
-            onClick={handleCancelRecording}
-            disabled={disabled}
-            style={{ ...btnStyle, cursor: 'pointer' }}
-            title="Discard recording"
-          >
-            <X size={18} color="#e5484d" />
-          </button>
-          <button
-            type="button"
-            id="voice-stop-btn"
-            onClick={handleStopRecording}
-            disabled={disabled}
-            style={{ ...btnStyle, cursor: 'pointer', borderColor: 'var(--danger-line)' }}
-            title="Send voice note"
-          >
-            <Square size={16} color="#e5484d" fill="#e5484d" />
-          </button>
-        </>
-      ) : (
-        <>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            style={{ display: 'none' }}
-            onChange={handleFileChange}
-          />
-          <button
-            type="button"
-            id="attach-image-btn"
-            onClick={handlePickImage}
-            disabled={disabled || busy}
-            style={{ ...btnStyle, opacity: (disabled || busy) ? 0.5 : 1, cursor: (disabled || busy) ? 'not-allowed' : 'pointer' }}
-            title="Send an image"
-          >
-            <ImageIcon size={18} color="var(--text-secondary)" />
-          </button>
-          <button
-            type="button"
-            id="voice-record-btn"
-            onClick={handleStartRecording}
-            disabled={disabled || busy}
-            style={{ ...btnStyle, opacity: (disabled || busy) ? 0.5 : 1, cursor: (disabled || busy) ? 'not-allowed' : 'pointer' }}
-            title="Record a voice note (max 2 min)"
-          >
-            <Mic size={18} color="var(--text-secondary)" />
-          </button>
-        </>
-      )}
-    </div>
-  );
 }

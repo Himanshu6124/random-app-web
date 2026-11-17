@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { GuestEntryModal } from '../components/GuestEntryModal';
+import { CraftedCredit } from '../components/CraftedCredit';
 import { GoogleUsernameClaimForm } from '../components/GoogleUsernameClaimForm';
 import { HERO, STEPS, SAFETY, FAQ } from '../content/landingContent';
 import { SEO_PAGES } from '../content/seoPages';
@@ -246,6 +247,7 @@ export function LoginView() {
             ))}
           </ul>
         </nav>
+        <CraftedCredit />
       </footer>
 
       <GuestEntryModal

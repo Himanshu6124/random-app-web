@@ -1,17 +1,39 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { discoverService } from '../../services/discoverService';
 import { DiscoverAvatar } from './DiscoverAvatar';
 import { FriendshipButton } from './FriendshipButton';
-import { highlight } from './discoverUtils';
+import { highlight, timeAgo } from './discoverUtils';
+import { useProfileCard } from '../ProfileCard';
+
+/** "Online", "Last seen 5m ago" — kept ticking so it never goes stale on screen. */
+function PresenceLine({ online, lastOnline }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (online) return undefined;
+    const id = setInterval(() => setTick(t => t + 1), 30000);
+    return () => clearInterval(id);
+  }, [online]);
+  if (online) return <span className="dc-person-sub dc-person-sub--online">Online</span>;
+  const ago = timeAgo(lastOnline);
+  return <span className="dc-person-sub">{ago ? `Last seen ${ago}` : 'Offline'}</span>;
+}
+
+const seenAt = (f) => (f.isOnline ? Number.MAX_SAFE_INTEGER : (f.lastOnline ? new Date(f.lastOnline).getTime() : 0));
 
 const MIN_CHARS = 1;
 const PAGE_SIZE = 20;
 
 /** Find friends: search everyone (guests included) by name or @username. */
 export function FindFriendsPanel({ onOpenChat }) {
-  const { jwtToken } = useAuth();
+  const { jwtToken, friends } = useAuth();
+  const { openProfile } = useProfileCard();
+  // Friends first by who is online, then by who was online most recently.
+  const sortedFriends = useMemo(
+    () => [...friends].sort((a, b) => seenAt(b) - seenAt(a) || String(a.name || '').localeCompare(String(b.name || ''))),
+    [friends]
+  );
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [page, setPage] = useState(0);
@@ -120,10 +142,45 @@ export function FindFriendsPanel({ onOpenChat }) {
       {error && <div className="dc-error" role="alert">{error}</div>}
 
       {!term ? (
-        <div className="dc-empty">
-          <strong>Look someone up</strong>
-          <span>Type a name or @username, then tap search.</span>
-        </div>
+        sortedFriends.length === 0 ? (
+          <div className="dc-empty">
+            <strong>Look someone up</strong>
+            <span>Type a name or @username, then tap search.</span>
+          </div>
+        ) : (
+          <>
+            <span className="dc-muted">Your friends ({sortedFriends.length})</span>
+            <ul className="dc-person-list">
+              {sortedFriends.map(friend => {
+                const fid = friend.id || friend.friendUserId;
+                const fname = friend.name || friend.friendUserName || friend.username;
+                return (
+                  <li key={fid} className="dc-person-row dc-person-row--tappable">
+                    <button
+                      type="button"
+                      className="dc-person-open"
+                      onClick={() => openProfile({ ...friend, id: fid })}
+                      aria-label={`View ${fname}'s profile`}
+                    >
+                      <DiscoverAvatar id={fid} name={fname} photoUrl={friend.photoUrl} online={friend.isOnline} size={48} />
+                      <span className="dc-person-text">
+                        <span className="dc-person-name">{fname}</span>
+                        <PresenceLine online={friend.isOnline} lastOnline={friend.lastOnline} />
+                      </span>
+                    </button>
+                    <FriendshipButton
+                      personId={fid}
+                      name={fname}
+                      status="ACCEPTED"
+                      onMessage={() => onOpenChat(fid)}
+                      onError={setError}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )
       ) : (
         <>
           <span className="dc-muted" aria-live="polite">
@@ -138,18 +195,25 @@ export function FindFriendsPanel({ onOpenChat }) {
           ) : (
             <ul className="dc-person-list">
               {results.map(person => (
-                <li key={person.id} className="dc-person-row">
-                  <DiscoverAvatar
-                    id={person.id}
-                    name={person.name}
-                    photoUrl={person.photoUrl}
-                    online={person.isOnline}
-                    size={48}
-                  />
-                  <div className="dc-person-text">
-                    <span className="dc-person-name">{highlight(person.name, term)}</span>
-                    <span className="dc-person-sub">@{highlight(person.username, term)}</span>
-                  </div>
+                <li key={person.id} className="dc-person-row dc-person-row--tappable">
+                  <button
+                    type="button"
+                    className="dc-person-open"
+                    onClick={() => openProfile(person, { onBlocked: () => setStatus(person.id, 'BLOCKED') })}
+                    aria-label={`View ${person.name}'s profile`}
+                  >
+                    <DiscoverAvatar
+                      id={person.id}
+                      name={person.name}
+                      photoUrl={person.photoUrl}
+                      online={person.isOnline}
+                      size={48}
+                    />
+                    <span className="dc-person-text">
+                      <span className="dc-person-name">{highlight(person.name, term)}</span>
+                      <span className="dc-person-sub">@{highlight(person.username, term)}</span>
+                    </span>
+                  </button>
                   <FriendshipButton
                     personId={person.id}
                     name={person.name}

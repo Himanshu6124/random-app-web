@@ -1,4 +1,5 @@
 import React from 'react';
+import { Portal } from './Portal';
 import { X, Check, Loader2, UserRound } from 'lucide-react';
 
 export function FriendRequestDialog({
@@ -9,6 +10,7 @@ export function FriendRequestDialog({
   onReject
 }) {
   return (
+    <Portal>
     <div className="m-sheet-backdrop"
       onClick={(e) => {
         if (e.target === e.currentTarget) onDismiss();
@@ -210,5 +212,6 @@ export function FriendRequestDialog({
         )}
       </div>
     </div>
+    </Portal>
   );
 }
