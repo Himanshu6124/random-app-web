@@ -4,6 +4,8 @@
  * Conforms 100% to FRONTEND_INTEGRATION_GUIDE.md specifications.
  */
 
+import { track } from './analytics';
+
 const rawBackendUrl = import.meta.env.VITE_BACKEND_URL || '';
 const BASE_URL = rawBackendUrl.replace(/\/+$/, '');
 const TOKEN_KEY = 'randomeet_jwt_token';
@@ -830,3 +832,26 @@ export const authService = {
     }
   }
 };
+
+// Analytics: record auth and friendship outcomes (success only) without touching each method.
+const TRACKED_CALLS = {
+  loginAsGuest: 'guest_login',
+  login: 'login',
+  signUp: 'signup',
+  firebaseSignIn: 'google_login',
+  firebaseCompleteSignup: 'signup',
+  upgradeGuest: 'guest_upgrade',
+  firebaseLinkAccount: 'guest_upgrade',
+  sendFriendRequest: 'friend_request_sent',
+  acceptFriendRequest: 'friend_request_accepted',
+  deleteAccount: 'account_deleted',
+};
+for (const [method, eventName] of Object.entries(TRACKED_CALLS)) {
+  const original = authService[method];
+  if (typeof original !== 'function') continue;
+  authService[method] = async function trackedCall(...args) {
+    const result = await original.apply(this, args);
+    track(eventName);
+    return result;
+  };
+}

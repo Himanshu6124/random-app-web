@@ -1,9 +1,9 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import { Users, MessageSquare, Volume2, VolumeX, LogOut, Compass, UserRound } from 'lucide-react';
+import { Users, MessageSquare, Volume2, VolumeX, LogOut, Compass, UserRound, ChartColumn } from 'lucide-react';
 
-export function Header({ activeTab, setActiveTab }) {
+export function Header({ activeTab, setActiveTab, onOpenAnalytics }) {
   const { user, isGuest, soundEnabled, setSoundEnabled, logout, totalUnreadFriendsCount, friendRequests } = useAuth();
   const { unreadRandomCount } = useSocket();
 
@@ -55,6 +55,20 @@ export function Header({ activeTab, setActiveTab }) {
 
       {/* Right User Actions */}
       <div className="header-actions">
+        {/* Analytics dashboard: only rendered for admin accounts */}
+        {onOpenAnalytics && (
+          <button
+            onClick={onOpenAnalytics}
+            className="btn-secondary analytics-entry-btn"
+            title="Analytics dashboard"
+            aria-label="Analytics dashboard"
+            data-track="Open analytics"
+            style={{ width: '44px', height: '44px', padding: 0, borderRadius: '50%', flexShrink: 0, justifyContent: 'center' }}
+          >
+            <ChartColumn size={18} color="var(--text-primary)" />
+          </button>
+        )}
+
         {/* Sound Toggle */}
         <button
           onClick={() => setSoundEnabled(!soundEnabled)}

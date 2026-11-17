@@ -6,9 +6,11 @@ import './styles/mobile.css';
 import './styles/motion.css';
 import { initNativeShell } from './mobile/nativeShell';
 import { initTapFeedback } from './mobile/feedback';
+import { initAnalytics } from './services/analytics';
 
 initNativeShell();
 initTapFeedback();
+initAnalytics();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

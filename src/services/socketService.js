@@ -1,5 +1,6 @@
 import { Client, ReconnectionTimeMode } from '@stomp/stompjs';
 import { authService } from './authService';
+import { trackPublish, trackMatchFound, resetSearch } from './analytics';
 
 const DEV = Boolean(import.meta.env && import.meta.env.DEV);
 
@@ -695,11 +696,13 @@ export class SocketService {
           status: 'Online'
         };
 
+        trackMatchFound(matchInfo);
         this.callbacks.onMatchFound?.(matchInfo);
       } else if (event.type === 'MATCH_CANCELLED' || event.type === 'MATCH_EXPIRED') {
         // The server discarded our ticket: leave the searching state instead of
         // spinning the radar forever.
         this.cancelMatchmaking();
+        resetSearch();
         this.callbacks.onMatchCancelled?.(event.payload);
       }
     } catch (e) {
@@ -737,6 +740,7 @@ export class SocketService {
     if (!this.client || !this.client.connected) return false;
     try {
       this.client.publish({ destination, body: JSON.stringify(body) });
+      trackPublish(destination, body);
       return true;
     } catch (e) {
       console.warn('[SocketService] Failed to publish to', destination, e);

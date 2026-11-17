@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider, useSocket } from './context/SocketContext';
 import { Header } from './components/Header';
@@ -13,12 +13,38 @@ import { LogoutConfirmationDialog } from './components/LogoutConfirmationDialog'
 import { GuestUpgradeModal } from './components/GuestUpgradeModal';
 import { NotificationToasts, NotificationPermissionPrompt } from './components/NotificationToasts';
 import { subscribeNavigate } from './services/notify';
+import { setScreen } from './services/analytics';
+import { checkAnalyticsAdmin } from './views/admin/adminApi';
+
+// Admin-only, so it is split out of the main bundle.
+const AdminAnalyticsView = lazy(() => import('./views/admin/AdminAnalyticsView'));
 
 function AppContent() {
-  const { isAuthenticated, authLoading, showLogoutModal, cancelLogout, performLogout } = useAuth();
+  const { user, isAuthenticated, authLoading, showLogoutModal, cancelLogout, performLogout } = useAuth();
   const { activeTab, setActiveTab } = useSocket();
   // Friend to open in the Friends tab when another view (Discover, notifications) asks for a DM
   const [dmTargetId, setDmTargetId] = useState(null);
+  const [isAnalyticsAdmin, setIsAnalyticsAdmin] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
+
+  // Screen views for analytics: the login page until signed in, then the active tab.
+  useEffect(() => {
+    if (authLoading) return;
+    if (showAnalytics) setScreen('admin_analytics');
+    else setScreen(isAuthenticated ? activeTab : 'login');
+  }, [authLoading, isAuthenticated, activeTab, showAnalytics]);
+
+  // The server decides who is an admin; the button only appears when it says yes.
+  useEffect(() => {
+    let cancelled = false;
+    if (!isAuthenticated || !user || user.isGuest || user.guest) {
+      setIsAnalyticsAdmin(false);
+      setShowAnalytics(false);
+      return undefined;
+    }
+    checkAnalyticsAdmin().then((ok) => { if (!cancelled) setIsAnalyticsAdmin(ok); });
+    return () => { cancelled = true; };
+  }, [isAuthenticated, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openFriendChat = (friendId) => {
     setDmTargetId(friendId);
@@ -61,7 +87,11 @@ function AppContent() {
   // 3. Authenticated state -> Main App Layout
   return (
     <div className="app-container">
-      <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Header
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onOpenAnalytics={isAnalyticsAdmin ? () => setShowAnalytics(true) : null}
+      />
       
       <main className="main-content" key={activeTab}>
         {activeTab === 'match' && <MatchView />}
@@ -84,6 +114,11 @@ function AppContent() {
         onConfirm={performLogout}
       />
       <GuestUpgradeModal />
+      {showAnalytics && isAnalyticsAdmin && (
+        <Suspense fallback={<div className="an-root" />}>
+          <AdminAnalyticsView onClose={() => setShowAnalytics(false)} />
+        </Suspense>
+      )}
       <NotificationToasts />
       <NotificationPermissionPrompt />
     </div>
