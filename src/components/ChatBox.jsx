@@ -16,9 +16,6 @@ import { isInteractive, jumpToMessage } from './chat/messageUtils';
 import { useMessageInteractions } from './chat/useMessageInteractions';
 import { feedback } from '../mobile/feedback';
 
-// The AI badge on bot profiles is hidden for now (bots still say they are AI when asked).
-const SHOW_AI_BADGE = false;
-
 // AI partners we "sent" a friend request to (never sent to the server), kept across tab switches.
 const botRequestsSent = new Set();
 
@@ -433,9 +430,6 @@ export function ChatBox() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: '8px', rowGap: '2px' }}>
               <h3 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700 }}>{peerName}</h3>
-              {SHOW_AI_BADGE && isAiPeer && (
-                <span className="ai-badge" title="AI chat companion" aria-label="AI chat companion">AI</span>
-              )}
               {isPeerOnline ? (
                 <span className="online-badge" aria-label="Online">Online</span>
               ) : (

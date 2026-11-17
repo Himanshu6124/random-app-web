@@ -133,23 +133,6 @@
 }
 
 /* Peer presence in the chat header: green "Online" with a pulsing dot */
-/* Small pill next to a bot partner's name (ChatBox header). */
-.ai-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: var(--plum-3);
-  color: var(--text-secondary);
-  font-family: var(--font-main);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  line-height: 1.2;
-  flex-shrink: 0;
-}
-
 .online-badge {
   display: inline-flex;
   align-items: center;
