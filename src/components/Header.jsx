@@ -1,10 +1,10 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import { Users, MessageSquare, Volume2, VolumeX, LogOut, Lock, Compass, UserRound } from 'lucide-react';
+import { Users, MessageSquare, Volume2, VolumeX, LogOut, Compass, UserRound } from 'lucide-react';
 
 export function Header({ activeTab, setActiveTab }) {
-  const { user, isGuest, soundEnabled, setSoundEnabled, logout, openUpgradeModal, totalUnreadFriendsCount } = useAuth();
+  const { user, isGuest, soundEnabled, setSoundEnabled, logout, totalUnreadFriendsCount, friendRequests } = useAuth();
   const { unreadRandomCount } = useSocket();
 
   return (
@@ -30,40 +30,26 @@ export function Header({ activeTab, setActiveTab }) {
 
         <button
           className={activeTab === 'discover' ? 'btn-secondary is-current' : 'btn-secondary'}
-          onClick={() => {
-            if (isGuest) {
-              openUpgradeModal('find friends, see who is nearby and keep your match history');
-            } else {
-              setActiveTab('discover');
-            }
-          }}
+          onClick={() => setActiveTab('discover')}
           aria-current={activeTab === 'discover' ? 'page' : undefined}
           style={{ padding: '8px 16px', borderRadius: 'var(--radius-full)', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
-          title={isGuest ? "Sign up to unlock Discover" : "Find friends, nearby friends and match history"}
+          title="Find people, see who is nearby and your match history"
         >
           <Compass size={18} />
           <span>Discover</span>
-          {isGuest && <Lock size={13} style={{ opacity: 0.8 }} />}
         </button>
 
         <button
           className={activeTab === 'friends' ? 'btn-secondary is-current' : 'btn-secondary'}
-          onClick={() => {
-            if (isGuest) {
-              openUpgradeModal('access Friends & Direct Messages');
-            } else {
-              setActiveTab('friends');
-            }
-          }}
+          onClick={() => setActiveTab('friends')}
           style={{ padding: '8px 16px', borderRadius: 'var(--radius-full)', display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
-          title={isGuest ? "Sign up to unlock friends" : "View Friends"}
+          title="View Friends"
         >
           <Users size={18} />
           <span>Friends</span>
-          {!isGuest && totalUnreadFriendsCount > 0 && (
-            <span className="app-count">{totalUnreadFriendsCount}</span>
+          {totalUnreadFriendsCount + (friendRequests?.length || 0) > 0 && (
+            <span className="app-count">{totalUnreadFriendsCount + (friendRequests?.length || 0)}</span>
           )}
-          {isGuest && <Lock size={13} style={{ opacity: 0.8 }} />}
         </button>
       </nav>
 

@@ -431,3 +431,215 @@
   }
 }
 
+
+/* Pending friend requests shown inline at the top of the Friends list */
+.friend-requests-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background: var(--plum-3);
+  border: 1px solid rgba(240, 114, 137, 0.35);
+}
+.friend-requests-inline__title {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: #f6a3b2;
+}
+.friend-requests-inline__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.friend-requests-inline__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-body-sm);
+  color: var(--text-primary);
+}
+.friend-requests-inline__accept,
+.friend-requests-inline__decline,
+.friend-requests-inline__more {
+  border: none;
+  border-radius: var(--radius-full);
+  padding: 5px 12px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.friend-requests-inline__accept { background: var(--accent); color: var(--accent-ink); }
+.friend-requests-inline__decline { background: var(--plum-4); color: var(--text-secondary); }
+.friend-requests-inline__more { background: transparent; color: var(--text-secondary); align-self: flex-start; padding-left: 0; }
+
+/* ---- In-app notification toasts: small, brief, never block the chat ---- */
+.rc-toasts {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  right: 16px;
+  z-index: 2500;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(340px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.rc-toast {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 8px 10px;
+  border-radius: var(--radius-lg);
+  background: rgba(43, 26, 40, 0.96);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  color: var(--text-primary);
+  overflow: hidden;
+  pointer-events: auto;
+  animation: rc-toast-in 220ms ease-out;
+  backdrop-filter: blur(8px);
+}
+.rc-toast--request { border-color: rgba(240, 114, 137, 0.5); }
+.rc-toast--message { border-color: rgba(126, 166, 246, 0.5); }
+.rc-toast--success { border-color: rgba(92, 200, 140, 0.5); }
+.rc-toast__main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rc-toast__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--plum-4);
+  color: var(--text-secondary);
+}
+.rc-toast__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.rc-toast__text { display: flex; flex-direction: column; min-width: 0; }
+.rc-toast__title,
+.rc-toast__body {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rc-toast__title { font-size: var(--fs-body-sm); font-weight: 700; }
+.rc-toast__body { font-size: var(--fs-sm); color: var(--text-secondary); }
+.rc-toast__action {
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  padding: 5px 11px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.rc-toast__close {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.rc-toast__close:hover { background: var(--plum-4); color: var(--text-primary); }
+.rc-toast__timer {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: currentColor;
+  opacity: 0.25;
+  transform-origin: left;
+  animation: rc-toast-timer 4500ms linear forwards;
+}
+@keyframes rc-toast-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes rc-toast-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (max-width: 640px) {
+  .rc-toasts { left: 50%; right: auto; transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-toast { animation: none; }
+  .rc-toast__timer { animation: none; display: none; }
+}
+
+/* One-time "turn on notifications" strip, bottom corner, above the tab bar */
+.rc-notify-prompt {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  z-index: 2400;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 10px 8px 14px;
+  border-radius: var(--radius-full);
+  background: rgba(43, 26, 40, 0.97);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  animation: rc-toast-in 220ms ease-out;
+}
+.rc-notify-prompt__text { min-width: 0; }
+.rc-notify-prompt__yes,
+.rc-notify-prompt__no {
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  padding: 5px 12px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.rc-notify-prompt__yes { background: var(--accent); color: var(--accent-ink); }
+.rc-notify-prompt__no { background: transparent; color: var(--text-secondary); }
+@media (min-width: 900px) {
+  .rc-notify-prompt { bottom: 24px; }
+}
+
+/* Live voice-note waveform shown while recording */
+.voice-waveform {
+  width: 120px;
+  height: 28px;
+  flex-shrink: 1;
+  min-width: 48px;
+  color: #f07289;
+}
+@media (max-width: 480px) {
+  .voice-waveform { width: 72px; }
+}
+@media (min-width: 641px) {
+  /* Sit just under the desktop header so its buttons stay usable */
+  .rc-toasts { top: 76px; }
+}

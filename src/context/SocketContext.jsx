@@ -3,6 +3,7 @@ import { useAuth } from './AuthContext';
 import { socketService, extractPeerName } from '../services/socketService';
 import { applyReaction } from '../components/chat/messageUtils';
 import { feedback } from '../mobile/feedback';
+import { notify, pageInView } from '../services/notify';
 import { cleanTopicIds, formatTopics, loadSavedTopics, saveTopics } from '../content/matchTopics';
 
 const SocketContext = createContext();
@@ -61,6 +62,7 @@ export function SocketProvider({ children }) {
     sessionEpoch,
     soundEnabled,
     setLiveFriendRequest,
+    acceptFriendRequest,
     loadFriendRequests,
     loadFriendsFromApi,
     applyFriendPresence,
@@ -70,8 +72,6 @@ export function SocketProvider({ children }) {
 
   // Tab management owned here so notifications and seen tracking work across tabs
   const [activeTab, setActiveTab] = useState('match');
-  // A friend tapped "Wave" on the Nearby map (FRIEND_WAVE on /user/queue/notifications)
-  const [liveWave, setLiveWave] = useState(null);
   const activeTabRef = useRef(activeTab);
   useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
 
@@ -200,6 +200,17 @@ export function SocketProvider({ children }) {
     });
 
     if (isPeerMsg) {
+      const peerForAlert = currentPeerRef.current;
+      if (activeTabRef.current !== 'match' || !pageInView()) {
+        notify({
+          key: 'random-chat',
+          kind: 'message',
+          title: peerForAlert?.name || 'Random Match',
+          body: msg.type === 'IMAGE' ? '📷 Photo' : (msg.text || msg.message || 'Sent you a message'),
+          icon: peerForAlert?.photoUrl || '',
+          target: { tab: 'match' }
+        });
+      }
       if (activeTabRef.current !== 'match') {
         // User is currently in Friends or Profile tab: inform them with red dot & notification card
         setUnreadRandomCount(c => c + 1);
@@ -272,6 +283,8 @@ export function SocketProvider({ children }) {
   const loadRequestsRef = useRef(loadFriendRequests);
   const applyFriendPresenceRef = useRef(applyFriendPresence);
   const setLiveFriendRequestRef = useRef(setLiveFriendRequest);
+  const acceptFriendRequestRef = useRef(acceptFriendRequest);
+  useEffect(() => { acceptFriendRequestRef.current = acceptFriendRequest; }, [acceptFriendRequest]);
 
   useEffect(() => { handleMatchFoundRef.current = handleMatchFound; }, [handleMatchFound]);
   useEffect(() => { handleMessageReceivedRef.current = handleMessageReceived; }, [handleMessageReceived]);
@@ -345,7 +358,7 @@ export function SocketProvider({ children }) {
             carriedRoomId = null;
           }
           // Presence changes while we were disconnected were missed: resync from the server.
-          if (!userRef.current?.isGuest) loadFriendsRef.current?.();
+          loadFriendsRef.current?.();
 
           // The socket service replays every room subscription by itself; all that is
           // left here is telling the peer about a username that really changed.
@@ -490,17 +503,36 @@ export function SocketProvider({ children }) {
         },
         onFriendRequestReceived: (sender) => {
           setLiveFriendRequestRef.current?.(sender);
+          const senderId = sender?.id || sender?.friendUserId;
+          notify({
+            key: `friend-request-${senderId}`,
+            kind: 'request',
+            title: sender?.name || sender?.username || 'Someone',
+            body: 'sent you a friend request',
+            icon: sender?.photoUrl || '',
+            target: { tab: 'friends' },
+            action: senderId ? {
+              label: 'Accept',
+              run: () => {
+                setLiveFriendRequestRef.current?.(null);
+                acceptFriendRequestRef.current?.(senderId)?.catch?.(() => {});
+              }
+            } : undefined
+          });
           loadRequestsRef.current?.();
           feedback('notify');
           if (soundEnabledRef.current) playChime('match');
         },
-        onFriendWave: (sender) => {
-          if (!sender) return;
-          setLiveWave({ ...sender, receivedAt: Date.now() });
-          feedback('notify');
-          if (soundEnabledRef.current) playChime('message');
-        },
-        onFriendRequestAccepted: () => {
+        onFriendRequestAccepted: (friend) => {
+          const friendId = friend?.id || friend?.friendUserId;
+          notify({
+            key: `friend-accepted-${friendId}`,
+            kind: 'success',
+            title: friend?.name || friend?.username || 'New friend',
+            body: 'accepted your friend request',
+            icon: friend?.photoUrl || '',
+            target: friendId ? { tab: 'friends', friendId } : { tab: 'friends' }
+          });
           loadFriendsRef.current?.();
           loadRequestsRef.current?.();
           feedback('success');
@@ -827,7 +859,6 @@ export function SocketProvider({ children }) {
   }, [currentPeer, peerLeft]);
 
   const clearUnreadRandomCount = useCallback(() => setUnreadRandomCount(0), []);
-  const dismissLiveWave = useCallback(() => setLiveWave(null), []);
   const dismissLiveRandomMessage = useCallback(() => setLiveRandomMessage(null), []);
 
   const value = useMemo(() => ({
@@ -837,8 +868,6 @@ export function SocketProvider({ children }) {
     clearUnreadRandomCount,
     liveRandomMessage,
     dismissLiveRandomMessage,
-    liveWave,
-    dismissLiveWave,
     matchState,
     matchTopics,
     setMatchTopics,
@@ -868,7 +897,7 @@ export function SocketProvider({ children }) {
     isLiveConnected
   }), [
     activeTab, setActiveTab, unreadRandomCount, clearUnreadRandomCount, liveRandomMessage,
-    dismissLiveRandomMessage, liveWave, dismissLiveWave, matchState, matchTopics, setMatchTopics, currentPeer, messages, isPeerTyping, isPeerOnline, peerLeft,
+    dismissLiveRandomMessage, matchState, matchTopics, setMatchTopics, currentPeer, messages, isPeerTyping, isPeerOnline, peerLeft,
     startSearching, cancelSearch, skipStranger, disconnectChat, sendMessage,
     retryMessage, sendMedia, sendReaction, reactToMessage, sendIcebreaker, notifyTyping, floatingReactions,
     bottleGame, spinBottle, chooseGameOption, askGameQuestion, closeGame, connectionStatus, isLiveConnected

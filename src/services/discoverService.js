@@ -86,9 +86,6 @@ export const discoverService = {
     };
   },
 
-  waveAtFriend(friendId, token) {
-    return request(`/location/friends/${encodeURIComponent(friendId)}/wave`, { method: 'POST', token });
-  },
 
   // ---------- Match history ----------
 

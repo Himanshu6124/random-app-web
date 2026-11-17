@@ -7,7 +7,7 @@ import '../styles/discover.css';
 
 /**
  * Discover tab: Find friends (people search), Nearby (approximate-location map of everyone
- * around you, friends highlighted) and Match history (who you met in Random Match). Registered users only.
+ * around you, friends highlighted) and Match history (who you met in Random Match). Open to everyone, guests included.
  */
 export function DiscoverView({ onOpenChat }) {
   const [section, setSection] = useState('find');

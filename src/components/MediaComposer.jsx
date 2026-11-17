@@ -7,6 +7,7 @@ import {
   startVoiceRecording,
   newMessageId
 } from '../services/mediaService';
+import { VoiceWaveform } from './VoiceWaveform';
 
 const formatMs = (ms) => {
   const total = Math.floor(ms / 1000);
@@ -41,6 +42,7 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
   const [progress, setProgress] = useState(0);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [micStream, setMicStream] = useState(null);
   const fileInputRef = useRef(null);
   const recorderRef = useRef(null);
   const tickRef = useRef(null);
@@ -109,6 +111,7 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
     try {
       const controller = await startVoiceRecording();
       recorderRef.current = controller;
+      setMicStream(controller.stream || null);
       setRecording(true);
       setElapsed(0);
       tickRef.current = setInterval(() => setElapsed(controller.elapsedMs()), 200);
@@ -127,6 +130,7 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
     recorderRef.current = null;
     if (tickRef.current) clearInterval(tickRef.current);
     setRecording(false);
+    setMicStream(null);
 
     setUploading(true);
     setProgress(0);
@@ -150,6 +154,7 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
     recorderRef.current = null;
     if (tickRef.current) clearInterval(tickRef.current);
     setRecording(false);
+    setMicStream(null);
     controller?.cancel();
   };
 
@@ -175,6 +180,7 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
             }} />
             {formatMs(elapsed)}
           </span>
+          <VoiceWaveform stream={micStream} />
           {/* Cancel affordance: discard before sending */}
           <button
             type="button"

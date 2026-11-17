@@ -11,14 +11,13 @@ import { ProfileView } from './views/ProfileView';
 import { LoginView } from './views/LoginView';
 import { LogoutConfirmationDialog } from './components/LogoutConfirmationDialog';
 import { GuestUpgradeModal } from './components/GuestUpgradeModal';
-import { LiveFriendRequestAlert } from './components/LiveFriendRequestAlert';
-import { LiveRandomMessageAlert } from './components/LiveRandomMessageAlert';
-import { LiveWaveAlert } from './components/LiveWaveAlert';
+import { NotificationToasts, NotificationPermissionPrompt } from './components/NotificationToasts';
+import { subscribeNavigate } from './services/notify';
 
 function AppContent() {
-  const { isAuthenticated, isGuest, authLoading, showLogoutModal, cancelLogout, performLogout } = useAuth();
+  const { isAuthenticated, authLoading, showLogoutModal, cancelLogout, performLogout } = useAuth();
   const { activeTab, setActiveTab } = useSocket();
-  // Friend to open in the Friends tab when another view (Discover, wave alert) asks for a DM
+  // Friend to open in the Friends tab when another view (Discover, notifications) asks for a DM
   const [dmTargetId, setDmTargetId] = useState(null);
 
   const openFriendChat = (friendId) => {
@@ -26,15 +25,20 @@ function AppContent() {
     setActiveTab('friends');
   };
 
+  // A tapped toast or browser notification opens the screen it is about.
+  useEffect(() => subscribeNavigate((target) => {
+    if (target.tab === 'friends' && target.friendId) {
+      setDmTargetId(target.friendId);
+      setActiveTab('friends');
+    } else if (target.tab) {
+      setActiveTab(target.tab);
+    }
+  }), [setActiveTab]);
+
   // A pending DM hand-off only applies to the Friends tab it was made for
   useEffect(() => {
     if (activeTab !== 'friends') setDmTargetId(null);
   }, [activeTab]);
-
-  // Discover is registered-users only; a guest session (or a downgrade) falls back to Match.
-  useEffect(() => {
-    if (isGuest && activeTab === 'discover') setActiveTab('match');
-  }, [isGuest, activeTab, setActiveTab]);
 
   // 1. Initial Auth check loading state on landing
   if (authLoading) {
@@ -61,7 +65,7 @@ function AppContent() {
       
       <main className="main-content" key={activeTab}>
         {activeTab === 'match' && <MatchView />}
-        {activeTab === 'discover' && !isGuest && <DiscoverView onOpenChat={openFriendChat} />}
+        {activeTab === 'discover' && <DiscoverView onOpenChat={openFriendChat} />}
         {activeTab === 'friends' && (
           <FriendsView
             onStartMatch={() => setActiveTab('match')}
@@ -80,9 +84,8 @@ function AppContent() {
         onConfirm={performLogout}
       />
       <GuestUpgradeModal />
-      <LiveFriendRequestAlert />
-      <LiveRandomMessageAlert />
-      <LiveWaveAlert onOpenChat={openFriendChat} />
+      <NotificationToasts />
+      <NotificationPermissionPrompt />
     </div>
   );
 }

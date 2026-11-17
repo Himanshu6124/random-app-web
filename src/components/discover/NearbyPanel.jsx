@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Search, MessageCircle, EyeOff, MapPin, Users } from 'lucide-react';
+import { Search, MessageCircle, EyeOff, MapPin } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { discoverService } from '../../services/discoverService';
 import { DiscoverAvatar } from './DiscoverAvatar';
@@ -30,7 +30,8 @@ function getDevicePosition() {
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 /**
- * Nearby: a map of everyone around you (friends, plus people who share with everyone).
+ * Nearby: a map of everyone around you who shares a location (friends and strangers alike).
+ * Seeing others requires sharing your own location first.
  * It opens on a ~12 km area around you; the list always follows what the map shows, so
  * zooming out brings in more people. Crowded spots are grouped into numbered clusters.
  */
@@ -47,13 +48,11 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState(null);
-  const [waveState, setWaveState] = useState(null);
   const [statusOverrides, setStatusOverrides] = useState({});
   const [reloadTick, setReloadTick] = useState(0);
   const toggleRef = useRef(null);
 
   const sharing = Boolean(me?.sharing);
-  const everyone = Boolean(me?.visibleToEveryone);
 
   /** Pushes a fresh device position (only while sharing), optionally changing who sees it. */
   const refreshPosition = useCallback(async (visibleToEveryone) => {
@@ -120,7 +119,7 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
       }
     }, VIEW_DEBOUNCE_MS);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [sharing, viewQuery, me?.latitude, me?.longitude, me?.visibleToEveryone, reloadTick, jwtToken]);
+  }, [sharing, viewQuery, me?.latitude, me?.longitude, reloadTick, jwtToken]);
 
   const loadMore = async () => {
     if (!viewQuery) return;
@@ -136,12 +135,13 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
     }
   };
 
-  const setSharing = async (enabled, visibleToEveryone) => {
+  const setSharing = async (enabled) => {
     setToggling(true);
     setError('');
     try {
       if (enabled) {
-        await refreshPosition(visibleToEveryone);
+        // Sharing is always with everyone: seeing others means being visible to them.
+        await refreshPosition(true);
       } else {
         setMe(await discoverService.setLocationSharing(false, jwtToken));
         setSelected(null);
@@ -150,29 +150,6 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
       setError(err.message || 'Could not update location sharing.');
     } finally {
       setToggling(false);
-    }
-  };
-
-  const setVisibility = async (visibleToEveryone) => {
-    setToggling(true);
-    setError('');
-    try {
-      setMe(await discoverService.setLocationSharing(true, jwtToken, visibleToEveryone));
-      setSelected(null);
-    } catch (err) {
-      setError(err.message || 'Could not update who can see you.');
-    } finally {
-      setToggling(false);
-    }
-  };
-
-  const wave = async (friendId) => {
-    setWaveState({ id: friendId, status: 'sending' });
-    try {
-      await discoverService.waveAtFriend(friendId, jwtToken);
-      setWaveState({ id: friendId, status: 'sent' });
-    } catch (err) {
-      setWaveState({ id: friendId, status: 'error', message: err.message || 'Could not wave.' });
     }
   };
 
@@ -205,26 +182,19 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
       <MapPin size={22} color="var(--dc-cyan)" aria-hidden="true" />
       <h2>See who's around you</h2>
       <p>
-        Share your area to see people within about 12 km, and zoom out to look farther. Others only
-        ever see a position rounded to about 1 km, never your exact spot. Turn it off any time and
-        your position is deleted.
+        To see people nearby, turn on your own location first. You'll appear on the map too, but
+        only as an area rounded to about 1 km, never your exact spot. Turn it off any time and your
+        position is deleted.
       </p>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-        <button type="button" className="dc-btn dc-btn--primary dc-btn--sm" onClick={() => setSharing(true, true)} disabled={toggling}>
-          <MapPin size={16} aria-hidden="true" />Share with everyone
-        </button>
-        <button type="button" className="dc-btn dc-btn--soft dc-btn--sm" onClick={() => setSharing(true, false)} disabled={toggling}>
-          <Users size={16} aria-hidden="true" />Friends only
-        </button>
-      </div>
+      <button type="button" className="dc-btn dc-btn--primary dc-btn--sm" onClick={() => setSharing(true)} disabled={toggling}>
+        <MapPin size={16} aria-hidden="true" />{toggling ? 'Getting location…' : 'Enable my location'}
+      </button>
     </div>
   ) : null;
 
   const emptyText = filter
     ? 'Nobody on the map matches that name.'
-    : everyone
-      ? 'Nobody is sharing in this area right now. Zoom out to look farther.'
-      : 'No friends in this area. You share with friends only, so strangers are hidden. Zoom out, or share with everyone to see people nearby.';
+    : 'Nobody is sharing in this area right now. Zoom out to look farther.';
 
   return (
     <>
@@ -242,25 +212,11 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
               className="dc-sr-only"
               checked={sharing}
               disabled={toggling || loading}
-              onChange={(e) => setSharing(e.target.checked, e.target.checked ? true : undefined)}
+              onChange={(e) => setSharing(e.target.checked)}
             />
             <span className="dc-switch-track" aria-hidden="true" />
             Share my location
           </label>
-          {sharing && (
-            <label className="dc-switch">
-              <input
-                type="checkbox"
-                role="switch"
-                className="dc-sr-only"
-                checked={everyone}
-                disabled={toggling}
-                onChange={(e) => setVisibility(e.target.checked)}
-              />
-              <span className="dc-switch-track" aria-hidden="true" />
-              Visible to everyone
-            </label>
-          )}
         </div>
       </div>
 
@@ -275,8 +231,6 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
           selected={selectedNow}
           onSelect={setSelected}
           onMessage={onOpenChat}
-          onWave={wave}
-          waveState={waveState}
           onStatusChange={onStatusChange}
           onError={setError}
           updatedAt={me?.updatedAt}
@@ -303,7 +257,7 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
           {!sharing ? (
             <div className="dc-empty">
               <EyeOff size={22} aria-hidden="true" />
-              <span>Turn on location sharing to see who's around.</span>
+              <span>Enable your location to see who's around.</span>
             </div>
           ) : listed.length === 0 ? (
             <div className="dc-empty">
@@ -362,13 +316,10 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
             </ul>
           )}
 
-          {sharing && data && (data.truncated || !everyone) && (
+          {sharing && data?.truncated && (
             <p className="nearby-list-foot">
               <EyeOff size={14} aria-hidden="true" />
-              {[
-                !everyone && 'You share with friends only, so only friends are shown.',
-                data.truncated && 'This area is very busy; zoom in to see everyone.'
-              ].filter(Boolean).join(' ')}
+              This area is very busy; zoom in to see everyone.
             </p>
           )}
         </section>

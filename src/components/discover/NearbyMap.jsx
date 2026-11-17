@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, Minus, LocateFixed, MessageCircle, Hand, ShieldCheck } from 'lucide-react';
+import { Plus, Minus, LocateFixed, MessageCircle, ShieldCheck } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { DiscoverAvatar } from './DiscoverAvatar';
@@ -70,8 +70,6 @@ export function NearbyMap({
   selected,
   onSelect,
   onMessage,
-  onWave,
-  waveState,
   onStatusChange,
   onError,
   updatedAt,
@@ -251,7 +249,6 @@ export function NearbyMap({
 
   const popoverBelow = popoverPos && popoverPos.y < 200;
   const popoverLeft = popoverPos ? Math.max(12, popoverPos.x - 125) : 0;
-  const waving = waveState?.id === selected?.id ? waveState : null;
 
   return (
     <div className="nearby-map">
@@ -285,15 +282,6 @@ export function NearbyMap({
                 <MessageCircle size={16} aria-hidden="true" />
                 Message
               </button>
-              <button
-                type="button"
-                className="dc-btn dc-btn--soft dc-btn--sm"
-                onClick={() => onWave(selected.id)}
-                disabled={waving && waving.status !== 'error'}
-              >
-                <Hand size={16} aria-hidden="true" />
-                {waving?.status === 'sent' ? 'Waved' : 'Wave'}
-              </button>
             </div>
           ) : (
             <div style={{ display: 'flex', gap: 8 }}>
@@ -307,9 +295,6 @@ export function NearbyMap({
                 onError={onError}
               />
             </div>
-          )}
-          {waving?.status === 'error' && (
-            <span className="nearby-popover-sub" role="alert">{waving.message}</span>
           )}
         </div>
       )}

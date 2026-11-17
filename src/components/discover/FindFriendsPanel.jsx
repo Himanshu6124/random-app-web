@@ -9,7 +9,7 @@ import { highlight } from './discoverUtils';
 const MIN_CHARS = 2;
 const PAGE_SIZE = 20;
 
-/** Find friends: search registered people by name or @username. */
+/** Find friends: search everyone (guests included) by name or @username. */
 export function FindFriendsPanel({ onOpenChat }) {
   const { jwtToken } = useAuth();
   const [query, setQuery] = useState('');

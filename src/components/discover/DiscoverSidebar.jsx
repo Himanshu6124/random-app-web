@@ -32,7 +32,7 @@ export function DiscoverSidebar({ section, onSelect, onManageVisibility }) {
 
       <div className="discover-privacy">
         <div className="discover-privacy-title"><ShieldCheck size={16} aria-hidden="true" />Your privacy</div>
-        <p>People nearby see your area (about 1 km), never your exact spot. Choose friends only to hide from strangers.</p>
+        <p>Turn on your location to see people nearby. They see only your area (about 1 km), never your exact spot.</p>
         <button type="button" className="dc-link" onClick={onManageVisibility}>Manage visibility</button>
       </div>
     </aside>

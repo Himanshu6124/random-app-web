@@ -463,3 +463,8 @@
     mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
   }
 }
+@media (max-width: 640px) {
+  /* Full "Truth & Dare" on phones, just a touch smaller so it fits next to the emojis */
+  .chat-game-btn .chat-game-label-short { font-size: 11px; letter-spacing: -0.01em; }
+  .chat-subbar-pill { gap: 4px; }
+}

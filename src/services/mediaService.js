@@ -101,7 +101,7 @@ export async function prepareImage(file) {
 
 /**
  * Starts a voice recording. Returns a controller:
- *   { stop() -> Promise<{ blob, durationMs }>, cancel(), elapsedMs(), maxMs }
+ *   { stop() -> Promise<{ blob, durationMs }>, cancel(), elapsedMs(), maxMs, stream }
  * Rejects when mic permission is denied or MediaRecorder is unavailable.
  */
 export function startVoiceRecording() {
@@ -197,7 +197,9 @@ export function startVoiceRecording() {
         return stopped.catch(() => {});
       },
       elapsedMs: () => Date.now() - startedAt,
-      maxMs: MAX_VOICE_MS
+      maxMs: MAX_VOICE_MS,
+      // The live mic stream, so the UI can draw a level waveform while recording.
+      stream
     };
   });
 }

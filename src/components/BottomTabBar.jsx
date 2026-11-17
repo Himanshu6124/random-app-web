@@ -9,20 +9,14 @@ import { haptic, isIOS } from '../mobile/nativeShell';
  * Mirrors the Header's tab rules: Discover & Friends are locked for guests.
  */
 export function BottomTabBar({ activeTab, setActiveTab }) {
-  const { user, isGuest, openUpgradeModal, totalUnreadFriendsCount } = useAuth();
+  const { user, openUpgradeModal, totalUnreadFriendsCount, friendRequests } = useAuth();
+  const pendingRequestCount = friendRequests?.length || 0;
   const { unreadRandomCount } = useSocket();
 
   const tabs = [
     { id: 'match', label: 'Match', Icon: MessageSquare, badge: unreadRandomCount },
-    {
-      id: 'discover', label: 'Discover', Icon: Compass, locked: isGuest,
-      lockReason: 'find friends, see who is nearby and keep your match history',
-    },
-    {
-      id: 'friends', label: 'Friends', Icon: Users, locked: isGuest,
-      badge: isGuest ? 0 : totalUnreadFriendsCount,
-      lockReason: 'access Friends & Direct Messages',
-    },
+    { id: 'discover', label: 'Discover', Icon: Compass },
+    { id: 'friends', label: 'Friends', Icon: Users, badge: totalUnreadFriendsCount + pendingRequestCount },
     { id: 'profile', label: 'Profile', avatar: true },
   ];
 

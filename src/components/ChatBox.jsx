@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
-import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Star, Hand, Lock, RefreshCw, X, Zap, Ban, UserRound, AlertTriangle, CheckCheck, Check, Wine } from 'lucide-react';
+import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Star, Hand, RefreshCw, X, Zap, Ban, UserRound, AlertTriangle, CheckCheck, Check, Wine } from 'lucide-react';
 import { extractPeerName, MAX_MESSAGE_LENGTH } from '../services/socketService';
 import { authService } from '../services/authService';
 import { MediaComposer } from './MediaComposer';
@@ -19,14 +19,12 @@ export function ChatBox() {
   const {
     user,
     jwtToken,
-    isGuest,
     sendFriendRequest,
     acceptFriendRequest,
     cancelFriendRequest,
     friends,
     friendRequests,
     liveFriendRequest,
-    openUpgradeModal,
     blockUser,
     soundEnabled
   } = useAuth();
@@ -145,13 +143,6 @@ export function ChatBox() {
     }
 
     if (friendStatus === 'PENDING_RECEIVED') {
-      if (isGuest) {
-        openUpgradeModal(`create an account to accept friend request from ${peerName}`, {
-          action: 'ACCEPT_FRIEND',
-          targetUserId: peerId
-        });
-        return;
-      }
       setActionLoading(true);
       try {
         await acceptFriendRequest(peerId);
@@ -165,13 +156,6 @@ export function ChatBox() {
     }
 
     // Case: 'NONE' -> Send friend request
-    if (isGuest) {
-      openUpgradeModal(`create an account to add ${peerName} as a friend`, {
-        action: 'SEND_FRIEND',
-        targetUserId: peerId
-      });
-      return;
-    }
 
     setActionLoading(true);
     try {
@@ -499,9 +483,8 @@ export function ChatBox() {
               type="button"
               onClick={handleFriendActionClick}
               disabled={actionLoading}
-              className={isGuest ? 'btn-secondary' : 'btn-primary'}
+              className="btn-primary"
               style={{
-                color: isGuest ? 'var(--text-secondary)' : undefined,
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
@@ -509,13 +492,12 @@ export function ChatBox() {
                 fontSize: 'var(--fs-md)',
                 cursor: 'pointer'
               }}
-              title={isGuest ? "Sign up to add friends" : "Add to Friends"}
-              aria-label={isGuest ? "Add Friend (sign up to unlock)" : "Add Friend"}
+              title="Add to Friends"
+              aria-label="Add Friend"
             >
               <UserPlus size={16} aria-hidden="true" />
               <span className="label-long">{actionLoading ? 'Sending...' : 'Add Friend'}</span>
               <span className="label-short">Add</span>
-              {isGuest && <Lock size={12} aria-hidden="true" />}
             </button>
           )}
 
@@ -575,7 +557,7 @@ export function ChatBox() {
               <path d="M12 20.5C9 18.2 4 14.6 4 9.8 4 7.2 6 5.2 8.4 5.2c1.5 0 2.8.8 3.6 2 .8-1.2 2.1-2 3.6-2C18 5.2 20 7.2 20 9.8c0 4.8-5 8.4-8 10.7Z" />
             </svg>
             <p className="chat-intro__title">It's just the two of you now.</p>
-            <p className="chat-intro__hint">Say hi, or tap Ask Icebreaker if you're shy.</p>
+            <p className="chat-intro__hint">Say hi, or tap Icebreaker if you're shy.</p>
           </div>
         )}
         {messages.map(msg => {
@@ -748,8 +730,8 @@ export function ChatBox() {
             className="btn-secondary chat-subbar-pill"
           >
             <HelpCircle size={15} color="var(--text-secondary)" aria-hidden="true" />
-            <span className="label-long">Ask Icebreaker</span>
-            <span className="label-short">Icebreaker</span>
+            <span className="label-long">Icebreaker</span>
+            <span className="label-short">Ice</span>
           </button>
 
           {/* Spin the Bottle */}
@@ -763,7 +745,7 @@ export function ChatBox() {
           >
             <Wine size={15} aria-hidden="true" />
             <span className="label-long">Truth &amp; Dare</span>
-            <span className="label-short">T &amp; D</span>
+            <span className="label-short chat-game-label-short">Truth &amp; Dare</span>
           </button>
         </div>
 

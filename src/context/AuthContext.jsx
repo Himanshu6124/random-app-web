@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { authService } from '../services/authService';
 import { feedback } from '../mobile/feedback';
+import { notify, pageInView } from '../services/notify';
 import {
   startGoogleSignIn, consumeGoogleRedirect, ensureAnonymousFirebaseSession, isFirebaseConfigured
 } from '../services/firebaseClient';
@@ -43,6 +44,8 @@ export function AuthProvider({ children }) {
 
   // Friends & conversations lists
   const [friends, setFriends] = useState([]);
+  const friendsRef = useRef([]);
+  useEffect(() => { friendsRef.current = friends; }, [friends]);
   const [friendRequests, setFriendRequests] = useState([]);
   const [friendRequestsLoading, setFriendRequestsLoading] = useState(false);
   const [liveFriendRequest, setLiveFriendRequest] = useState(null);
@@ -188,6 +191,17 @@ export function AuthProvider({ children }) {
     const isViewingThisFriend = activeDmFriendIdRef.current === senderId;
     feedback(isViewingThisFriend ? 'receive' : 'notify');
     const preview = msg.type === 'IMAGE' ? '📷 Photo' : (msg.text || msg.message || 'Say hi!');
+    if (!isViewingThisFriend || !pageInView()) {
+      const sender = friendsRef.current.find(f => (f.id || f.friendUserId) === senderId);
+      notify({
+        key: `dm-${senderId}`,
+        kind: 'message',
+        title: sender?.name || msg.senderName || 'New message',
+        body: preview,
+        icon: sender?.photoUrl || '',
+        target: { tab: 'friends', friendId: senderId }
+      });
+    }
     const rawTime = msg.timestamp || msg.timeStamp || new Date().toISOString();
 
     setFriends(prev => {
@@ -223,7 +237,7 @@ export function AuthProvider({ children }) {
   // Safety-net social sync. Live updates come over the socket; this only covers
   // what a missed frame would lose, so it is slow, jittered and visible-tab only.
   useEffect(() => {
-    if (!isAuthenticated || !jwtToken || isGuest) return;
+    if (!isAuthenticated || !jwtToken) return;
 
     let cancelled = false;
 
@@ -246,7 +260,7 @@ export function AuthProvider({ children }) {
       cancelled = true;
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
-  }, [isAuthenticated, jwtToken, isGuest, loadFriendsFromApi, loadFriendRequests]);
+  }, [isAuthenticated, jwtToken, loadFriendsFromApi, loadFriendRequests]);
 
   // Initial Auth check on mount
   useEffect(() => {
@@ -260,7 +274,7 @@ export function AuthProvider({ children }) {
           setUser(res.user);
           setJwtToken(res.jwt || null);
 
-          if (res.isAuthenticated && res.jwt && !res.user?.isGuest) {
+          if (res.isAuthenticated && res.jwt) {
             loadFriendsFromApi(res.jwt);
             loadFriendRequests(res.jwt);
           }
@@ -708,20 +722,11 @@ export function AuthProvider({ children }) {
   const acceptLiveFriendRequest = useCallback(async () => {
     if (!liveFriendRequest) return;
     const reqUserId = liveFriendRequest.id || liveFriendRequest.friendUserId;
-    const senderName = liveFriendRequest.name || liveFriendRequest.senderName || liveFriendRequest.username || 'Someone';
-    if (isGuest) {
-      setLiveFriendRequest(null);
-      openUpgradeModal(`create an account to accept friend request from ${senderName}`, {
-        action: 'ACCEPT_FRIEND',
-        targetUserId: reqUserId
-      });
-      return;
-    }
     setLiveFriendRequest(null);
     if (reqUserId) {
       await acceptFriendRequest(reqUserId);
     }
-  }, [liveFriendRequest, isGuest, openUpgradeModal, acceptFriendRequest]);
+  }, [liveFriendRequest, acceptFriendRequest]);
 
   const updateUserProfile = useCallback(async (updated) => {
     try {

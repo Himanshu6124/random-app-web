@@ -34,7 +34,6 @@ const MAX_CACHED_MESSAGES = 200;
 export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHandled }) {
   const {
     user,
-    isGuest,
     jwtToken,
     friends,
     removeFriend,
@@ -46,7 +45,6 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     acceptFriendRequest,
     rejectFriendRequest,
     loadFriendsFromApi,
-    openUpgradeModal,
     markFriendMessagesSeen,
     setActiveDmFriendId
   } = useAuth();
@@ -130,7 +128,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     setShowMenu(false);
   };
 
-  // Another view (Discover, a wave alert) asked to open a chat with this friend
+  // Another view (Discover, a notification) asked to open a chat with this friend
   useEffect(() => {
     if (!initialFriendId) return;
     const target = friends.find(f => f.id === initialFriendId || f.friendUserId === initialFriendId);
@@ -160,10 +158,9 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
 
   // Load latest friends and pending requests from API on mount
   useEffect(() => {
-    if (isGuest) return;
     loadFriendsFromApi();
     loadFriendRequests();
-  }, [isGuest, loadFriendsFromApi, loadFriendRequests]);
+  }, [loadFriendsFromApi, loadFriendRequests]);
 
   const loadBlockedUsers = async () => {
     const token = jwtToken || authService.getToken();
@@ -176,10 +173,9 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   };
 
   useEffect(() => {
-    if (isGuest) return;
     loadBlockedUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isGuest, jwtToken]);
+  }, [jwtToken]);
 
   // Close the chat options menu on any click outside it
   useEffect(() => {
@@ -631,100 +627,6 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   }, [activeKey, dmMessages]);
   const freshIds = useNewMessageIds(currentMessages, activeKey);
 
-  if (isGuest) {
-    return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100%',
-        width: '100%',
-        padding: '24px'
-      }}>
-        <div className="glass-panel animate-scale-up" style={{
-          maxWidth: '480px',
-          width: '100%',
-          padding: '40px 32px',
-          borderRadius: 'var(--radius-xl)',
-          textAlign: 'center',
-          backgroundColor: '#21141f',
-          border: '1px solid var(--border-color)',
-          boxShadow: 'var(--shadow-pop)'
-        }}>
-
-          <h2 style={{ fontSize: 'var(--fs-2xl)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>
-            Friends & Direct Messages
-          </h2>
-          <p style={{ color: '#c9b6bf', fontSize: 'var(--fs-body)', lineHeight: 1.5, marginBottom: '24px' }}>
-            Never lose touch with great people you meet! Create a free permanent account to save friends, send direct messages anytime, and see who's online.
-          </p>
-
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            marginBottom: '28px',
-            textAlign: 'left',
-            background: 'var(--plum-3)',
-            padding: '16px',
-            borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--border-color)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: 'var(--fs-body-sm)', color: '#f5ecef' }}>
-              <Check size={16} color="var(--green)" aria-hidden="true" /> Save friends met in Random Chat
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: 'var(--fs-body-sm)', color: '#f5ecef' }}>
-              <Check size={16} color="var(--green)" aria-hidden="true" /> 1-on-1 private direct messaging
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: 'var(--fs-body-sm)', color: '#f5ecef' }}>
-              <Check size={16} color="var(--green)" aria-hidden="true" /> Real-time online status and typing alerts
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <button
-              type="button"
-              id="guest-friends-upgrade-btn"
-              onClick={() => openUpgradeModal('unlock Friends & Direct Messages')}
-              style={{
-                width: '100%',
-                padding: '14px',
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--accent)',
-                color: 'var(--accent-ink)',
-                border: 'none',
-                fontWeight: 700,
-                fontSize: 'var(--fs-base)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-            >
-              Create Free Account
-            </button>
-
-            <button
-              type="button"
-              onClick={onStartMatch}
-              className="btn-secondary"
-              style={{
-                width: '100%',
-                padding: '12px',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 'var(--fs-body-sm)',
-                cursor: 'pointer'
-              }}
-            >
-              Back to Random Match
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="friends-view" style={{
       display: 'flex',
@@ -785,6 +687,44 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             )}
           </button>
         </div>
+
+        {friendRequests.length > 0 && (
+          <div className="friend-requests-inline" aria-label="Pending friend requests">
+            <div className="friend-requests-inline__title">
+              {friendRequests.length === 1 ? '1 friend request' : `${friendRequests.length} friend requests`}
+            </div>
+            {friendRequests.slice(0, 3).map(req => {
+              const reqId = req.id || req.friendUserId;
+              const reqName = req.name || req.username || 'Someone';
+              return (
+                <div key={reqId} className="friend-requests-inline__row">
+                  <span className="friend-requests-inline__name" title={reqName}>{reqName}</span>
+                  <button
+                    type="button"
+                    className="friend-requests-inline__accept"
+                    onClick={() => acceptFriendRequest(reqId).catch(() => {})}
+                    aria-label={`Accept friend request from ${reqName}`}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    className="friend-requests-inline__decline"
+                    onClick={() => rejectFriendRequest(reqId).catch(() => {})}
+                    aria-label={`Decline friend request from ${reqName}`}
+                  >
+                    Decline
+                  </button>
+                </div>
+              );
+            })}
+            {friendRequests.length > 3 && (
+              <button type="button" className="friend-requests-inline__more" onClick={() => setShowRequestDialog(true)}>
+                See all {friendRequests.length}
+              </button>
+            )}
+          </div>
+        )}
 
         {friends.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)' }}>
@@ -1323,7 +1263,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                 }}
               >
                 <HelpCircle size={14} color="var(--text-secondary)" />
-                <span style={{ fontWeight: 600 }}>Ask Icebreaker</span>
+                <span style={{ fontWeight: 600 }}>Icebreaker</span>
               </button>
 
               <div style={{ display: 'flex', gap: '6px' }}>
