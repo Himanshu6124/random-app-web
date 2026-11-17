@@ -1676,3 +1676,117 @@
     display: none;
   }
 }
+.dc-guest-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+.dc-search--submit { padding-right: 6px; margin: 0; }
+.dc-search-submit {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+.dc-search-submit:disabled { opacity: 0.45; cursor: default; }
+
+/* ---- Nearby: gender tabs, big map, horizontal people strip ---- */
+.nearby-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+.nearby-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.nearby-gender {
+  display: inline-flex;
+  padding: 3px;
+  gap: 3px;
+  border-radius: var(--radius-full);
+  background: var(--dc-field);
+  border: 1px solid var(--dc-line);
+}
+.nearby-gender button {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: var(--fs-md);
+  padding: 7px 18px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.nearby-gender button.is-active { background: var(--accent); color: var(--accent-ink); }
+.nearby-share-switch { gap: 6px; color: var(--text-secondary); }
+.nearby-panel .nearby-map {
+  flex: none;
+  width: 100%;
+  height: clamp(380px, calc(100vh - 340px), 720px);
+}
+.nearby-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+.nearby-strip__empty {
+  padding: 14px 4px;
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+}
+.nearby-card {
+  flex: 0 0 132px;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px 10px;
+  border-radius: var(--radius-lg);
+  background: var(--dc-field);
+  border: 1px solid var(--dc-line);
+  cursor: pointer;
+  text-align: center;
+}
+.nearby-card.is-selected { border-color: rgba(240, 114, 137, 0.7); }
+.nearby-card__name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+}
+.nearby-card__sub {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  white-space: nowrap;
+}
+@media (max-width: 768px) {
+  .nearby-panel .nearby-map { height: calc(var(--app-height, 100dvh) - 440px); min-height: 260px; }
+  .nearby-panel { gap: 10px; }
+  .nearby-card { flex-basis: 116px; }
+  .nearby-gender button { padding: 7px 14px; }
+}

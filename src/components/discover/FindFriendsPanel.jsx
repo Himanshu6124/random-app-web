@@ -6,7 +6,7 @@ import { DiscoverAvatar } from './DiscoverAvatar';
 import { FriendshipButton } from './FriendshipButton';
 import { highlight } from './discoverUtils';
 
-const MIN_CHARS = 2;
+const MIN_CHARS = 1;
 const PAGE_SIZE = 20;
 
 /** Find friends: search everyone (guests included) by name or @username. */
@@ -20,38 +20,45 @@ export function FindFriendsPanel({ onOpenChat }) {
   const [error, setError] = useState('');
   const inputRef = useRef(null);
 
-  const term = query.trim().replace(/^@+/, '').trim();
-  const searchable = term.length >= MIN_CHARS;
+  const typed = query.trim().replace(/^@+/, '').trim();
+  // The term actually searched for; only changes when the user taps search or presses Enter.
+  const [term, setTerm] = useState('');
+  const abortRef = useRef(null);
 
-  // Debounced search; an in-flight request is aborted when the query changes.
-  useEffect(() => {
-    if (!searchable) {
-      setResults([]);
-      setHasMore(false);
-      setError('');
-      setLoading(false);
-      return undefined;
-    }
+  const runSearch = async (e) => {
+    e?.preventDefault();
+    if (typed.length < MIN_CHARS) return;
+    abortRef.current?.abort();
     const controller = new AbortController();
+    abortRef.current = controller;
+    setTerm(typed);
     setLoading(true);
-    const timer = setTimeout(async () => {
-      try {
-        const res = await discoverService.searchPeople(term, { page: 0, size: PAGE_SIZE, token: jwtToken, signal: controller.signal });
-        setResults(res.results);
-        setHasMore(!res.last);
-        setPage(0);
-        setError('');
-      } catch (err) {
-        if (err.name !== 'AbortError') setError(err.message || 'Search failed. Please try again.');
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    }, 300);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [term, searchable, jwtToken]);
+    setResults([]);
+    try {
+      const res = await discoverService.searchPeople(typed, { page: 0, size: PAGE_SIZE, token: jwtToken, signal: controller.signal });
+      setResults(res.results);
+      setHasMore(!res.last);
+      setPage(0);
+      setError('');
+    } catch (err) {
+      if (err.name !== 'AbortError') setError(err.message || 'Search failed. Please try again.');
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
+  };
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const clearSearch = () => {
+    abortRef.current?.abort();
+    setQuery('');
+    setTerm('');
+    setResults([]);
+    setHasMore(false);
+    setError('');
+    setLoading(false);
+    inputRef.current?.focus();
+  };
 
   const loadMore = async () => {
     setLoading(true);
@@ -77,8 +84,7 @@ export function FindFriendsPanel({ onOpenChat }) {
         <p>Search by name or @username.</p>
       </div>
 
-      <label className="dc-search">
-        <Search size={18} aria-hidden="true" />
+      <form className="dc-search dc-search--submit" role="search" onSubmit={runSearch}>
         <span className="dc-sr-only">Search people</span>
         <input
           ref={inputRef}
@@ -89,26 +95,34 @@ export function FindFriendsPanel({ onOpenChat }) {
           autoComplete="off"
           spellCheck={false}
           maxLength={50}
+          enterKeyHint="search"
         />
-        {loading && <span className="dc-spinner" aria-hidden="true" />}
         {query && (
           <button
             type="button"
             className="dc-icon-btn dc-icon-btn--ghost dc-icon-btn--sm"
             aria-label="Clear search"
-            onClick={() => { setQuery(''); inputRef.current?.focus(); }}
+            onClick={clearSearch}
           >
             <X size={18} aria-hidden="true" />
           </button>
         )}
-      </label>
+        <button
+          type="submit"
+          className="dc-search-submit"
+          aria-label="Search"
+          disabled={!typed || loading}
+        >
+          {loading ? <span className="dc-spinner" aria-hidden="true" /> : <Search size={18} aria-hidden="true" />}
+        </button>
+      </form>
 
       {error && <div className="dc-error" role="alert">{error}</div>}
 
-      {!searchable ? (
+      {!term ? (
         <div className="dc-empty">
           <strong>Look someone up</strong>
-          <span>Type at least {MIN_CHARS} letters of a name or @username.</span>
+          <span>Type a name or @username, then tap search.</span>
         </div>
       ) : (
         <>
@@ -138,6 +152,7 @@ export function FindFriendsPanel({ onOpenChat }) {
                   </div>
                   <FriendshipButton
                     personId={person.id}
+                    guest={person.guest}
                     name={person.name}
                     status={person.friendshipStatus}
                     onStatusChange={(s) => setStatus(person.id, s)}

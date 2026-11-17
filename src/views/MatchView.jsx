@@ -29,7 +29,7 @@ export function MatchView() {
 
     if (matchState === 'matched') {
       const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-      const delay = prev === 'searching' ? (reduced ? 300 : 1150) : 0;
+      const delay = prev === 'searching' ? (reduced ? 200 : 600) : 0;
       let raf;
       const timer = setTimeout(() => {
         // Mount first, then animate in (like Android's enter transition)

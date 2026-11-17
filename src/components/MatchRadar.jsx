@@ -56,11 +56,6 @@ function prefersReducedMotion() {
   return typeof window !== 'undefined' && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 }
 
-/** "Sunday night", "Monday morning", "Late night" (after midnight the weekday reads oddly). */
-function dayLabel(date, part) {
-  if (part.part === 'late night') return 'Late night';
-  return `${date.toLocaleDateString(undefined, { weekday: 'long' })} ${part.part}`;
-}
 
 // Heart outlines that burst up and outward once (upper half only)
 const BURST_ANGLES = [-80, -55, -30, -10, 10, 30, 55, 80];
@@ -77,7 +72,7 @@ function HeartBurst({ className = '' }) {
 }
 
 export function MatchRadar() {
-  const { matchState, startSearching, cancelSearch, currentPeer, matchTopics, setMatchTopics } = useSocket();
+  const { matchState, startSearching, cancelSearch, currentPeer, matchTopics, setMatchTopics, matchGender, setMatchGender } = useSocket();
   const { user, soundEnabled } = useAuth();
 
   const isSearching = matchState === 'searching';
@@ -252,19 +247,34 @@ export function MatchRadar() {
           </span>
         </h2>
         <p className="match-home__lede">
-          Chat one-to-one with a random stranger. Keep the ones you click with.
+          Chat one-to-one with a random stranger.
         </p>
       </div>
 
-      <p className="match-status is-idle">
-        <span className="match-status__dot" aria-hidden="true" />
-        {dayLabel(now, dayPart)} · ready when you are
-      </p>
+      {/* Compact filters: who to meet, then an optional single row of vibes */}
+      <div className="match-filters">
+        <div className="match-filter-row">
+          <span className="match-filter-row__label" id="meet-label">Meet</span>
+          <div className="match-gender" role="radiogroup" aria-labelledby="meet-label">
+            {[['any', 'Anyone'], ['boy', 'Male'], ['girl', 'Female']].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="radio"
+                aria-checked={matchGender === id}
+                className={matchGender === id ? 'is-active' : ''}
+                onClick={() => setMatchGender(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-      <fieldset className="topic-picker">
-        <legend className="topic-picker__label">
-          Pick up to {MAX_MATCH_TOPICS} vibes <span className="topic-picker__hint">· optional</span>
-        </legend>
+        <fieldset className="topic-picker topic-picker--row">
+          <legend className="topic-picker__label">
+            Vibes <span className="topic-picker__hint">· up to {MAX_MATCH_TOPICS}, optional</span>
+          </legend>
         <div className="topic-picker__chips">
           {MATCH_TOPICS.map(t => {
             const selected = matchTopics.includes(t.id);
@@ -285,6 +295,7 @@ export function MatchRadar() {
           })}
         </div>
       </fieldset>
+      </div>
 
       <div className="match-home__action">
         <div className="find-match">

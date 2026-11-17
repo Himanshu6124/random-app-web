@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Search, MessageCircle, EyeOff, MapPin } from 'lucide-react';
+import { MapPin, MessageCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { discoverService } from '../../services/discoverService';
 import { DiscoverAvatar } from './DiscoverAvatar';
@@ -8,8 +8,13 @@ import { NearbyMap } from './NearbyMap';
 import { presenceLabel } from './discoverUtils';
 
 const REFRESH_MS = 2 * 60 * 1000;
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
 const VIEW_DEBOUNCE_MS = 300;
+const GENDERS = [
+  { id: 'all', label: 'All' },
+  { id: 'boy', label: 'Male' },
+  { id: 'girl', label: 'Female' },
+];
 
 function getDevicePosition() {
   return new Promise((resolve, reject) => {
@@ -20,49 +25,45 @@ function getDevicePosition() {
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve(pos.coords),
       (err) => reject(new Error(err.code === 1
-        ? 'Location permission was denied. Allow it in your browser settings to share.'
+        ? 'Location permission was denied. Allow it in your browser settings.'
         : 'Could not get your location. Please try again.')),
       { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
     );
   });
 }
 
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const lastSeenMs = (p) => (p.isOnline ? Date.now() : new Date(p.lastOnline || p.locationUpdatedAt || 0).getTime());
 
 /**
- * Nearby: a map of everyone around you who shares a location (friends and strangers alike).
- * Seeing others requires sharing your own location first.
- * It opens on a ~12 km area around you; the list always follows what the map shows, so
- * zooming out brings in more people. Crowded spots are grouped into numbered clusters.
+ * Nearby: All / Male / Female filter, a big map, and a horizontal strip of the people on it
+ * (online first, then most recently active, then closest). Seeing others requires sharing your
+ * own (rounded) location.
  */
 export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
   const { jwtToken } = useAuth();
   const [me, setMe] = useState(null);
   const [view, setView] = useState(null);
   const [data, setData] = useState(null);
-  const [people, setPeople] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [fetchingView, setFetchingView] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [toggling, setToggling] = useState(false);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState('');
+  const [gender, setGender] = useState('all');
   const [selected, setSelected] = useState(null);
   const [statusOverrides, setStatusOverrides] = useState({});
   const [reloadTick, setReloadTick] = useState(0);
   const toggleRef = useRef(null);
+  const stripRef = useRef(null);
 
   const sharing = Boolean(me?.sharing);
 
-  /** Pushes a fresh device position (only while sharing), optionally changing who sees it. */
-  const refreshPosition = useCallback(async (visibleToEveryone) => {
+  /** Pushes a fresh device position; sharing is always visible to everyone. */
+  const refreshPosition = useCallback(async () => {
     const coords = await getDevicePosition();
-    const mine = await discoverService.updateMyLocation(coords.latitude, coords.longitude, jwtToken, visibleToEveryone);
+    const mine = await discoverService.updateMyLocation(coords.latitude, coords.longitude, jwtToken, true);
     setMe(mine);
     setReloadTick(t => t + 1);
   }, [jwtToken]);
 
-  // First load: read state; if already sharing, refresh the position silently.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -97,51 +98,31 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
     return { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast(), zoom: view.zoom };
   }, [view]);
 
-  // Everyone in the current map view, re-read whenever the map settles.
+  // Everyone in the current map view, re-read whenever the map settles or the filter changes.
   useEffect(() => {
     if (!sharing || !viewQuery || me?.latitude == null) {
       setData(null);
-      setPeople([]);
       return undefined;
     }
     const controller = new AbortController();
     const timer = setTimeout(async () => {
-      setFetchingView(true);
       try {
-        const res = await discoverService.getNearbyInView({ ...viewQuery, limit: PAGE_SIZE }, jwtToken, controller.signal);
+        const res = await discoverService.getNearbyInView({ ...viewQuery, limit: PAGE_SIZE, gender }, jwtToken, controller.signal);
         setData(res);
-        setPeople(res.people);
         setError('');
       } catch (err) {
         if (err.name !== 'AbortError') setError(err.message || 'Could not load people nearby.');
-      } finally {
-        if (!controller.signal.aborted) setFetchingView(false);
       }
     }, VIEW_DEBOUNCE_MS);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [sharing, viewQuery, me?.latitude, me?.longitude, reloadTick, jwtToken]);
-
-  const loadMore = async () => {
-    if (!viewQuery) return;
-    setLoadingMore(true);
-    try {
-      const res = await discoverService.getNearbyInView({ ...viewQuery, offset: people.length, limit: PAGE_SIZE }, jwtToken);
-      setPeople(prev => [...prev, ...res.people.filter(p => !prev.some(q => q.id === p.id))]);
-      setData(d => ({ ...d, hasMore: res.hasMore }));
-    } catch (err) {
-      setError(err.message || 'Could not load more people.');
-    } finally {
-      setLoadingMore(false);
-    }
-  };
+  }, [sharing, viewQuery, me?.latitude, me?.longitude, gender, reloadTick, jwtToken]);
 
   const setSharing = async (enabled) => {
     setToggling(true);
     setError('');
     try {
       if (enabled) {
-        // Sharing is always with everyone: seeing others means being visible to them.
-        await refreshPosition(true);
+        await refreshPosition();
       } else {
         setMe(await discoverService.setLocationSharing(false, jwtToken));
         setSelected(null);
@@ -153,7 +134,6 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
     }
   };
 
-  // Friend requests sent from here update the row, marker and popover without a refetch.
   const withStatus = useCallback((p) => {
     const status = statusOverrides[p.id];
     return status ? { ...p, friendshipStatus: status, friend: status === 'ACCEPTED' } : p;
@@ -164,16 +144,22 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
     () => (data?.markers || []).map(m => (m.person ? { ...m, person: withStatus(m.person) } : m)),
     [data, withStatus]
   );
-  const listed = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    const all = people.map(withStatus);
-    if (!q) return all;
-    return all.filter(p => p.name?.toLowerCase().includes(q) || p.username?.toLowerCase().includes(q));
-  }, [people, filter, withStatus]);
+  // Online first, then most recently active, then closest.
+  const people = useMemo(
+    () => (data?.people || []).map(withStatus).sort((a, b) =>
+      (Number(b.isOnline) - Number(a.isOnline))
+      || (lastSeenMs(b) - lastSeenMs(a))
+      || (a.distanceKm - b.distanceKm)),
+    [data, withStatus]
+  );
   const selectedNow = selected ? withStatus(selected) : null;
 
-  const total = data?.total ?? 0;
-  const friendCount = data?.friendCount ?? 0;
+  // Keep the selected person's card in view when they are picked on the map.
+  useEffect(() => {
+    if (!selected) return;
+    stripRef.current?.querySelector(`[data-person="${CSS.escape(selected.id)}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }, [selected]);
 
   const overlay = loading ? (
     <div className="dc-card" aria-live="polite"><span className="dc-spinner" aria-hidden="true" /><p>Loading the map…</p></div>
@@ -181,149 +167,102 @@ export function NearbyPanel({ onOpenChat, focusSharingToggle }) {
     <div className="dc-card">
       <MapPin size={22} color="var(--dc-cyan)" aria-hidden="true" />
       <h2>See who's around you</h2>
-      <p>
-        To see people nearby, turn on your own location first. You'll appear on the map too, but
-        only as an area rounded to about 1 km, never your exact spot. Turn it off any time and your
-        position is deleted.
-      </p>
+      <p>Turn on your location to see people nearby. Others see only your rough area (~1 km).</p>
       <button type="button" className="dc-btn dc-btn--primary dc-btn--sm" onClick={() => setSharing(true)} disabled={toggling}>
         <MapPin size={16} aria-hidden="true" />{toggling ? 'Getting location…' : 'Enable my location'}
       </button>
     </div>
   ) : null;
 
-  const emptyText = filter
-    ? 'Nobody on the map matches that name.'
-    : 'Nobody is sharing in this area right now. Zoom out to look farther.';
-
   return (
-    <>
-      <div className="dc-page-head">
-        <div className="dc-page-title">
-          <h1>Nearby</h1>
-          <p>People around you on the map. Positions are rounded to about 1 km to protect privacy.</p>
+    <div className="nearby-panel">
+      <div className="nearby-toolbar">
+        <div className="nearby-gender" role="tablist" aria-label="Show">
+          {GENDERS.map(g => (
+            <button
+              key={g.id}
+              type="button"
+              role="tab"
+              aria-selected={gender === g.id}
+              className={gender === g.id ? 'is-active' : ''}
+              onClick={() => { setGender(g.id); setSelected(null); }}
+            >
+              {g.label}
+            </button>
+          ))}
         </div>
-        <div className="nearby-head-controls" style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center' }}>
-          <label className="dc-switch">
-            <input
-              ref={toggleRef}
-              type="checkbox"
-              role="switch"
-              className="dc-sr-only"
-              checked={sharing}
-              disabled={toggling || loading}
-              onChange={(e) => setSharing(e.target.checked)}
-            />
-            <span className="dc-switch-track" aria-hidden="true" />
-            Share my location
-          </label>
-        </div>
+        <label className="dc-switch nearby-share-switch" title="Share my location">
+          <input
+            ref={toggleRef}
+            type="checkbox"
+            role="switch"
+            className="dc-sr-only"
+            checked={sharing}
+            disabled={toggling || loading}
+            onChange={(e) => setSharing(e.target.checked)}
+          />
+          <span className="dc-switch-track" aria-hidden="true" />
+          <MapPin size={15} aria-hidden="true" />
+          <span className="dc-sr-only">Share my location</span>
+        </label>
       </div>
 
       {error && <div className="dc-error" role="alert">{error}</div>}
 
-      <div className="nearby-body">
-        <NearbyMap
-          me={me}
-          markers={sharing ? markers : []}
-          onViewChange={setView}
-          onCenter={() => { setSelected(null); refreshPosition().catch(err => setError(err.message)); }}
-          selected={selectedNow}
-          onSelect={setSelected}
-          onMessage={onOpenChat}
-          onStatusChange={onStatusChange}
-          onError={setError}
-          updatedAt={me?.updatedAt}
-          overlay={overlay}
-        />
+      <NearbyMap
+        me={me}
+        markers={sharing ? markers : []}
+        onViewChange={setView}
+        onCenter={() => { setSelected(null); refreshPosition().catch(err => setError(err.message)); }}
+        selected={selectedNow}
+        onSelect={setSelected}
+        onMessage={onOpenChat}
+        onStatusChange={onStatusChange}
+        onError={setError}
+        updatedAt={me?.updatedAt}
+        overlay={overlay}
+      />
 
-        <section className="dc-card nearby-list" aria-labelledby="nearby-list-title" aria-busy={fetchingView}>
-          <div className="nearby-list-head">
-            <h2 id="nearby-list-title">
-              {sharing ? `${plural(total, 'person', 'people')} in this area` : 'People nearby'}
-            </h2>
-            {sharing && friendCount > 0 && (
-              <span className="nearby-friend-tag nearby-friend-tag--inline">{plural(friendCount, 'friend', 'friends')}</span>
-            )}
-          </div>
-          {sharing && <span className="dc-muted" style={{ fontSize: 12, marginTop: -6 }}>Friends first, then closest · zoom the map to change the area</span>}
-
-          <label className="dc-search dc-search--compact">
-            <Search size={18} aria-hidden="true" />
-            <span className="dc-sr-only">Filter people on the map</span>
-            <input type="search" placeholder="Filter by name" value={filter} onChange={(e) => setFilter(e.target.value)} disabled={!sharing} />
-          </label>
-
-          {!sharing ? (
-            <div className="dc-empty">
-              <EyeOff size={22} aria-hidden="true" />
-              <span>Enable your location to see who's around.</span>
-            </div>
-          ) : listed.length === 0 ? (
-            <div className="dc-empty">
-              <strong>{filter ? 'No match' : fetchingView && !data ? 'Looking around…' : 'Nobody here yet'}</strong>
-              {!(fetchingView && !data) && <span>{emptyText}</span>}
-            </div>
-          ) : (
-            <ul className="dc-person-list" role="listbox" aria-label="People on the map">
-              {listed.map(p => (
-                <li
-                  key={p.id}
-                  className="dc-person-row"
-                  role="option"
-                  aria-selected={selected?.id === p.id}
-                  onClick={() => setSelected(p)}
-                >
-                  <DiscoverAvatar id={p.id} name={p.name} photoUrl={p.photoUrl} online={p.isOnline} size={44} />
-                  <div className="dc-person-text">
-                    <span className="dc-person-name">
-                      {p.name}
-                      {p.friend && <span className="nearby-friend-tag nearby-friend-tag--inline">Friend</span>}
-                    </span>
-                    <span className="dc-person-sub">{p.distanceKm} km away · {presenceLabel(p)}</span>
-                  </div>
-                  {p.friend ? (
-                    <button
-                      type="button"
-                      className="dc-icon-btn"
-                      aria-label={`Message ${p.name}`}
-                      onClick={(e) => { e.stopPropagation(); onOpenChat(p.id); }}
-                    >
-                      <MessageCircle size={18} aria-hidden="true" />
-                    </button>
-                  ) : (
-                    <span onClick={(e) => e.stopPropagation()}>
-                      <FriendshipButton
-                        personId={p.id}
-                        name={p.name}
-                        status={p.friendshipStatus}
-                        size="sm"
-                        onStatusChange={(status) => onStatusChange(p.id, status)}
-                        onMessage={() => onOpenChat(p.id)}
-                        onError={setError}
-                      />
-                    </span>
-                  )}
-                </li>
-              ))}
-              {data?.hasMore && !filter && (
-                <li style={{ listStyle: 'none', padding: '10px 0', textAlign: 'center' }}>
-                  <button type="button" className="dc-btn dc-btn--soft dc-btn--sm" onClick={loadMore} disabled={loadingMore}>
-                    {loadingMore ? 'Loading…' : `Show more (${total - people.length} left)`}
+      {sharing && (
+        <div className="nearby-strip" ref={stripRef} aria-label="People nearby">
+          {data && people.length === 0 && (
+            <div className="nearby-strip__empty">Nobody here right now. Zoom out to look farther.</div>
+          )}
+          {people.map(p => (
+            <div
+              key={p.id}
+              data-person={p.id}
+              className={`nearby-card${selected?.id === p.id ? ' is-selected' : ''}`}
+              onClick={() => setSelected(p)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter') setSelected(p); }}
+            >
+              <DiscoverAvatar id={p.id} name={p.name} photoUrl={p.photoUrl} online={p.isOnline} size={48} />
+              <span className="nearby-card__name">{p.name}</span>
+              <span className="nearby-card__sub">{p.distanceKm} km · {p.isOnline ? 'Online' : presenceLabel(p).replace('Active ', '')}</span>
+              <span onClick={(e) => e.stopPropagation()}>
+                {p.friend ? (
+                  <button type="button" className="dc-btn dc-btn--soft dc-btn--sm" onClick={() => onOpenChat(p.id)}>
+                    <MessageCircle size={14} aria-hidden="true" />Chat
                   </button>
-                </li>
-              )}
-            </ul>
-          )}
-
-          {sharing && data?.truncated && (
-            <p className="nearby-list-foot">
-              <EyeOff size={14} aria-hidden="true" />
-              This area is very busy; zoom in to see everyone.
-            </p>
-          )}
-        </section>
-      </div>
-    </>
+                ) : (
+                  <FriendshipButton
+                    personId={p.id}
+                    name={p.name}
+                    guest={p.guest}
+                    status={p.friendshipStatus}
+                    size="sm"
+                    onStatusChange={(status) => onStatusChange(p.id, status)}
+                    onMessage={() => onOpenChat(p.id)}
+                    onError={setError}
+                  />
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

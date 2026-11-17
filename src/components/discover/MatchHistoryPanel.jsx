@@ -206,6 +206,7 @@ export function MatchHistoryPanel({ onOpenChat }) {
       <span onClick={(e) => e.stopPropagation()} style={{ display: 'contents' }}>
         <FriendshipButton
           personId={item.peerId}
+          guest={item.peerGuest}
           name={item.peerName}
           status={item.friendshipStatus}
           size={size}
@@ -460,6 +461,7 @@ export function MatchHistoryPanel({ onOpenChat }) {
                 <div className="history-detail-primary" style={{ display: 'flex' }}>
                   <FriendshipButton
                     personId={selected.peerId}
+                    guest={selected.peerGuest}
                     name={selected.peerName}
                     status={selected.friendshipStatus}
                     onStatusChange={(s) => onFriendshipChange(selected, s)}

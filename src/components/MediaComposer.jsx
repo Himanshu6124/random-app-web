@@ -161,7 +161,10 @@ export function MediaComposer({ conversationId, disabled, onSend, onError }) {
   const busy = uploading || recording;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+    <div
+      className={`media-composer${recording ? ' is-recording' : ''}`}
+      style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}
+    >
       {uploading && (
         <span id="media-upload-progress" style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
           {progress}%

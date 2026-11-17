@@ -22,7 +22,7 @@ export const MATCH_TOPICS = [
 export const MAX_MATCH_TOPICS = 3;
 
 /** How long the server holds out for a shared topic before matching anyone (matchmaking.interest-window-ms). */
-export const TOPIC_WINDOW_SECONDS = 5;
+export const TOPIC_WINDOW_SECONDS = 1;
 
 const BY_ID = new Map(MATCH_TOPICS.map(t => [t.id, t]));
 const STORAGE_KEY = 'rc.matchTopics';

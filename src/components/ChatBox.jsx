@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Send, SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Star, Hand, RefreshCw, X, Zap, Ban, UserRound, AlertTriangle, CheckCheck, Check, Wine } from 'lucide-react';
 import { extractPeerName, MAX_MESSAGE_LENGTH } from '../services/socketService';
 import { authService } from '../services/authService';
+import { PeerAbout } from './chat/PeerAbout';
 import { MediaComposer } from './MediaComposer';
 import { ChatMediaMessage } from './ChatMediaMessage';
 import { DiscoverConfirmDialog } from './discover/DiscoverConfirmDialog';
@@ -19,6 +20,8 @@ export function ChatBox() {
   const {
     user,
     jwtToken,
+    isGuest,
+    openUpgradeModal,
     sendFriendRequest,
     acceptFriendRequest,
     cancelFriendRequest,
@@ -61,6 +64,7 @@ export function ChatBox() {
   const [blocking, setBlocking] = useState(false);
   const [blockError, setBlockError] = useState('');
   const [gameOpen, setGameOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [replyTarget, setReplyTarget] = useState(null);
   const interactions = useMessageInteractions();
   const closeInteractions = interactions.close;
@@ -126,6 +130,18 @@ export function ChatBox() {
     if (actionLoading || !peerId) return;
 
     if (friendStatus === 'ACCEPTED') {
+      return;
+    }
+
+    // Friends need an account. The chat keeps going while the guest signs in, and the
+    // request (or accept) is sent automatically afterwards.
+    if (isGuest) {
+      openUpgradeModal(
+        friendStatus === 'PENDING_RECEIVED'
+          ? `Sign in to accept ${peerName}'s friend request.`
+          : `Sign in to add ${peerName} as a friend.`,
+        { action: friendStatus === 'PENDING_RECEIVED' ? 'ACCEPT_FRIEND' : 'SEND_FRIEND', targetUserId: peerId }
+      );
       return;
     }
 
@@ -359,10 +375,17 @@ export function ChatBox() {
         justifyContent: 'space-between',
         background: 'rgba(26, 16, 25, 0.4)',
         position: 'relative',
-        zIndex: 10
+        zIndex: aboutOpen ? 60 : 10
       }}>
-        {/* Peer Profile Info */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        {/* Peer Profile Info: tap to see their bio and interests */}
+        <button
+          type="button"
+          className="chat-peer-info"
+          onClick={() => setAboutOpen(o => !o)}
+          aria-expanded={aboutOpen}
+          aria-label={`About ${peerName}`}
+          style={{ display: 'flex', alignItems: 'center', gap: '14px' }}
+        >
           <div style={{
             width: '46px',
             height: '46px',
@@ -398,11 +421,29 @@ export function ChatBox() {
                 <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-muted)' }}>Offline</span>
               )}
             </div>
-            <p className="chat-peer-bio" style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)' }}>
-              {currentPeer.bio || 'Random Chat Partner'}
-            </p>
+            {currentPeer.peerBio && (
+              <p className="chat-peer-bio" style={{ fontSize: 'var(--fs-sm)', color: 'var(--text-secondary)' }}>
+                {currentPeer.peerBio}
+              </p>
+            )}
           </div>
-        </div>
+        </button>
+        {aboutOpen && (
+          <>
+            <div className="peer-about-backdrop" onClick={() => setAboutOpen(false)} aria-hidden="true" />
+            <div className="peer-about-popover" role="dialog" aria-label={`About ${peerName}`}>
+              <div className="peer-about-popover__name">{peerName}</div>
+              <PeerAbout
+                bio={currentPeer.peerBio}
+                topics={currentPeer.peerTopics}
+                sharedTopics={currentPeer.sharedTopics}
+              />
+              {!currentPeer.peerBio && !(currentPeer.peerTopics || []).length && (
+                <p className="peer-about-popover__empty">{peerName} hasn't added a bio or interests yet.</p>
+              )}
+            </div>
+          </>
+        )}
 
         {/* Action Controls */}
         <div className="chat-header-actions">
@@ -477,7 +518,8 @@ export function ChatBox() {
               <UserCheck size={16} />
               <span>{actionLoading ? 'Accepting...' : 'Accept Friend'}</span>
             </button>
-          ) : (
+          ) : currentPeer.peerGuest ? null : (
+            /* Guests (and AI partners) cannot receive friend requests, so no button for them */
             <button
               id="add-friend-btn"
               type="button"
@@ -552,11 +594,16 @@ export function ChatBox() {
         zIndex: 10
       }}>
         {!messages.some(m => m.senderId !== 'system') && !peerLeft && (
-          <div className="chat-intro" aria-hidden="true">
-            <svg className="chat-intro__heart" viewBox="0 0 24 24">
+          <div className="chat-intro">
+            <svg className="chat-intro__heart" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 20.5C9 18.2 4 14.6 4 9.8 4 7.2 6 5.2 8.4 5.2c1.5 0 2.8.8 3.6 2 .8-1.2 2.1-2 3.6-2C18 5.2 20 7.2 20 9.8c0 4.8-5 8.4-8 10.7Z" />
             </svg>
             <p className="chat-intro__title">It's just the two of you now.</p>
+            <PeerAbout
+              bio={currentPeer.peerBio}
+              topics={currentPeer.peerTopics}
+              sharedTopics={currentPeer.sharedTopics}
+            />
             <p className="chat-intro__hint">Say hi, or tap Icebreaker if you're shy.</p>
           </div>
         )}

@@ -814,3 +814,134 @@
     font-size: var(--fs-sm);
   }
 }
+
+/* Peer bio + interests (empty chat intro and the header popover) */
+.chat-peer-info {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.chat-peer-info .chat-peer-bio {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40vw;
+}
+.peer-about {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 34ch;
+}
+.peer-about__bio {
+  font-size: var(--fs-body-sm);
+  color: var(--text-primary);
+  font-style: italic;
+  line-height: 1.45;
+}
+.peer-about__topics {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.peer-about__topic {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--plum-3);
+  border: 1px solid var(--border-color);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.peer-about__topic.is-shared {
+  border-color: rgba(240, 114, 137, 0.6);
+  color: var(--text-primary);
+}
+.peer-about-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.peer-about-popover {
+  position: absolute;
+  top: calc(100% - 6px);
+  left: 16px;
+  z-index: 41;
+  width: min(300px, calc(100vw - 32px));
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  background: #2b1a28;
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: rc-toast-in 180ms ease-out;
+}
+.peer-about-popover .peer-about { align-items: flex-start; max-width: none; }
+.peer-about-popover .peer-about__topics { justify-content: flex-start; }
+.peer-about-popover__name { font-weight: 700; font-size: var(--fs-body); }
+.peer-about-popover__empty { font-size: var(--fs-sm); color: var(--text-muted); }
+
+/* Match home: compact "Meet" filter and a single scrolling row of vibes */
+.match-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+}
+.match-filter-row { display: flex; align-items: center; gap: 12px; }
+.match-filter-row__label {
+  font-family: var(--font-sub);
+  font-size: var(--fs-body-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 44px;
+}
+.match-gender {
+  display: inline-flex;
+  padding: 3px;
+  gap: 3px;
+  border-radius: var(--radius-full);
+  background: var(--plum-3);
+  border: 1px solid var(--border-color);
+}
+.match-gender button {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: var(--fs-md);
+  padding: 7px 16px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.match-gender button.is-active { background: var(--accent); color: var(--accent-ink); }
+.topic-picker--row .topic-picker__label { margin-bottom: 8px; }
+.topic-picker--row .topic-picker__chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+.topic-picker--row .topic-picker__chips::-webkit-scrollbar { display: none; }
+.topic-picker--row .topic-chip { flex-shrink: 0; }
+@media (min-width: 769px) {
+  /* Desktop has room: let the vibes wrap instead of scrolling */
+  .topic-picker--row .topic-picker__chips { flex-wrap: wrap; overflow: visible; -webkit-mask-image: none; mask-image: none; }
+}

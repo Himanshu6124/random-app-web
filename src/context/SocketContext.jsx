@@ -82,6 +82,17 @@ export function SocketProvider({ children }) {
   // matchState: 'idle' | 'searching' | 'matched'
   const [matchState, setMatchState] = useState('idle');
   // Topics picked on the Match screen; sent with each search, remembered on this device.
+  // Who to meet: 'any' | 'boy' | 'girl' (remembered on this device).
+  const [matchGender, setMatchGenderState] = useState(() => {
+    try { return localStorage.getItem('rc.matchGender') || 'any'; } catch { return 'any'; }
+  });
+  const matchGenderRef = useRef(matchGender);
+  const setMatchGender = useCallback((g) => {
+    const next = g === 'boy' || g === 'girl' ? g : 'any';
+    matchGenderRef.current = next;
+    setMatchGenderState(next);
+    try { localStorage.setItem('rc.matchGender', next); } catch { /* private mode */ }
+  }, []);
   const [matchTopics, setMatchTopicsState] = useState(loadSavedTopics);
   const matchTopicsRef = useRef(matchTopics);
   const setMatchTopics = useCallback((ids) => {
@@ -638,7 +649,7 @@ export function SocketProvider({ children }) {
     setCurrentPeer(null);
     setPeerLeft(false);
     setMessages([]);
-    socketService.startMatchmaking({ topics: matchTopicsRef.current });
+    socketService.startMatchmaking({ topics: matchTopicsRef.current, gender: matchGenderRef.current });
   }, []);
 
   const cancelSearch = useCallback(() => {
@@ -672,7 +683,7 @@ export function SocketProvider({ children }) {
     if (skipTimerRef.current) clearTimeout(skipTimerRef.current);
     skipTimerRef.current = setTimeout(() => {
       skipTimerRef.current = null;
-      socketService.startMatchmaking({ topics: matchTopicsRef.current });
+      socketService.startMatchmaking({ topics: matchTopicsRef.current, gender: matchGenderRef.current });
     }, 150);
   }, []);
 
@@ -870,6 +881,8 @@ export function SocketProvider({ children }) {
     dismissLiveRandomMessage,
     matchState,
     matchTopics,
+    matchGender,
+    setMatchGender,
     setMatchTopics,
     currentPeer,
     messages,
@@ -897,7 +910,7 @@ export function SocketProvider({ children }) {
     isLiveConnected
   }), [
     activeTab, setActiveTab, unreadRandomCount, clearUnreadRandomCount, liveRandomMessage,
-    dismissLiveRandomMessage, matchState, matchTopics, setMatchTopics, currentPeer, messages, isPeerTyping, isPeerOnline, peerLeft,
+    dismissLiveRandomMessage, matchState, matchTopics, setMatchTopics, matchGender, setMatchGender, currentPeer, messages, isPeerTyping, isPeerOnline, peerLeft,
     startSearching, cancelSearch, skipStranger, disconnectChat, sendMessage,
     retryMessage, sendMedia, sendReaction, reactToMessage, sendIcebreaker, notifyTyping, floatingReactions,
     bottleGame, spinBottle, chooseGameOption, askGameQuestion, closeGame, connectionStatus, isLiveConnected

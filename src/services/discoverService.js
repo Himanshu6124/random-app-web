@@ -68,8 +68,9 @@ export const discoverService = {
    * Everyone visible in a map view (friends + strangers who share with everyone), already
    * clustered for `zoom`, plus a page of people in view (friends first, then closest).
    */
-  async getNearbyInView({ south, west, north, east, zoom, offset = 0, limit = 50 }, token, signal) {
-    const data = await request(`/location/nearby${qs({ south, west, north, east, zoom, offset, limit })}`, { token, signal });
+  async getNearbyInView({ south, west, north, east, zoom, offset = 0, limit = 50, gender }, token, signal) {
+    const g = gender && gender !== 'all' ? gender : undefined;
+    const data = await request(`/location/nearby${qs({ south, west, north, east, zoom, offset, limit, gender: g })}`, { token, signal });
     const person = (p) => ({ ...normalizeFriend(p), friend: Boolean(p?.friend), friendshipStatus: p?.friendshipStatus || 'NONE' });
     return {
       ...data,

@@ -628,6 +628,9 @@ export class SocketService {
     if (Array.isArray(userProfile?.topics)) {
       this._searchTopics = userProfile.topics;
     }
+    if (userProfile && 'gender' in userProfile) {
+      this._searchGender = userProfile.gender && userProfile.gender !== 'any' ? userProfile.gender : null;
+    }
     this._isSearching = true;
     this._lastHandledMatchConvId = null;
 
@@ -652,7 +655,7 @@ export class SocketService {
 
   _publishSearch() {
     log('[SocketService] Publishing match search to /app/chat.random');
-    this._publish('/app/chat.random', { topics: this._searchTopics });
+    this._publish('/app/chat.random', { topics: this._searchTopics, gender: this._searchGender || null });
   }
 
   _handleMatchmakingEvent(frame) {
@@ -685,6 +688,9 @@ export class SocketService {
           name: peerName,
           photoUrl: payload.photoUrl || '',
           sharedTopics: Array.isArray(payload.sharedTopics) ? payload.sharedTopics : [],
+          peerTopics: Array.isArray(payload.peerTopics) ? payload.peerTopics : [],
+          peerBio: payload.peerBio || '',
+          peerGuest: Boolean(payload.peerGuest),
           avatarBg: '#8b5cf6',
           status: 'Online'
         };

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import { startGoogleSignIn } from '../services/firebaseClient';
 import { GoogleUsernameClaimForm } from './GoogleUsernameClaimForm';
 import { X } from 'lucide-react';
@@ -18,6 +19,9 @@ export function GuestUpgradeModal() {
     clearGoogleRedirectUpgrade
   } = useAuth();
 
+  const { matchState } = useSocket();
+  // Mid-chat sign-ins get explicit reassurance that the chat carries on.
+  const inLiveChat = matchState === 'matched';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [pendingIdToken, setPendingIdToken] = useState(null);
@@ -195,12 +199,12 @@ export function GuestUpgradeModal() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
           <div>
             <h2 style={{ fontSize: 'var(--fs-xl)', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
-              Create Free Account
+              Sign in or create an account
             </h2>
             <p style={{ fontSize: 'var(--fs-md)', color: 'var(--text-secondary)', margin: '4px 0 0', fontWeight: 500 }}>
               {upgradeModalReason
                 ? (upgradeModalReason.charAt(0).toUpperCase() + upgradeModalReason.slice(1))
-                : 'Save friends & unlock direct messaging!'}
+                : 'Add friends and message them anytime.'}
             </p>
           </div>
         </div>
@@ -229,9 +233,7 @@ export function GuestUpgradeModal() {
           />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <p style={{ fontSize: 'var(--fs-md)', color: '#c9b6bf', margin: 0 }}>
-              Sign in with Google to create your account — your active chat, messages and friends stay exactly as they are.
-            </p>
+
 
             <button
               type="button"
@@ -239,7 +241,7 @@ export function GuestUpgradeModal() {
               onClick={handleGoogleLink}
               disabled={loading || !firebaseConfigured}
               title={firebaseConfigured
-                ? 'Link your Google account to this guest profile'
+                ? 'Sign in with Google'
                 : 'Google sign-in is not configured on this server yet'}
               style={{
                 padding: '14px',
@@ -275,12 +277,14 @@ export function GuestUpgradeModal() {
             {!firebaseConfigured && (
               <p style={{ fontSize: '0.78rem', color: '#f07289', margin: 0 }}>
                 Google sign-in is not configured on this server yet. Your guest account still
-                works; ask the admin to set the Firebase configuration to enable upgrades.
+                works; ask the admin to set the Firebase configuration to enable sign-in.
               </p>
             )}
 
-            <p style={{ fontSize: 'var(--fs-xs)', color: '#a8939e', margin: 0, textAlign: 'center' }}>
-              Mid-chat upgrade keeps the conversation alive — nothing is lost.
+            <p className="signin-reassure">
+              {inLiveChat
+                ? "Don't worry, your chat keeps going. It won't disconnect when you sign in."
+                : 'Your matches and history come with you. Nothing is lost.'}
             </p>
           </div>
         )}
