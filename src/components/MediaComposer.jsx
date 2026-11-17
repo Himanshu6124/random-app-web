@@ -66,7 +66,7 @@ export function useMediaComposer({ conversationId, onSend, onError }) {
   }, [conversationId]);
 
   const startRecording = useCallback(async () => {
-    if (!conversationId || recorderRef.current) return;
+    if (!conversationId || recorderRef.current) return false;
     try {
       const controller = await startVoiceRecording();
       recorderRef.current = controller;
@@ -74,12 +74,14 @@ export function useMediaComposer({ conversationId, onSend, onError }) {
       setRecording(true);
       setElapsed(0);
       tickRef.current = setInterval(() => setElapsed(controller.elapsedMs()), 200);
+      return true;
     } catch (err) {
       if (err?.name === 'NotAllowedError' || /denied|permission/i.test(err?.message || '')) {
         onErrorRef.current?.('Microphone permission was denied. Allow mic access to record voice notes.');
       } else {
         onErrorRef.current?.(err?.message || 'Voice recording is unavailable.');
       }
+      return false;
     }
   }, [conversationId]);
 

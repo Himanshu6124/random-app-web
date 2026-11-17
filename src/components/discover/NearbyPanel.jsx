@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MapPin, MessageCircle } from 'lucide-react';
+import { MapPin, MessageCircle, Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { discoverService } from '../../services/discoverService';
 import { DiscoverAvatar } from './DiscoverAvatar';
@@ -221,10 +221,13 @@ export function NearbyPanel({ onOpenChat }) {
               onKeyDown={(e) => { if (e.key === 'Enter') setSelected(p); }}
             >
               <DiscoverAvatar id={p.id} name={p.name} photoUrl={p.photoUrl} online={p.isOnline} size={48} />
-              <span className="nearby-card__name">{p.name}</span>
+              <span className="nearby-card__name">
+                {p.name}
+                {String(p.id).startsWith('bot-') && <span className="dc-ai-badge"><Sparkles size={10} aria-hidden="true" />AI</span>}
+              </span>
               <span className="nearby-card__sub">{p.distanceKm} km · {p.isOnline ? 'Online' : presenceLabel(p).replace('Active ', '')}</span>
               <span onClick={(e) => e.stopPropagation()}>
-                {p.friend ? (
+                {String(p.id).startsWith('bot-') ? null : p.friend ? (
                   <button type="button" className="dc-btn dc-btn--soft dc-btn--sm" onClick={() => onOpenChat(p.id)}>
                     <MessageCircle size={14} aria-hidden="true" />Chat
                   </button>

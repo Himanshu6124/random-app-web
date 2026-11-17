@@ -50,3 +50,17 @@ export function jumpToMessage(messageId) {
   void el.offsetWidth;
   el.classList.add('msg-flash');
 }
+
+/** Bubble classes: colours come from the chat theme; media / replies hug their content. */
+export function bubbleClass(msg, isMe, isFailed = false) {
+  const isMedia = msg.type === 'IMAGE' || msg.type === 'AUDIO' || Boolean(msg.objectUri);
+  const isAudio = msg.type === 'AUDIO';
+  return [
+    'chat-bubble',
+    isFailed ? 'chat-bubble--failed' : (isMe ? 'chat-bubble--me' : 'chat-bubble--them'),
+    isMe ? 'chat-bubble--me-shape' : '',
+    isMedia ? 'chat-bubble--media' : '',
+    isAudio ? 'chat-bubble--audio' : '',
+    msg.referredMessageId ? 'chat-bubble--reply' : ''
+  ].filter(Boolean).join(' ');
+}

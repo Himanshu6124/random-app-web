@@ -488,6 +488,12 @@ export function SocketProvider({ children }) {
           handleIncomingDirectMessageRef.current?.(payload);
           if (soundEnabledRef.current) playChime('message');
         },
+        onMessageDeleted: (payload) => {
+          // Random rooms are not stored: only the author may delete, so check it here.
+          const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+          if (!activeConvId || payload?.conversationId !== activeConvId || !payload?.messageId) return;
+          setMessages(prev => prev.filter(m => !(m.id === payload.messageId && m.senderId === payload.senderId)));
+        },
         onReaction: (payload) => {
           const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
           if (!activeConvId || payload?.conversationId !== activeConvId) return;
@@ -920,6 +926,18 @@ export function SocketProvider({ children }) {
     return sent;
   }, [currentPeer, peerLeft, isPeerOnline]);
 
+  /** Delete one of my random-chat messages for both people. */
+  const deleteMessage = useCallback((messageId) => {
+    const conversationId = currentPeer?.conversationId || currentPeer?.id;
+    if (!conversationId || !messageId) return false;
+    const sent = socketService.deleteMessage(conversationId, messageId);
+    if (sent) {
+      const myId = userRef.current?.id;
+      setMessages(prev => prev.filter(m => !(m.id === messageId && m.senderId === myId)));
+    }
+    return sent;
+  }, [currentPeer]);
+
   const sendIcebreaker = useCallback(() => {
     if (peerLeftRef.current || !isPeerOnlineRef.current) return false;
     const questions = ICEBREAKER_QUESTIONS;
@@ -982,6 +1000,7 @@ export function SocketProvider({ children }) {
     retryMessage,
     sendReaction,
     reactToMessage,
+    deleteMessage,
     sendIcebreaker,
     notifyTyping,
     floatingReactions,
@@ -996,7 +1015,7 @@ export function SocketProvider({ children }) {
     activeTab, setActiveTab, unreadRandomCount, clearUnreadRandomCount, liveRandomMessage,
     dismissLiveRandomMessage, matchState, matchTopics, setMatchTopics, matchGender, setMatchGender, currentPeer, messages, isPeerTyping, isPeerOnline, peerLastSeen, peerLeft, resyncTick,
     startSearching, cancelSearch, skipStranger, disconnectChat, sendMessage,
-    retryMessage, sendMedia, sendReaction, reactToMessage, sendIcebreaker, notifyTyping, floatingReactions,
+    retryMessage, sendMedia, sendReaction, reactToMessage, deleteMessage, sendIcebreaker, notifyTyping, floatingReactions,
     bottleGame, spinBottle, chooseGameOption, askGameQuestion, closeGame, connectionStatus, isLiveConnected
   ]);
 

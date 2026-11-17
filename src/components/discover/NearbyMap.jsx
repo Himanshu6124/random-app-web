@@ -269,6 +269,7 @@ export function NearbyMap({
               <span className="nearby-popover-name">
                 {selected.name}
                 {selected.friend && <span className="nearby-friend-tag nearby-friend-tag--inline">Friend</span>}
+                {String(selected.id).startsWith('bot-') && <span className="dc-ai-badge">AI</span>}
               </span>
               <span className="nearby-popover-sub">
                 {selected.distanceKm} km ·{' '}
@@ -276,7 +277,7 @@ export function NearbyMap({
               </span>
             </div>
           </div>
-          {selected.friend ? (
+          {String(selected.id).startsWith('bot-') ? null : selected.friend ? (
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" className="dc-btn dc-btn--primary dc-btn--sm" onClick={() => onMessage(selected.id)}>
                 <MessageCircle size={16} aria-hidden="true" />

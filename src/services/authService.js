@@ -571,6 +571,8 @@ export const authService = {
           referredMessageId: m.referredMessageId || null,
           reactEmojiSender: m.reactEmojiSender || null,
           reactEmojiReceiver: m.reactEmojiReceiver || null,
+          clientMessageId: m.clientMessageId || null,
+          expiresAt: m.expiresAt || null,
           status: m.status || 'SENT',
           type: m.type || 'TEXT',
           time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),

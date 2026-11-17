@@ -51,15 +51,66 @@ function readAsImage(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
-    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.decoding = 'async';
+    img.onload = async () => {
+      // onload can fire before a big image is decoded; drawing it then gives a blank canvas.
+      try { if (img.decode) await img.decode(); } catch { /* draw anyway */ }
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('This file is not a readable image.')); };
     img.src = url;
   });
 }
 
+/** Decodes an image, honouring EXIF rotation. createImageBitmap is the most reliable path. */
+async function decodeImage(file) {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      if (bmp.width > 0 && bmp.height > 0) return { source: bmp, width: bmp.width, height: bmp.height, close: () => bmp.close?.() };
+    } catch { /* fall back to <img> */ }
+  }
+  const img = await readAsImage(file);
+  return { source: img, width: img.naturalWidth || img.width, height: img.naturalHeight || img.height, close: () => {} };
+}
+
+/**
+ * Samples the drawn canvas: is any pixel see-through, and did the draw produce anything at all?
+ * A draw that silently failed (low-memory phones, huge screenshots, undecoded image) leaves
+ * every pixel at alpha 0 — encoded as JPEG that is a solid black picture.
+ */
+function inspectCanvas(canvas) {
+  try {
+    const probe = document.createElement('canvas');
+    const w = Math.min(64, canvas.width);
+    const h = Math.min(64, canvas.height);
+    probe.width = w;
+    probe.height = h;
+    const pctx = probe.getContext('2d', { willReadFrequently: true });
+    pctx.drawImage(canvas, 0, 0, w, h);
+    const data = pctx.getImageData(0, 0, w, h).data;
+    let transparent = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] < 250) transparent++;
+    const total = data.length / 4;
+    return { blank: transparent === total, hasAlpha: transparent > 0 };
+  } catch {
+    return { blank: false, hasAlpha: true };
+  }
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+}
+
 /**
  * Validates and normalizes an image file. Returns { blob, width, height }.
  * Rejects non-images and anything over the cap AFTER processing (never silently drops).
+ *
+ * Screenshots used to arrive black on some phones: either the canvas draw failed silently
+ * (blank canvas -> black JPEG) or a see-through image was flattened onto black when encoded
+ * as JPEG. Now: decode properly, detect a failed draw (and send the original instead), keep
+ * PNG only for images that really have transparency, and paint opaque output on white.
  */
 export async function prepareImage(file) {
   if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
@@ -77,26 +128,60 @@ export async function prepareImage(file) {
     return { blob: file };
   }
 
-  const img = await readAsImage(file);
-  const scale = Math.min(1, MAX_IMAGE_EDGE_PX / Math.max(img.width, img.height));
-  const width = Math.max(1, Math.round(img.width * scale));
-  const height = Math.max(1, Math.round(img.height * scale));
+  const sendOriginal = () => {
+    if (file.size > MAX_IMAGE_BYTES) {
+      throw new Error('This image could not be processed on your device. Try a smaller image.');
+    }
+    return { blob: file };
+  };
 
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Your browser could not process this image.');
-  ctx.drawImage(img, 0, 0, width, height);
-
-  // PNG keeps transparency; everything else becomes JPEG at high quality (much smaller).
-  const outType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, outType, 0.9));
-  if (!blob) throw new Error('Your browser could not process this image.');
-  if (blob.size > MAX_IMAGE_BYTES) {
-    throw new Error('Image is still too large after optimization (max 5 MB).');
+  let decoded;
+  try {
+    decoded = await decodeImage(file);
+  } catch {
+    return sendOriginal();
   }
-  return { blob, width, height };
+
+  try {
+    let edge = MAX_IMAGE_EDGE_PX;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const scale = Math.min(1, edge / Math.max(decoded.width, decoded.height));
+      const width = Math.max(1, Math.round(decoded.width * scale));
+      const height = Math.max(1, Math.round(decoded.height * scale));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return sendOriginal();
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(decoded.source, 0, 0, width, height);
+
+      const { blank, hasAlpha } = inspectCanvas(canvas);
+      if (blank) return sendOriginal();
+
+      let blob;
+      if (hasAlpha) {
+        blob = await canvasToBlob(canvas, 'image/png');
+      } else {
+        // Opaque: paint on white first so no stray transparent pixel can turn black.
+        const flat = document.createElement('canvas');
+        flat.width = width;
+        flat.height = height;
+        const fctx = flat.getContext('2d');
+        fctx.fillStyle = '#ffffff';
+        fctx.fillRect(0, 0, width, height);
+        fctx.drawImage(canvas, 0, 0);
+        blob = await canvasToBlob(flat, 'image/jpeg', 0.9);
+      }
+      if (!blob || blob.size === 0) return sendOriginal();
+      if (blob.size <= MAX_IMAGE_BYTES) return { blob, width, height };
+      edge = Math.round(edge * 0.7);
+    }
+    throw new Error('Image is still too large after optimization (max 5 MB).');
+  } finally {
+    decoded.close();
+  }
 }
 
 /**

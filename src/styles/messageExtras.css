@@ -255,3 +255,19 @@
   .msg-bubble-hit { transition: none; }
   .msg-row.is-active .msg-bubble-hit { transform: none; }
 }
+
+/* Delete for everyone: trash, then a small red "Delete" confirm */
+.msg-delete-btn { gap: 4px; }
+.msg-delete-btn.is-confirm {
+  width: auto;
+  padding: 0 10px;
+  color: #fff;
+  background: var(--danger, #e5484d);
+  border-color: transparent;
+  font-size: var(--fs-sm, 13px);
+  font-weight: 600;
+  border-radius: 999px;
+}
+.msg-delete-btn.is-confirm:hover { background: var(--danger, #e5484d); color: #fff; }
+.reaction-picker .msg-delete-btn { border-left: none; border-radius: var(--radius-full); margin-left: 0; color: var(--danger, #e5484d); }
+.reaction-picker .msg-delete-btn.is-confirm { color: #fff; height: 32px; align-self: center; }

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
-import { SkipForward, UserPlus, UserCheck, LogOut, HelpCircle, Heart, Flame, Smile, Star, Hand, RefreshCw, X, Zap, UserRound, AlertTriangle, CheckCheck, Check, Wine, Clock, WifiOff } from 'lucide-react';
+import { SkipForward, UserPlus, UserCheck, LogOut, RefreshCw, X, Zap, UserRound, AlertTriangle, CheckCheck, Check, Clock, WifiOff, Palette } from 'lucide-react';
 import { extractPeerName } from '../services/socketService';
 import { authService } from '../services/authService';
 import { PeerAbout } from './chat/PeerAbout';
@@ -12,11 +12,16 @@ import { timeAgo } from './discover/discoverUtils';
 import { useNewMessageIds, displayTime } from '../mobile/useNewMessageIds';
 import { BottleGame, GameFeedCard } from './BottleGame';
 import { playReveal, unlockGameAudio } from '../services/gameFx';
+import { ChatQuickBar } from './chat/ChatQuickBar';
 import { MessageShell, ReplyQuote, ReplyComposerBar } from './chat/MessageExtras';
-import { isInteractive, jumpToMessage } from './chat/messageUtils';
+import { isInteractive, jumpToMessage, bubbleClass } from './chat/messageUtils';
 import { useMessageInteractions } from './chat/useMessageInteractions';
 import { feedback } from '../mobile/feedback';
 import { MarqueeText } from './MarqueeText';
+import { TypingIndicator } from './chat/TypingIndicator';
+import { useChatAutoScroll } from './chat/useChatAutoScroll';
+import { useChatTheme } from './chat/chatThemes';
+import { ChatThemePicker } from './chat/ChatThemePicker';
 
 // AI partners we "sent" a friend request to (never sent to the server), kept across tab switches.
 const botRequestsSent = new Set();
@@ -60,6 +65,7 @@ export function ChatBox() {
     retryMessage,
     sendReaction,
     reactToMessage,
+    deleteMessage,
     sendIcebreaker,
     skipStranger,
     startSearching,
@@ -82,6 +88,9 @@ export function ChatBox() {
   const interactions = useMessageInteractions();
   const closeInteractions = interactions.close;
   const messagesEndRef = useRef(null);
+  const feedRef = useRef(null);
+  const [chatTheme, setChatTheme] = useChatTheme('random');
+  const [themePickerOpen, setThemePickerOpen] = useState(false);
   const typingTimerRef = useRef(null);
   const inputRef = useRef(null);
   const lastGameRoundRef = useRef(null);
@@ -268,10 +277,14 @@ export function ChatBox() {
   };
 
   // Follow NEW messages only: a reaction on an old message must not yank the feed to the bottom.
-  const lastMessageId = messages.length ? messages[messages.length - 1].id : null;
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [lastMessageId, messages.length, isPeerTyping, gameOpen, game?.phase, game?.roundId]);
+  const lastMessage = messages.length ? messages[messages.length - 1] : null;
+  useChatAutoScroll(feedRef, {
+    threadKey: activeConvId || 'random',
+    lastId: lastMessage?.id || null,
+    count: messages.length,
+    lastIsMine: Boolean(lastMessage && lastMessage.senderId === user?.id),
+    pulse: `${isPeerTyping}|${gameOpen}|${game?.phase}|${game?.roundId}`
+  });
 
   const messagesById = useMemo(() => {
     const map = new Map();
@@ -377,7 +390,8 @@ export function ChatBox() {
   if (!currentPeer) return null;
 
   return (
-    <div className="glass-panel chat-screen" style={{
+    <div className="glass-panel chat-screen" data-chat-theme={chatTheme.id} style={{
+      ...chatTheme.vars,
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
@@ -454,6 +468,16 @@ export function ChatBox() {
 
         {/* Action Controls: friend request + exit only; block/report live on the profile card */}
         <div className="chat-header-actions">
+          <button
+            id="chat-theme-btn"
+            type="button"
+            onClick={() => setThemePickerOpen(true)}
+            className="btn-secondary chat-tool-btn"
+            title="Chat theme"
+            aria-label="Change chat theme"
+          >
+            <Palette size={16} aria-hidden="true" />
+          </button>
           {friendStatus === 'ACCEPTED' ? (
             <button
               id="friend-status-btn"
@@ -520,7 +544,7 @@ export function ChatBox() {
       </div>
 
       {/* Messages Scroll Feed */}
-      <div className="chat-feed" style={{
+      <div className="chat-feed" ref={feedRef} style={{
         flex: 1,
         padding: '20px',
         overflowY: 'auto',
@@ -587,25 +611,9 @@ export function ChatBox() {
                 enabled={isInteractive(msg) && !composerDisabled}
                 onReply={startReply}
                 onReact={handleReact}
+                onDelete={isMe && !peerLeft ? (m) => deleteMessage(m.id) : undefined}
               >
-              <div style={{
-                maxWidth: '100%',
-                padding: '12px 18px',
-                borderRadius: isMe ? 'var(--radius-bubble) var(--radius-bubble) var(--radius-xs) var(--radius-bubble)' : 'var(--radius-bubble) var(--radius-bubble) var(--radius-bubble) var(--radius-xs)',
-                background: isFailed
-                  ? 'rgba(229, 72, 77, 0.18)'
-                  : isMe
-                    ? 'var(--accent-tint)'
-                    : 'var(--plum-3)',
-                border: isFailed
-                  ? '1px dashed #e5484d'
-                  : isMe ? '1px solid var(--accent-line)' : '1px solid var(--border-color)',
-                color: 'var(--text-primary)',
-                fontSize: 'var(--fs-body)',
-                lineHeight: '1.4',
-                overflowWrap: 'anywhere',
-                wordBreak: 'break-word'
-              }}>
+              <div className={bubbleClass(msg, isMe, isFailed)}>
                 {msg.referredMessageId && (
                   <ReplyQuote
                     quoted={messagesById.get(msg.referredMessageId)}
@@ -616,7 +624,7 @@ export function ChatBox() {
                 {msg.type === 'IMAGE' || msg.type === 'AUDIO' ? (
                   <ChatMediaMessage msg={msg} />
                 ) : (
-                  msg.text || msg.message
+                  <span className="chat-bubble__text">{msg.text || msg.message}</span>
                 )}
               </div>
               </MessageShell>
@@ -685,77 +693,20 @@ export function ChatBox() {
           );
         })}
 
-        {/* Typing Indicator */}
-        {isPeerTyping && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: 'var(--fs-md)' }}>
-            <span>{peerName} is typing...</span>
-          </div>
-        )}
+        {/* Typing Indicator (folds open / closed so the feed never jumps) */}
+        <TypingIndicator show={Boolean(isPeerTyping) && !peerLeft} name={peerName} />
 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Bottom Bar: Icebreaker & Quick Reactions */}
-      <div className="chat-subbar" style={{
-        padding: '10px 20px',
-        borderTop: '1px solid var(--border-color)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        background: 'rgba(26, 16, 25, 0.5)',
-        position: 'relative',
-        zIndex: 20
-      }}>
-        <div className="chat-subbar-actions">
-          {/* Icebreaker button */}
-          <button
-            type="button"
-            onClick={handleIcebreakerClick}
-            disabled={composerDisabled}
-            className="btn-secondary chat-subbar-pill"
-          >
-            <HelpCircle size={15} color="var(--text-secondary)" aria-hidden="true" />
-            <span className="label-long">Icebreaker</span>
-            <span className="label-short">Icebreaker</span>
-          </button>
-
-          {/* Spin the Bottle */}
-          <button
-            id="spin-bottle-btn"
-            type="button"
-            onClick={handleSpinClick}
-            disabled={composerDisabled}
-            className="btn-secondary chat-subbar-pill chat-game-btn"
-            aria-label="Play Truth & Dare"
-          >
-            <Wine size={15} aria-hidden="true" />
-            <span className="label-long">Truth &amp; Dare</span>
-            <span className="label-short chat-game-label-short">Truth &amp; Dare</span>
-          </button>
-        </div>
-
-        {/* Quick Emojis */}
-        <div className="chat-subbar-reactions" style={{ display: 'flex', gap: '6px' }}>
-          {[
-            { icon: <Heart size={16} />, emoji: '❤️' },
-            { icon: <Flame size={16} />, emoji: '🔥' },
-            { icon: <Star size={16} />, emoji: '✨' },
-            { icon: <Smile size={16} />, emoji: '😂' },
-            { icon: <Hand size={16} />, emoji: '👋' }
-          ].map(item => (
-            <button
-              key={item.emoji}
-              type="button"
-              onClick={(e) => handleReactionClick(e, item.emoji)}
-              disabled={composerDisabled}
-              className="reaction-chip"
-              aria-label={`Send ${item.emoji}`}
-            >
-              {item.icon}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* Icebreaker, Truth & Dare and quick emojis (same strip as friend DMs) */}
+      <ChatQuickBar
+        onIcebreaker={handleIcebreakerClick}
+        onSpin={handleSpinClick}
+        onEmoji={handleReactionClick}
+        disabled={composerDisabled}
+        spinId="spin-bottle-btn"
+      />
 
       {/* Peer left on purpose (Next / Exit / blocked) or never came back: this chat is over */}
       {peerLeft && (
@@ -780,11 +731,7 @@ export function ChatBox() {
       {peerAway && isLiveConnected && (
         <div className="chat-state-banner chat-state-banner--away" role="status">
           <WifiOff size={16} aria-hidden="true" />
-          <span>
-            <strong>{peerName} is temporarily disconnected</strong>
-            {peerLastSeen ? <> · <LastSeen value={peerLastSeen} prefix="last active" /></> : null}
-            . They can rejoin in a few minutes, or you can move on.
-          </span>
+          <span>Disconnected for now. Wait, or find a new match.</span>
           <button
             type="button"
             onClick={skipStranger}
@@ -792,7 +739,7 @@ export function ChatBox() {
             style={{ padding: '8px 14px', fontSize: 'var(--fs-md)', cursor: 'pointer', flexShrink: 0 }}
           >
             <SkipForward size={16} aria-hidden="true" />
-            <span>Next match</span>
+            <span>New match</span>
           </button>
         </div>
       )}
@@ -869,14 +816,21 @@ export function ChatBox() {
             id="next-stranger-btn"
             type="button"
             onClick={skipStranger}
-            className="btn-secondary wa-next-btn"
+            className="wa-next-btn"
             title="Next match"
             aria-label="Next match"
           >
-            <SkipForward size={18} aria-hidden="true" />
+            <SkipForward size={15} strokeWidth={1.75} aria-hidden="true" />
             <span className="wa-next-btn__label">Next</span>
           </button>
         )}
+      />
+
+      <ChatThemePicker
+        open={themePickerOpen}
+        currentId={chatTheme.id}
+        onSelect={setChatTheme}
+        onClose={() => setThemePickerOpen(false)}
       />
 
       {/* Truth & Dare: a dialog over this chat screen only; the chat behind it is blurred. */}

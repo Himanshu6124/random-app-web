@@ -77,9 +77,10 @@ function ProfileCard({ person: initial, options, onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Fresh profile, friendship and distance from the server.
+  // Fresh profile, friendship and distance from the server. AI partners listed in Discover
+  // (id "bot-<name>") have a profile and a distance too; they just can't be befriended.
   useEffect(() => {
-    if (!id || isAi) return undefined;
+    if (!id) return undefined;
     let cancelled = false;
     const token = jwtToken || authService.getToken();
     if (!token) return undefined;
@@ -87,10 +88,12 @@ function ProfileCard({ person: initial, options, onClose }) {
     authService.getUserById(id, token)
       .then(u => { if (!cancelled && u) setPerson(prev => ({ ...prev, ...u, name: u.name || prev.name, photoUrl: u.photoUrl || prev.photoUrl })); })
       .catch(() => {});
-    if (!isSelf) {
+    if (!isSelf && !isAi) {
       authService.getFriendshipStatus(id, token)
         .then(res => { if (!cancelled && res?.status) setStatus(res.status); })
         .catch(() => {});
+    }
+    if (!isSelf) {
       authService.getDistanceTo(id, token)
         .then(res => { if (!cancelled && typeof res?.distanceKm === 'number') setDistanceKm(res.distanceKm); })
         .catch(() => {});
@@ -283,7 +286,7 @@ function ProfileCard({ person: initial, options, onClose }) {
                   ) : (
                     <UserRound size={40} aria-hidden="true" />
                   )}
-                  {!isAi && <span className={`pc-avatar__dot${online ? ' is-online' : ''}`} aria-hidden="true" />}
+                  <span className={`pc-avatar__dot${online ? ' is-online' : ''}`} aria-hidden="true" />
                 </div>
                 <h2 className="pc-name">
                   {name}
@@ -291,7 +294,7 @@ function ProfileCard({ person: initial, options, onClose }) {
                   {guestPeer && !isAi && <span className="pc-badge pc-badge--muted">Guest</span>}
                 </h2>
                 {person.username && !isAi && <div className="pc-username">@{person.username}</div>}
-                {!isAi && (
+                {(!isAi || lastSeen || online) && (
                   <div className={`pc-presence${online ? ' is-online' : ''}`}>{presenceLabel(online, lastSeen)}</div>
                 )}
               </div>

@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { Reply, SmilePlus, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Reply, SmilePlus, Trash2, X } from 'lucide-react';
 import { REACTION_EMOJIS, myReactionOn, previewText } from './messageUtils';
 import '../../styles/messageExtras.css';
 import { feedback } from '../../mobile/feedback';
@@ -89,6 +89,7 @@ export function MessageShell({
   enabled = true,
   onReply,
   onReact,
+  onDelete,
   children
 }) {
   const { activeId, setActiveId, pickerId, setPickerId, close } = interactions;
@@ -98,8 +99,34 @@ export function MessageShell({
   const pressStart = useRef(null);
   const longPressed = useRef(false);
   const mine = myReactionOn(msg, myId);
+  // Delete for everyone: only my own messages, two taps (trash, then "Delete").
+  const canDelete = Boolean(isMe && onDelete);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => () => clearTimeout(pressTimer.current), []);
+  useEffect(() => { if (!isActive && !pickerOpen) setConfirmDelete(false); }, [isActive, pickerOpen]);
+
+  const deleteButton = (className) => canDelete && (
+    <button
+      type="button"
+      className={`${className} msg-delete-btn${confirmDelete ? ' is-confirm' : ''}`}
+      onClick={() => {
+        if (!confirmDelete) {
+          setActiveId(msg.id);
+          setConfirmDelete(true);
+          return;
+        }
+        onDelete(msg);
+        setConfirmDelete(false);
+        close();
+      }}
+      aria-label={confirmDelete ? 'Confirm delete for everyone' : 'Delete for everyone'}
+      title={confirmDelete ? 'Tap again to delete for everyone' : 'Delete for everyone'}
+    >
+      <Trash2 size={16} aria-hidden="true" />
+      {confirmDelete && <span>Delete</span>}
+    </button>
+  );
 
   const react = (emoji) => {
     // Picking the reaction you already have removes it
@@ -193,6 +220,7 @@ export function MessageShell({
         >
           <SmilePlus size={16} aria-hidden="true" />
         </button>
+        {!pickerOpen && deleteButton('msg-action-btn')}
 
         {pickerOpen && (
           <div className={`reaction-picker ${isMe ? 'reaction-picker--me' : 'reaction-picker--them'}`} role="menu" aria-label="Pick a reaction">
@@ -220,6 +248,7 @@ export function MessageShell({
             >
               <Reply size={16} aria-hidden="true" />
             </button>
+            {deleteButton('reaction-picker__reply')}
           </div>
         )}
       </div>

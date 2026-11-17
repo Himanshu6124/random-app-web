@@ -2,9 +2,10 @@ import { MarqueeText } from '../components/MarqueeText';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket, ICEBREAKER_QUESTIONS } from '../context/SocketContext';
-import { socketService } from '../services/socketService';
+import { socketService, newClientMessageId } from '../services/socketService';
 import { authService } from '../services/authService';
-import { Users, UserMinus, UserPlus, MessageCircle, ArrowLeft, HelpCircle, Heart, Flame, Star, Smile, Hand, MoreVertical, Loader2, Ban, ChevronDown, ChevronRight, UserRound, AlertTriangle, CheckCheck, Check, X, Wine } from 'lucide-react';
+import { chatSettingsService, DISAPPEAR_OPTIONS, disappearLabel } from '../services/chatSettingsService';
+import { Users, UserMinus, UserPlus, MessageCircle, ArrowLeft, MoreVertical, Loader2, Ban, ChevronDown, ChevronRight, UserRound, AlertTriangle, CheckCheck, Check, X, Palette, Timer } from 'lucide-react';
 import { useNewMessageIds, displayTime } from '../mobile/useNewMessageIds';
 import { DiscoverConfirmDialog } from '../components/discover/DiscoverConfirmDialog';
 import { FriendRequestDialog } from '../components/FriendRequestDialog';
@@ -16,7 +17,12 @@ import { useBackHandler } from '../mobile/useBackHandler';
 import { useEdgeSwipeBack } from '../mobile/useEdgeSwipeBack';
 import { ChatMediaMessage } from '../components/ChatMediaMessage';
 import { MessageShell, ReplyQuote, ReplyComposerBar } from '../components/chat/MessageExtras';
-import { applyReaction, isInteractive, jumpToMessage } from '../components/chat/messageUtils';
+import { ChatQuickBar } from '../components/chat/ChatQuickBar';
+import { applyReaction, isInteractive, jumpToMessage, bubbleClass } from '../components/chat/messageUtils';
+import { TypingIndicator } from '../components/chat/TypingIndicator';
+import { useChatAutoScroll } from '../components/chat/useChatAutoScroll';
+import { useChatTheme } from '../components/chat/chatThemes';
+import { ChatThemePicker } from '../components/chat/ChatThemePicker';
 import { useMessageInteractions } from '../components/chat/useMessageInteractions';
 import { feedback } from '../mobile/feedback';
 import { timeAgo, chatListTime } from '../components/discover/discoverUtils';
@@ -78,11 +84,19 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   const [showBlocked, setShowBlocked] = useState(false);
   const [unblockingId, setUnblockingId] = useState(null);
   const menuRef = useRef(null);
+  // Disappearing messages of the open chat (seconds, 0 = off) and its small picker
+  const [disappearSeconds, setDisappearSeconds] = useState(0);
+  const [showTimerMenu, setShowTimerMenu] = useState(false);
+  const timerMenuRef = useRef(null);
+  // Re-render now and then so messages whose time is up leave the screen on their own
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const chatAreaRef = useRef(null);
   // Phone: the DM screen is a pushed screen — Back button and edge-swipe pop it.
   useBackHandler(isMobile && mobileShowChat, () => setMobileShowChat(false));
   useEdgeSwipeBack(chatAreaRef, isMobile && mobileShowChat, () => setMobileShowChat(false));
   const messagesEndRef = useRef(null);
+  const feedRef = useRef(null);
+  const [themePickerOpen, setThemePickerOpen] = useState(false);
   const typingTimerRef = useRef(null);
   const dmInputRef = useRef(null);
   const [replyTarget, setReplyTarget] = useState(null);
@@ -197,6 +211,37 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     return () => document.removeEventListener('mousedown', onDown);
   }, [showMenu]);
 
+  useEffect(() => {
+    if (!showTimerMenu) return undefined;
+    const onDown = (e) => {
+      if (timerMenuRef.current && !timerMenuRef.current.contains(e.target)) setShowTimerMenu(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('touchstart', onDown, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
+    };
+  }, [showTimerMenu]);
+
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Disappearing-messages timer of the open chat
+  useEffect(() => {
+    const conversationId = selectedFriend?.conversationId;
+    setDisappearSeconds(0);
+    setShowTimerMenu(false);
+    if (!conversationId) return undefined;
+    let alive = true;
+    chatSettingsService.getDisappearing(conversationId, jwtToken || authService.getToken())
+      .then(sec => { if (alive) setDisappearSeconds(sec); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [selectedFriend?.conversationId, jwtToken]);
+
   const friendKey = (f) => f?.id || f?.friendUserId;
   const friendLabel = (f) => f?.name || f?.friendUserName || f?.username || 'this user';
 
@@ -287,8 +332,18 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       const existingLocal = prev[conversationId] || prev[friendId] || [];
       const mergedMap = new Map();
       apiMessages.forEach(m => mergedMap.set(m.id, m));
+      // A cached server message inside the fetched time range that the server no longer has
+      // was deleted (for everyone, or it disappeared) while we were away: drop it.
+      const oldestApi = Math.min(...apiMessages.map(m => new Date(m.timestamp || 0).getTime()));
+      const apiClientIds = new Set(apiMessages.map(m => m.clientMessageId).filter(Boolean));
       existingLocal.forEach(m => {
-        if (!mergedMap.has(m.id)) mergedMap.set(m.id, m);
+        if (mergedMap.has(m.id)) return;
+        // The optimistic copy of a message the server already has
+        if (m.clientMessageId && apiClientIds.has(m.clientMessageId)) return;
+        const settled = m.status !== 'SENDING' && m.status !== 'FAILED'
+          && m.senderId !== 'system' && m.senderId !== 'game' && !String(m.id).startsWith('pending_');
+        if (settled && new Date(m.timestamp || 0).getTime() >= oldestApi) return;
+        mergedMap.set(m.id, m);
       });
       const mergedList = Array.from(mergedMap.values());
       mergedList.sort((a, b) => {
@@ -373,6 +428,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             type: msg.type || (msg.objectUri ? 'IMAGE' : 'TEXT'),
             objectUri: msg.objectUri || null,
             referredMessageId: msg.referredMessageId || null,
+            clientMessageId: msg.clientMessageId || null,
+            expiresAt: msg.expiresAt || null,
             reactEmojiSender: msg.reactEmojiSender || null,
             reactEmojiReceiver: msg.reactEmojiReceiver || null,
             status: msg.status || 'SENT',
@@ -381,12 +438,18 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
           };
 
           // Reconcile the optimistic copy of our own message if there is one
-          const pendingIdx = currentList.findIndex(
-            m => m.status === 'SENDING' && (
-              (m.id && msg.id && m.id === msg.id) ||
-              (m.text === (msg.text || msg.message) && m.senderId === msg.senderId)
-            )
-          );
+          // Matched by the id we gave it; servers that don't echo one fall back to the text.
+          let pendingIdx = msg.clientMessageId
+            ? currentList.findIndex(m => m.clientMessageId && m.clientMessageId === msg.clientMessageId)
+            : -1;
+          if (pendingIdx === -1) {
+            pendingIdx = currentList.findIndex(
+              m => m.status === 'SENDING' && (
+                (m.id && msg.id && m.id === msg.id) ||
+                (m.text === (msg.text || msg.message) && m.senderId === msg.senderId)
+              )
+            );
+          }
 
           if (pendingIdx !== -1) {
             const updated = [...currentList];
@@ -405,6 +468,28 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
         if (msg.id && msg.senderId !== myId) {
           socketService.sendSeen(conversationId, msg.id);
         }
+      },
+      onMessageDeleted: (payload) => {
+        if (payload?.messageId) removeDmMessage(payload.messageId);
+      },
+      onDisappearing: (payload) => {
+        const seconds = Number(payload?.seconds) || 0;
+        setDisappearSeconds(seconds);
+        const who = payload?.changedBy === myId
+          ? 'You'
+          : (selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username || 'Your friend');
+        const text = seconds
+          ? `${who} turned on disappearing messages. New messages disappear after ${disappearLabel(seconds)}.`
+          : `${who} turned off disappearing messages.`;
+        setDmMessages(prev => ({
+          ...prev,
+          [conversationId]: [...(prev[conversationId] || []), {
+            id: 'sys_disappear_' + Date.now(),
+            senderId: 'system',
+            text,
+            timestamp: new Date().toISOString()
+          }]
+        }));
       },
       onReaction: (payload) => {
         setDmMessages(prev => {
@@ -486,12 +571,21 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
 
   const scrollKey = selectedFriend ? (selectedFriend.conversationId || selectedFriend.id) : null;
   const scrollList = scrollKey ? (dmMessages[scrollKey] || []) : [];
-  const lastDmId = scrollList.length ? scrollList[scrollList.length - 1].id : null;
+  const lastDm = scrollList.length ? scrollList[scrollList.length - 1] : null;
+  const chatVisible = !isMobile || mobileShowChat;
 
-  // Scroll to bottom on NEW messages only: a reaction on an old message must not jump the feed.
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [lastDmId, scrollList.length, selectedFriend, isFriendTyping]);
+  // Opening a chat lands on the last message with no scroll animation; new messages glide in.
+  useChatAutoScroll(feedRef, {
+    threadKey: `${scrollKey}|${chatVisible}`,
+    lastId: lastDm?.id || null,
+    count: scrollList.length,
+    lastIsMine: Boolean(lastDm && (lastDm.sender === 'me' || lastDm.senderId === user?.id)),
+    pulse: isFriendTyping
+  });
+
+  const [chatTheme, setChatTheme] = useChatTheme(
+    selectedFriend ? `dm:${selectedFriend.conversationId || selectedFriend.id || selectedFriend.friendUserId}` : null
+  );
 
   // A pending reply belongs to the chat it was started in.
   useEffect(() => {
@@ -585,8 +679,10 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     const rawTime = new Date().toISOString();
     const referredMessageId = replyTarget?.id || null;
 
+    const clientMessageId = newClientMessageId();
     const newMsg = {
-      id: 'pending_' + Date.now(),
+      id: 'pending_' + clientMessageId,
+      clientMessageId,
       sender: 'me',
       senderId: user?.id || 'me',
       text: messageText,
@@ -611,7 +707,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     if (!conversationId) return;
 
     socketService.sendTyping(conversationId, false);
-    const sent = socketService.sendMessage(conversationId, messageText, 'TEXT', null, referredMessageId);
+    const sent = socketService.sendMessage(conversationId, messageText, 'TEXT', null, referredMessageId, clientMessageId);
     if (!sent) {
       setDmMessages(prev => {
         const list = (prev[conversationId] || []).map(m => m.id === newMsg.id ? { ...m, status: 'FAILED' } : m);
@@ -652,8 +748,10 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     const referredMessageId = replyTarget?.id || null;
     setReplyTarget(null);
 
+    const clientMessageId = newClientMessageId();
     const newMsg = {
-      id: 'pending_' + Date.now(),
+      id: 'pending_' + clientMessageId,
+      clientMessageId,
       sender: 'me',
       senderId: user?.id || 'me',
       text: caption,
@@ -670,7 +768,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       [conversationId]: [...(prev[conversationId] || []), newMsg]
     }));
 
-    const sent = socketService.sendMessage(conversationId, caption, type, objectUri, referredMessageId);
+    const sent = socketService.sendMessage(conversationId, caption, type, objectUri, referredMessageId, clientMessageId);
     if (!sent) {
       setDmMessages(prev => {
         const list = (prev[conversationId] || []).map(m => m.id === newMsg.id ? { ...m, status: 'FAILED' } : m);
@@ -701,8 +799,10 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     const friendId = selectedFriend.id || selectedFriend.friendUserId;
     const rawTime = new Date().toISOString();
 
+    const clientMessageId = newClientMessageId();
     const newMsg = {
-      id: 'pending_' + Date.now(),
+      id: 'pending_' + clientMessageId,
+      clientMessageId,
       sender: 'me',
       senderId: user?.id || 'me',
       text: emoji,
@@ -720,7 +820,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     });
 
     if (conversationId) {
-      const sent = socketService.sendMessage(conversationId, emoji, 'TEXT');
+      const sent = socketService.sendMessage(conversationId, emoji, 'TEXT', null, null, clientMessageId);
       if (!sent) {
         setDmMessages(prev => {
           const list = (prev[conversationId] || []).map(m => m.id === newMsg.id ? { ...m, status: 'FAILED' } : m);
@@ -734,8 +834,51 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     }, 1800);
   };
 
+  /** Drops a message from every cached list (it may sit under both the conversation and friend key). */
+  const removeDmMessage = (messageId) => {
+    setDmMessages(prev => {
+      let changed = false;
+      const next = {};
+      Object.entries(prev).forEach(([key, list]) => {
+        const kept = (list || []).filter(m => m.id !== messageId);
+        if (kept.length !== (list || []).length) changed = true;
+        next[key] = kept;
+      });
+      return changed ? next : prev;
+    });
+  };
+
+  /** Delete for everyone: my own, already-sent messages only. */
+  const handleDeleteDm = (m) => {
+    const conversationId = selectedFriend?.conversationId;
+    if (!conversationId || !m?.id) return;
+    if (!socketService.deleteMessage(conversationId, m.id)) {
+      setMediaError("Couldn't delete the message. Check your connection and try again.");
+      return;
+    }
+    feedback('success');
+    removeDmMessage(m.id);
+  };
+
+  const changeDisappearing = async (seconds) => {
+    const conversationId = selectedFriend?.conversationId;
+    setShowTimerMenu(false);
+    if (!conversationId || seconds === disappearSeconds) return;
+    const previous = disappearSeconds;
+    setDisappearSeconds(seconds);
+    try {
+      await chatSettingsService.setDisappearing(conversationId, seconds, jwtToken || authService.getToken());
+      feedback('success');
+    } catch (err) {
+      setDisappearSeconds(previous);
+      setMediaError(err?.message || "Couldn't change disappearing messages.");
+    }
+  };
+
   const activeKey = selectedFriend ? (selectedFriend.conversationId || selectedFriend.id) : null;
-  const currentMessages = activeKey ? (dmMessages[activeKey] || []) : [];
+  // Disappeared messages leave the screen even before the server's cleanup removes them.
+  const currentMessages = (activeKey ? (dmMessages[activeKey] || []) : [])
+    .filter(m => !m.expiresAt || new Date(m.expiresAt).getTime() > nowTick);
   const messagesById = useMemo(() => {
     const map = new Map();
     (activeKey ? (dmMessages[activeKey] || []) : []).forEach(m => { if (m.id) map.set(m.id, m); });
@@ -858,10 +1001,6 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
           <div className="friends-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
             {friends.map(friend => {
               const friendId = friend.id || friend.friendUserId;
-              const isSelected = selectedFriend && (
-                (selectedFriend.conversationId && selectedFriend.conversationId === friend.conversationId) ||
-                (selectedFriend.id === friendId)
-              );
               // Messages sent from this screen are newer than the list's server copy.
               const localList = dmMessages[friend.conversationId] || dmMessages[friendId] || [];
               const localLast = localList.length ? localList[localList.length - 1] : null;
@@ -884,19 +1023,16 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                     justifyContent: 'space-between',
                     padding: '12px',
                     borderRadius: 'var(--radius-md)',
-                    background: isSelected ? 'rgba(240, 114, 137, 0.2)' : 'rgba(255, 255, 255, 0.04)',
-                    border: isSelected ? '1px solid var(--primary-purple)' : '1px solid transparent',
+                    // No "last opened" highlight: the list always looks the same when you come back.
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid transparent',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease'
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden', flex: 1, minWidth: 0 }}>
                     <div
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`View ${friendLabel(friend)}'s profile`}
-                      onClick={(e) => { e.stopPropagation(); openFriendProfile(friend); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openFriendProfile(friend); } }}
+                      aria-hidden="true"
                       style={{
                       cursor: 'pointer',
                       width: '42px',
@@ -1060,7 +1196,9 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       <div
         ref={chatAreaRef}
         className={`glass-panel friends-chat-area chat-screen${isMobile && mobileShowChat ? ' chat-active' : ''}`}
+        data-chat-theme={chatTheme.id}
         style={{
+        ...chatTheme.vars,
         flex: 1,
         display: (isMobile && !mobileShowChat) ? 'none' : 'flex',
         flexDirection: 'column',
@@ -1154,6 +1292,43 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                 </button>
               </div>
 
+              {/* Disappearing messages: timer icon, shows the duration while on */}
+              <div ref={timerMenuRef} className="dm-timer">
+                <button
+                  type="button"
+                  className={`dm-timer__btn${disappearSeconds ? ' is-on' : ''}`}
+                  onClick={() => setShowTimerMenu(v => !v)}
+                  aria-label={disappearSeconds ? `Disappearing messages: ${disappearLabel(disappearSeconds)}` : 'Disappearing messages: off'}
+                  aria-haspopup="menu"
+                  aria-expanded={showTimerMenu}
+                  title="Disappearing messages"
+                >
+                  <Timer size={18} aria-hidden="true" />
+                  {disappearSeconds > 0 && (
+                    <span className="dm-timer__label">{DISAPPEAR_OPTIONS.find(o => o.seconds === disappearSeconds)?.short}</span>
+                  )}
+                </button>
+                {showTimerMenu && (
+                  <div className="dm-timer__menu" role="menu" aria-label="Disappearing messages">
+                    <div className="dm-timer__title">Disappearing messages</div>
+                    {DISAPPEAR_OPTIONS.map(o => (
+                      <button
+                        key={o.seconds}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={disappearSeconds === o.seconds}
+                        className={`dm-timer__opt${disappearSeconds === o.seconds ? ' is-on' : ''}`}
+                        onClick={() => changeDisappearing(o.seconds)}
+                      >
+                        {o.label}
+                        {disappearSeconds === o.seconds && <Check size={15} aria-hidden="true" />}
+                      </button>
+                    ))}
+                    <p className="dm-timer__hint">New messages disappear for both of you.</p>
+                  </div>
+                )}
+              </div>
+
               {/* Options Menu */}
               <div ref={menuRef} style={{ position: 'relative' }}>
                 <button
@@ -1185,6 +1360,27 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                     width: '170px',
                     zIndex: 50
                   }}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setShowMenu(false); setThemePickerOpen(true); }}
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '10px 16px',
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-primary)',
+                        fontSize: 'var(--fs-md)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      <Palette size={15} />
+                      Chat theme
+                    </button>
                     <button
                       type="button"
                       role="menuitem"
@@ -1233,7 +1429,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             </div>
 
             {/* Direct Messages Log */}
-            <div className="chat-feed" style={{
+            <div className="chat-feed" ref={feedRef} style={{
               flex: 1,
               padding: '20px',
               overflowY: 'auto',
@@ -1291,22 +1487,9 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                       enabled={isInteractive(m) && isLiveConnected}
                       onReply={startReply}
                       onReact={handleReactDm}
+                      onDelete={isMe ? handleDeleteDm : undefined}
                     >
-                    <div style={{
-                      maxWidth: '100%',
-                      padding: '12px 18px',
-                      borderRadius: isMe ? 'var(--radius-bubble) var(--radius-bubble) var(--radius-xs) var(--radius-bubble)' : 'var(--radius-bubble) var(--radius-bubble) var(--radius-bubble) var(--radius-xs)',
-                      background: isMe
-                        ? 'var(--accent-tint)'
-                        : 'var(--plum-3)',
-                      border: isMe ? '1px solid var(--accent-line)' : '1px solid var(--border-color)',
-                      color: 'var(--text-primary)',
-                      fontSize: 'var(--fs-body)',
-                      lineHeight: '1.4',
-                      overflowWrap: 'anywhere',
-                      wordBreak: 'break-word',
-                      opacity: m.status === 'FAILED' ? 0.7 : 1
-                    }}>
+                    <div className={bubbleClass(m, isMe)} style={m.status === 'FAILED' ? { opacity: 0.7 } : undefined}>
                       {m.referredMessageId && (
                         <ReplyQuote
                           quoted={messagesById.get(m.referredMessageId)}
@@ -1317,7 +1500,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                       {(m.type === 'IMAGE' || m.type === 'AUDIO' || m.objectUri) ? (
                         <ChatMediaMessage msg={m} />
                       ) : (
-                        m.text
+                        <span className="chat-bubble__text">{m.text}</span>
                       )}
                     </div>
                     </MessageShell>
@@ -1354,85 +1537,19 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                 );
               })}
 
-              {isFriendTyping && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: 'var(--fs-md)' }}>
-                  <span>{selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username} is typing...</span>
-                </div>
-              )}
+              <TypingIndicator show={Boolean(isFriendTyping)} name={friendDisplayName} />
 
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick Actions Sub-bar */}
-            <div className="chat-subbar" style={{
-              padding: '8px 20px',
-              borderTop: '1px solid var(--border-color)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              background: 'rgba(26, 16, 25, 0.5)',
-              zIndex: 20
-            }}>
-              <div className="chat-subbar-actions" style={{ display: 'flex', gap: '6px' }}>
-              <button
-                type="button"
-                onClick={handleIcebreakerClick}
-                className="btn-secondary"
-                style={{
-                  padding: '6px 14px',
-                  fontSize: 'var(--fs-sm)',
-                  borderRadius: 'var(--radius-full)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <HelpCircle size={14} color="var(--text-secondary)" />
-                <span style={{ fontWeight: 600 }}>Icebreaker</span>
-              </button>
-              <button
-                type="button"
-                id="dm-spin-bottle-btn"
-                onClick={handleDmSpinClick}
-                disabled={!isLiveConnected}
-                className="btn-secondary chat-game-btn"
-                aria-label="Play Truth & Dare"
-                style={{
-                  padding: '6px 14px',
-                  fontSize: 'var(--fs-sm)',
-                  borderRadius: 'var(--radius-full)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <Wine size={14} aria-hidden="true" />
-                <span style={{ fontWeight: 600 }}>Truth &amp; Dare</span>
-              </button>
-              </div>
-
-              <div style={{ display: 'flex', gap: '6px' }}>
-                {[
-                  { icon: <Heart size={15} />, emoji: '❤️' },
-                  { icon: <Flame size={15} />, emoji: '🔥' },
-                  { icon: <Star size={15} />, emoji: '✨' },
-                  { icon: <Smile size={15} />, emoji: '😂' },
-                  { icon: <Hand size={15} />, emoji: '👋' }
-                ].map(item => (
-                  <button
-                    key={item.emoji}
-                    type="button"
-                    onClick={(e) => handleReactionClick(e, item.emoji)}
-                    className="reaction-chip"
-                    aria-label={`Send ${item.emoji}`}
-                  >
-                    {item.icon}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Icebreaker, Truth & Dare and quick emojis (same strip as the random chat) */}
+            <ChatQuickBar
+              onIcebreaker={handleIcebreakerClick}
+              onSpin={handleDmSpinClick}
+              onEmoji={handleReactionClick}
+              spinDisabled={!isLiveConnected}
+              spinId="dm-spin-bottle-btn"
+            />
 
             {/* Connection is down — say so instead of queueing messages silently */}
             {mediaError && (
@@ -1502,6 +1619,13 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               onSendMedia={handleSendMediaDm}
               onMediaError={setMediaError}
               sendClassName="btn-cyan"
+            />
+
+            <ChatThemePicker
+              open={themePickerOpen}
+              currentId={chatTheme.id}
+              onSelect={setChatTheme}
+              onClose={() => setThemePickerOpen(false)}
             />
 
             {dmGameOpen && (

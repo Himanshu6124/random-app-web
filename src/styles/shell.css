@@ -962,7 +962,7 @@
   letter-spacing: 0.01em;
   text-align: center;
 }
-.crafted-credit__heart { color: var(--accent); flex-shrink: 0; }
+.crafted-credit__heart { color: #e5252a; flex-shrink: 0; }
 
 /* Single-line text that scrolls when it is too long for its box (MarqueeText.jsx) */
 .marquee {

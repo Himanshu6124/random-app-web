@@ -7,7 +7,7 @@ export function CraftedCredit({ className = '' }) {
     <p className={`crafted-credit ${className}`.trim()}>
       Crafted with
       <Heart className="crafted-credit__heart" size={13} strokeWidth={0} fill="currentColor" aria-label="love" role="img" />
-      in Bangalore
+      in Bengaluru
     </p>
   );
 }

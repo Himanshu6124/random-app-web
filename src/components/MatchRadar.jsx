@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { X, UserRound, Heart } from 'lucide-react';
 import { startRadarSounds, playLockOn, unlockRadarAudio } from '../services/radarSound';
 import { CraftedCredit } from './CraftedCredit';
+import { VibeScroller } from './VibeScroller';
 import { MATCH_TOPICS, MAX_MATCH_TOPICS, TOPIC_WINDOW_SECONDS, topicById } from '../content/matchTopics';
 
 /**
@@ -172,7 +173,6 @@ export function MatchRadar() {
     );
   };
   // Phones: three rows that drift slowly (alternating direction) so it's obvious there are more.
-  const topicRows = [0, 1, 2].map(r => MATCH_TOPICS.filter((_, i) => i % 3 === r));
   const topicNames = matchTopics.map(id => topicById(id)?.label).filter(Boolean).join(', ');
   const searchTopicLine = matchTopics.length === 0
     ? null
@@ -309,20 +309,14 @@ export function MatchRadar() {
         </div>
 
         <fieldset className="topic-picker topic-picker--row">
-          <legend className="topic-picker__label">Vibes</legend>
+          <legend className="topic-picker__label">Select vibes</legend>
           <div className="topic-picker__chips topic-picker__chips--wrap">
             {MATCH_TOPICS.map(t => renderChip(t))}
           </div>
-          <div className="topic-marquee">
-            {topicRows.map((row, r) => (
-              <div key={r} className={`topic-marquee__row topic-marquee__row--${r}`}>
-                <div className="topic-marquee__track">
-                  {row.map(t => renderChip(t))}
-                  {row.map(t => renderChip(t, true))}
-                </div>
-              </div>
-            ))}
-          </div>
+          {/* Phones: three rows that scroll sideways together (and drift slowly) */}
+          <VibeScroller>
+            {MATCH_TOPICS.map(t => renderChip(t))}
+          </VibeScroller>
           {topicLimitHit && (
             <p className="topic-picker__limit" role="alert">
               You can pick up to {MAX_MATCH_TOPICS} vibes. Tap one you've picked to swap it.

@@ -13,18 +13,35 @@
   position: relative;
   z-index: 20;
 }
+/* Next match: a soft, light pill that sits quietly beside the message field */
 .wa-next-btn {
   flex-shrink: 0;
   height: 46px;
   min-width: 46px;
-  padding: 0 14px !important;
+  padding: 0 16px 0 13px !important;
   border-radius: var(--radius-full) !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  font-weight: 600;
+  gap: 5px;
+  border: 1px solid rgba(240, 114, 137, 0.28);
+  background: linear-gradient(180deg, rgba(240, 114, 137, 0.14), rgba(240, 114, 137, 0.07));
+  color: #f6a3b2;
+  font-family: var(--font-main);
+  font-size: var(--fs-sm, 13px);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background-color 0.18s var(--ease-out), border-color 0.18s var(--ease-out), transform 0.12s var(--ease-out), color 0.18s;
 }
+.wa-next-btn:hover {
+  background: rgba(240, 114, 137, 0.2);
+  border-color: rgba(240, 114, 137, 0.45);
+  color: #fbc4ce;
+}
+.wa-next-btn:active { transform: scale(0.96); }
+.wa-next-btn:focus-visible { outline: 2px solid var(--accent-line, rgba(240,114,137,0.5)); outline-offset: 2px; }
+.wa-next-btn svg { opacity: 0.9; }
 .wa-field {
   flex: 1;
   min-width: 0;
@@ -417,8 +434,8 @@
 /* ── Sheets always sit above the bottom tab bar ── */
 .m-sheet-backdrop { z-index: 3000 !important; }
 
-/* ── Vibes: wrapped on desktop, three drifting rows on phones ── */
-.topic-marquee { display: none; }
+/* ── Vibes: wrapped on desktop; on phones three rows that scroll sideways together ── */
+.vibe-scroller { display: none; }
 .topic-chip.is-full { opacity: 0.45; }
 .topic-picker__limit {
   margin-top: 8px;
@@ -428,39 +445,33 @@
 }
 @media (max-width: 768px) {
   .topic-picker--row .topic-picker__chips--wrap { display: none; }
-  .topic-marquee {
+  .vibe-scroller {
+    display: block;
+    margin: 0 -16px;
+    padding: 2px 16px 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+    mask-image: linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent);
+  }
+  .vibe-scroller::-webkit-scrollbar { display: none; }
+  .vibe-scroller__rows {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin: 0 -16px;
-    overflow: hidden;
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 16px), transparent);
-    mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 16px), transparent);
-  }
-  .topic-marquee__row { overflow: hidden; }
-  .topic-marquee__track {
-    display: flex;
-    gap: 8px;
     width: max-content;
-    animation: topic-drift 38s linear infinite;
   }
-  .topic-marquee__row--1 .topic-marquee__track { animation-direction: reverse; animation-duration: 44s; }
-  .topic-marquee__row--2 .topic-marquee__track { animation-duration: 50s; }
-  .topic-marquee:active .topic-marquee__track,
-  .topic-marquee:hover .topic-marquee__track { animation-play-state: paused; }
-  .topic-marquee .topic-chip { flex-shrink: 0; }
-}
-@keyframes topic-drift {
-  from { transform: translateX(0); }
-  to { transform: translateX(calc(-50% - 4px)); }
-}
-@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
-  .topic-marquee__track { animation: none; }
-  .topic-marquee__row { overflow-x: auto; scrollbar-width: none; }
+  .vibe-scroller__row { display: flex; gap: 8px; }
+  .vibe-scroller .topic-chip { flex-shrink: 0; }
 }
 
 /* ── Toasts: swipe left / right / up to dismiss ── */
 .rc-toast { touch-action: pan-y; will-change: transform; }
 .rc-toast.is-dragging { transition: none; animation: none; cursor: grabbing; }
 .rc-toast.is-dragging .rc-toast__timer { animation-play-state: paused; }
-.rc-toast.is-settling { transition: transform 0.2s ease, opacity 0.2s ease; }
+.rc-toast.is-touched { animation: none; }
+.rc-toast.is-settling { transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.22s ease-out; }

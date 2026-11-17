@@ -15,6 +15,9 @@ function SwipeableToast({ toast: t }) {
   const Icon = KIND_ICON[t.kind] || MessageCircle;
   const [drag, setDrag] = useState(null); // { x, y } while dragging
   const [leaving, setLeaving] = useState(null); // { x, y } fly-out target
+  // Once dragged, the entrance animation must never run again: removing the drag class used to
+  // restart it (it starts from opacity 0), which made the toast blink before flying out.
+  const [touched, setTouched] = useState(false);
   const startRef = useRef(null);
   const movedRef = useRef(false);
 
@@ -32,6 +35,7 @@ function SwipeableToast({ toast: t }) {
     if (!movedRef.current && Math.hypot(dx, dy) < 6) return;
     if (!movedRef.current) {
       movedRef.current = true;
+      setTouched(true);
       try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
     }
     setDrag({ x: dx, y: dy });
@@ -48,7 +52,7 @@ function SwipeableToast({ toast: t }) {
       setLeaving(horizontal
         ? { x: Math.sign(drag.x || 1) * (window.innerWidth || 400), y: drag.y }
         : { x: drag.x, y: -200 });
-      setTimeout(() => dismissToast(t.id), 180);
+      setTimeout(() => dismissToast(t.id), 220);
     }
     setDrag(null);
     e.preventDefault();
@@ -70,7 +74,7 @@ function SwipeableToast({ toast: t }) {
 
   return (
     <div
-      className={`rc-toast rc-toast--${t.kind}${drag ? ' is-dragging' : ''}${leaving || (!drag && pos) ? ' is-settling' : ''}`}
+      className={`rc-toast rc-toast--${t.kind}${touched ? ' is-touched' : ''}${drag ? ' is-dragging' : ''}${leaving || (!drag && pos) ? ' is-settling' : ''}`}
       role="status"
       style={style}
       onPointerDown={onPointerDown}

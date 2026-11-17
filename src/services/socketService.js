@@ -19,6 +19,14 @@ const ERRORS_QUEUE = '/user/queue/errors';
 /** Must match MessageLimits.MAX_MESSAGE_LENGTH on the server. */
 export const MAX_MESSAGE_LENGTH = 4000;
 
+/** Id the client gives each message, so a re-sent frame is recognised and the echo matches the optimistic copy. */
+export function newClientMessageId() {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  } catch { /* fall through */ }
+  return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+
 /**
  * Extracts a friendly peer display name from various payload formats.
  */
@@ -574,6 +582,8 @@ export class SocketService {
           reactEmojiReceiver: payload.reactEmojiReceiver || null,
           status: payload.status || 'SENT',
           type: payload.type || 'TEXT',
+          clientMessageId: payload.clientMessageId || null,
+          expiresAt: payload.expiresAt || null,
           timestamp: rawTime,
           time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
         };
@@ -621,6 +631,18 @@ export class SocketService {
         // senderId is the REACTOR; clients apply it with applyReaction().
         this.callbacks.onReaction?.(payload);
         this._emitRoom(conversationId, 'onReaction', payload);
+        break;
+      }
+
+      case 'MESSAGE_DELETED': {
+        // A message was deleted for everyone (by its author, or it disappeared).
+        this.callbacks.onMessageDeleted?.(payload);
+        this._emitRoom(conversationId, 'onMessageDeleted', payload);
+        break;
+      }
+
+      case 'DISAPPEARING': {
+        this._emitRoom(conversationId, 'onDisappearing', payload);
         break;
       }
 
@@ -775,28 +797,36 @@ export class SocketService {
   /**
    * Send chat message via STOMP in normal conversation: /app/chat.send
    */
-  sendMessage(conversationId, text, type = 'TEXT', objectUri = null, referredMessageId = null) {
+  sendMessage(conversationId, text, type = 'TEXT', objectUri = null, referredMessageId = null, clientMessageId = null) {
     if (!conversationId) return false;
     return this._publish('/app/chat.send', {
       conversationId,
       message: text,
       type,
       objectUri,
-      referredMessageId
+      referredMessageId,
+      clientMessageId: clientMessageId || newClientMessageId()
     });
+  }
+
+  /** Delete one of my own messages for both people (friend chats and random rooms). */
+  deleteMessage(conversationId, messageId) {
+    if (!conversationId || !messageId) return false;
+    return this._publish('/app/chat.delete', { conversationId, messageId });
   }
 
   /**
    * Send random chat message via STOMP: /app/chat.random.send
    */
-  sendRandomChatMessage(conversationId, text, type = 'TEXT', objectUri = null, referredMessageId = null) {
+  sendRandomChatMessage(conversationId, text, type = 'TEXT', objectUri = null, referredMessageId = null, clientMessageId = null) {
     if (!conversationId) return false;
     return this._publish('/app/chat.random.send', {
       conversationId,
       message: text,
       type,
       objectUri,
-      referredMessageId
+      referredMessageId,
+      clientMessageId: clientMessageId || newClientMessageId()
     });
   }
 
