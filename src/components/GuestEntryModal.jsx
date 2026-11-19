@@ -225,6 +225,11 @@ export function GuestEntryModal({ isOpen, onClose, onGuestSubmit }) {
               'Start Chatting'
             )}
           </button>
+          <p className="legal-notice" style={{ margin: 0 }}>
+            By starting you confirm you&rsquo;re 18 or older and agree to our{' '}
+            <a href="/terms/" target="_blank" rel="noopener">Terms</a> and{' '}
+            <a href="/privacy/" target="_blank" rel="noopener">Privacy Policy</a>.
+          </p>
         </form>
       </div>
     </div>

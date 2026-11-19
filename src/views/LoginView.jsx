@@ -194,6 +194,10 @@ export function LoginView() {
               configured={firebaseConfigured}
             />
             <GuestButton onClick={() => { clearErrors(); setGuestModalOpen(true); }} />
+            <p className="legal-notice">
+              18+ only. By continuing you confirm you&rsquo;re 18 or older and agree to our{' '}
+              <a href="/terms/">Terms</a> and <a href="/privacy/">Privacy Policy</a>.
+            </p>
           </>
         )}
 

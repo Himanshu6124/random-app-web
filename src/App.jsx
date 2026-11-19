@@ -35,6 +35,13 @@ function AppContent() {
     else setScreen(isAuthenticated ? activeTab : 'login');
   }, [authLoading, isAuthenticated, activeTab, showAnalytics]);
 
+  // Microsoft Clarity records page text by default. Once signed in, mask everything (chats, toasts,
+  // profile cards rendered in portals) so recordings show layout and clicks, never messages.
+  useEffect(() => {
+    if (isAuthenticated) document.body.setAttribute('data-clarity-mask', 'true');
+    else document.body.removeAttribute('data-clarity-mask');
+  }, [isAuthenticated]);
+
   // The server decides who is an admin; the button only appears when it says yes.
   useEffect(() => {
     let cancelled = false;
@@ -87,7 +94,7 @@ function AppContent() {
 
   // 3. Authenticated state -> Main App Layout
   return (
-    <div className="app-container">
+    <div className="app-container" data-clarity-mask="true">
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}

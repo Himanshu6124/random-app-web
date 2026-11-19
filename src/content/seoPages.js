@@ -35,7 +35,23 @@ const MORE_FAQ = [
   },
 ];
 
+MORE_FAQ.push(
+  {
+    question: 'Who can use RandomChatly?',
+    answer: 'RandomChatly is only for adults aged 18 or older. If you see someone who seems underage, report them and we will remove them.',
+  },
+  {
+    question: 'Am I always talking to a real person?',
+    answer:
+      'Not always. When nobody is free to match with you, RandomChatly may connect you with an automated chat partner so you are not left waiting. Real people are always matched first.',
+  }
+);
+
 export const ALL_FAQ = [...FAQ.items, ...MORE_FAQ];
+
+/** Contact address shown on the legal pages. */
+export const CONTACT_EMAIL = 'randomchat.startup@gmail.com';
+const LEGAL_UPDATED = 'November 19, 2026';
 
 export const SEO_PAGES = [
   {
@@ -209,5 +225,142 @@ export const SEO_PAGES = [
     intro: 'Quick answers about chatting with strangers on RandomChatly.',
     faq: ALL_FAQ,
     sections: [],
+  },
+
+  {
+    slug: 'terms',
+    navLabel: 'Terms',
+    title: 'Terms of Service',
+    description:
+      'The rules for using RandomChatly: you must be 18 or older, treat people with respect, and follow these terms. Read what we allow and what we remove.',
+    h1: 'Terms of Service',
+    intro: `Last updated ${LEGAL_UPDATED}. By using RandomChatly you agree to these terms. If you do not agree, please do not use the service.`,
+    sections: [
+      {
+        heading: 'Who can use RandomChatly',
+        list: [
+          'You must be at least 18 years old. RandomChatly is not for children or teenagers.',
+          'By starting a chat, as a guest or with Google, you confirm that you are 18 or older.',
+          'We remove accounts that we believe belong to someone under 18.',
+        ],
+      },
+      {
+        heading: 'What RandomChatly is',
+        paragraphs: [
+          'RandomChatly matches you with a random person for a one-on-one text chat, and lets you keep the people you click with as friends. The service is free and provided "as is". We may change, pause or stop features at any time.',
+          'When nobody is free to match with you, you may be connected with an automated chat partner (a bot) instead of a real person. Real people are always matched first.',
+        ],
+      },
+      {
+        heading: 'Rules you agree to follow',
+        list: [
+          'Be respectful. No harassment, threats, hate speech or bullying.',
+          'No sexual content involving anyone under 18, ever. We report it to the authorities.',
+          'No sending sexual content to people who did not ask for it.',
+          'No spam, scams, advertising, or asking people for money.',
+          'No sharing other people’s private information without their permission.',
+          'No pretending to be someone else, and no use of the service for anything illegal.',
+          'No attempts to break, overload, scrape or get around the security of the service.',
+        ],
+      },
+      {
+        heading: 'Your content',
+        paragraphs: [
+          'You are responsible for what you send. You keep ownership of your messages, photos and voice notes, and you give us permission to store and deliver them so the service works.',
+          'Other people are strangers. We do not check who they are, and we are not responsible for what they say or do. Use block and report whenever something feels wrong.',
+        ],
+      },
+      {
+        heading: 'Blocking, reports and removal',
+        paragraphs: [
+          'We review reports and may warn, suspend or remove any account that breaks these rules, without notice. Guest accounts are deleted automatically 24 hours after they are created.',
+        ],
+      },
+      {
+        heading: 'Limits of our responsibility',
+        paragraphs: [
+          'To the extent the law allows, RandomChatly is not liable for any loss or harm that comes from using the service or from contact with other users.',
+        ],
+      },
+      {
+        heading: 'Changes and contact',
+        paragraphs: [
+          'We may update these terms. If you keep using RandomChatly after a change, you accept the new terms. See also our Privacy Policy at /privacy/.',
+          `Questions or concerns: ${CONTACT_EMAIL}`,
+        ],
+      },
+    ],
+  },
+  {
+    slug: 'privacy',
+    navLabel: 'Privacy',
+    title: 'Privacy Policy',
+    description:
+      'What RandomChatly collects, why, who it is shared with, how long it is kept, and how to ask us to delete your data.',
+    h1: 'Privacy Policy',
+    intro: `Last updated ${LEGAL_UPDATED}. This page explains what information RandomChatly collects and what we do with it. RandomChatly is only for people aged 18 or older.`,
+    sections: [
+      {
+        heading: 'What we collect',
+        list: [
+          'Guest entry: the name and gender you enter.',
+          'Google sign-in: your Google account email, name and profile photo, plus the username, display name, bio and photo you choose.',
+          'Your chats: messages, photos and voice notes you send, so they can be delivered and, for friends, kept as chat history.',
+          'Friends and matches: who you are friends with, who you block, and the people you have met recently.',
+          'Location, only if you turn on location sharing: used to show nearby friends. Other people only ever see a rounded area, never your exact spot. Strangers never see it.',
+          'Reports you send, and reports about you.',
+          'Usage data: which screens you open and buttons you tap, your device and browser type, and technical logs, to keep the service working and improve it.',
+        ],
+      },
+      {
+        heading: 'Automated chat partners',
+        paragraphs: [
+          'When nobody is free to match with you, you may chat with an automated partner. Messages you send to it are processed by Google Gemini to write the replies.',
+        ],
+      },
+      {
+        heading: 'Services we use',
+        list: [
+          'Google Firebase: sign-in and file storage.',
+          'Cloudinary: storing and delivering photos and voice notes.',
+          'Google Gemini: replies from automated chat partners.',
+          'Google Analytics and Microsoft Clarity: understanding how people find and use the site, using cookies or similar technology. Clarity records clicks, scrolling and page layout; text inside the signed-in app, including your chats, is hidden from it.',
+          'Vercel: hosting the website.',
+        ],
+      },
+      {
+        heading: 'What we do not do',
+        list: [
+          'We do not sell your personal information.',
+          'We do not show strangers your location, email or real name unless you choose to share it.',
+          'We do not knowingly collect information from anyone under 18. If we learn we have, we delete it.',
+        ],
+      },
+      {
+        heading: 'How long we keep it',
+        list: [
+          'Guest accounts, with their chats and friendships, are deleted 24 hours after they are created.',
+          'Your list of people you have met is kept for 30 days.',
+          'Usage data in our own analytics is kept for 90 days.',
+          'Google account data and chats with friends are kept until you delete them or ask us to delete your account.',
+        ],
+      },
+      {
+        heading: 'Your choices',
+        list: [
+          'Turn location sharing off at any time.',
+          'Delete messages, or turn on disappearing messages in a chat with a friend.',
+          'Block anyone, at any time.',
+          `Ask us for a copy of your data, to correct it, or to delete your account by emailing ${CONTACT_EMAIL} from the email linked to your account.`,
+        ],
+      },
+      {
+        heading: 'Changes and contact',
+        paragraphs: [
+          'We may update this policy and will change the date at the top when we do. See also our Terms of Service at /terms/.',
+          `Questions about your privacy: ${CONTACT_EMAIL}`,
+        ],
+      },
+    ],
   },
 ];
