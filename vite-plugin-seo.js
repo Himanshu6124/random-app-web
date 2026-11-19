@@ -13,7 +13,7 @@
 
 import { FAQ } from './src/content/landingContent.js';
 import { SEO_PAGES } from './src/content/seoPages.js';
-import { renderSeoPage, pagePath, safeJson, clarityScript } from './seo-pages.js';
+import { renderSeoPage, pagePath, safeJson, clarityScript, gaTags } from './seo-pages.js';
 
 const NAME = 'RandomChatly';
 const DESCRIPTION =
@@ -21,6 +21,8 @@ const DESCRIPTION =
 const OG_IMAGE = '/og-image.png';
 // Microsoft Clarity project id. Added to production builds only, so local dev isn't recorded.
 const CLARITY_ID = 'zg623a0jbq';
+// Google Analytics 4 measurement id (Firebase project's GA property). Production builds only.
+const GA_ID = 'G-GW7L4DRCC8';
 
 export function seo({ siteUrl } = {}) {
   const site = siteUrl ? siteUrl.trim().replace(/\/+$/, '') : '';
@@ -58,7 +60,14 @@ export function seo({ siteUrl } = {}) {
 
     transformIndexHtml() {
       const clarity = isBuild
-        ? [{ tag: 'script', children: clarityScript(CLARITY_ID), injectTo: 'head' }]
+        ? [
+            { tag: 'script', children: clarityScript(CLARITY_ID), injectTo: 'head' },
+            ...gaTags(GA_ID).map((t) =>
+              t.src
+                ? { tag: 'script', attrs: { async: true, src: t.src }, injectTo: 'head' }
+                : { tag: 'script', children: t.inline, injectTo: 'head' }
+            ),
+          ]
         : [];
       if (!site) return clarity;
       const home = `${site}/`;
@@ -123,7 +132,7 @@ export function seo({ siteUrl } = {}) {
         this.emitFile({
           type: 'asset',
           fileName: `${page.slug}/index.html`,
-          source: renderSeoPage(page, SEO_PAGES, site, CLARITY_ID),
+          source: renderSeoPage(page, SEO_PAGES, site, CLARITY_ID, GA_ID),
         });
       }
 

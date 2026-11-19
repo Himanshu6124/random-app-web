@@ -103,7 +103,17 @@ function renderFaq(items) {
  * @param {object[]} allPages  every entry, for the footer links
  * @param {string} site  absolute origin without trailing slash, or '' when unknown
  */
-export function renderSeoPage(page, allPages, site, clarityId) {
+/** Google Analytics 4 (gtag.js) tags: the loader plus the config call. */
+export const gaTags = (id) => [
+  { src: `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}` },
+  {
+    inline:
+      `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}` +
+      `gtag('js',new Date());gtag('config',${JSON.stringify(id)});`,
+  },
+];
+
+export function renderSeoPage(page, allPages, site, clarityId, gaId) {
   const path = pagePath(page.slug);
   const url = site ? `${site}${path}` : '';
   const image = site ? `${site}/og-image.png` : '';
@@ -163,6 +173,9 @@ export function renderSeoPage(page, allPages, site, clarityId) {
     `<style>${STYLES}</style>`,
     `<script type="application/ld+json">${safeJson({ '@context': 'https://schema.org', '@graph': graph })}</script>`,
     clarityId && `<script>${clarityScript(clarityId)}</script>`,
+    ...(gaId
+      ? gaTags(gaId).map((t) => (t.src ? `<script async src="${t.src}"></script>` : `<script>${t.inline}</script>`))
+      : []),
   ]
     .filter(Boolean)
     .join('\n    ');

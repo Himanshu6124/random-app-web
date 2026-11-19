@@ -148,6 +148,8 @@ export function setScreen(screen) {
   currentScreen = screen;
   screenSince = document.visibilityState === 'visible' ? Date.now() : 0;
   push({ type: 'pageview', name: 'pageview' });
+  // Google Analytics (loaded in production builds only): the app has one URL, so report screens as events.
+  if (typeof window.gtag === 'function') window.gtag('event', 'screen_view', { screen_name: screen });
 }
 
 const CLICKABLE = 'button, a, [role="button"], [role="tab"], [role="menuitem"], [data-track], input[type="checkbox"], input[type="radio"], select';
