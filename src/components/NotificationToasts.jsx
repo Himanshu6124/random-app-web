@@ -4,6 +4,8 @@ import {
   subscribeToasts, dismissToast, navigateTo,
   notificationPermission, requestNotificationPermission, isPromptDismissed, dismissPrompt
 } from '../services/notify';
+import { authService } from '../services/authService';
+import { enablePushNotifications } from '../services/pushClient';
 
 const KIND_ICON = { message: MessageCircle, request: UserPlus, success: UserCheck, match: Sparkles };
 
@@ -150,7 +152,11 @@ export function NotificationPermissionPrompt() {
       <button
         type="button"
         className="rc-notify-prompt__yes"
-        onClick={async () => { await requestNotificationPermission(); close(); }}
+        onClick={async () => {
+          const permission = await requestNotificationPermission();
+          if (permission === 'granted') enablePushNotifications(authService.getToken());
+          close();
+        }}
       >
         Turn on
       </button>

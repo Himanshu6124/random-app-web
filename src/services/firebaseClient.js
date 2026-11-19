@@ -33,7 +33,8 @@ const NOT_CONFIGURED_MESSAGE =
   'Google sign-in and media uploads are not configured yet (missing VITE_FIREBASE_* env values). '
   + 'Please continue as a guest for now.';
 
-function getFirebaseApp() {
+/** The shared Firebase app (created on first use). Throws when Firebase is not configured. */
+export function getFirebaseApp() {
   if (!isFirebaseConfigured()) {
     throw new Error(NOT_CONFIGURED_MESSAGE);
   }

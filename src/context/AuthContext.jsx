@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { authService, isAuthRejection } from '../services/authService';
+import { disablePushNotifications } from '../services/pushClient';
 import { feedback } from '../mobile/feedback';
 import { notify, pageInView } from '../services/notify';
 import {
@@ -761,6 +762,8 @@ export function AuthProvider({ children }) {
 
   const performLogout = useCallback(() => {
     setShowLogoutModal(false);
+    // Stop this account's pushes on this device before the session token is discarded
+    disablePushNotifications(authService.getToken());
     authService.clearSession();
     // The next user on this tab must not inherit the previous one's cached chats
     try {

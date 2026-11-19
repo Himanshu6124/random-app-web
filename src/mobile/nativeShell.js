@@ -6,6 +6,8 @@
  * - Flags standalone (installed PWA) mode and touch devices on <html>.
  * - Blocks pinch / double-tap zoom so the UI behaves like a native screen.
  */
+import { serviceWorkerUrl } from '../services/pushConfig';
+
 export function initNativeShell() {
   if (typeof window === 'undefined') return;
   const root = document.documentElement;
@@ -58,7 +60,7 @@ export function initNativeShell() {
   // Service worker (pass-through, no caching) — required for the install prompt.
   if ('serviceWorker' in navigator && window.isSecureContext) {
     const register = () =>
-      navigator.serviceWorker.register('/sw.js').catch(() => { /* install just won't be offered */ });
+      navigator.serviceWorker.register(serviceWorkerUrl()).catch(() => { /* install just won't be offered */ });
     if (document.readyState === 'complete') register();
     else window.addEventListener('load', register, { once: true });
   }

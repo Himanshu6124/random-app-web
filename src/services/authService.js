@@ -488,6 +488,17 @@ export const authService = {
   },
 
   /**
+   * DELETE /users/fcm-token: this account stops receiving pushes on this browser.
+   */
+  async deleteFcmToken(token) {
+    const response = await fetch(`${BASE_URL}/users/fcm-token`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(token)
+    });
+    return await handleApiResponse(response);
+  },
+
+  /**
    * PUT /users/me
    */
   async updateProfile(profileData, token) {

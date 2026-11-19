@@ -13,7 +13,9 @@ import { LogoutConfirmationDialog } from './components/LogoutConfirmationDialog'
 import { GuestUpgradeModal } from './components/GuestUpgradeModal';
 import { NotificationToasts, NotificationPermissionPrompt } from './components/NotificationToasts';
 import { ProfileCardProvider } from './components/ProfileCard';
-import { subscribeNavigate } from './services/notify';
+import { subscribeNavigate, navigateTo } from './services/notify';
+import { authService } from './services/authService';
+import { enablePushNotifications } from './services/pushClient';
 import { setScreen } from './services/analytics';
 import { checkAnalyticsAdmin } from './views/admin/adminApi';
 
@@ -68,6 +70,26 @@ function AppContent() {
       setActiveTab(target.tab);
     }
   }), [setActiveTab]);
+
+  // A notification opened the app while it was closed: its target travels in the URL (see public/sw.js)
+  useEffect(() => {
+    let target = null;
+    try {
+      const raw = new URLSearchParams(window.location.search).get('target');
+      if (!raw) return;
+      target = JSON.parse(raw);
+      window.history.replaceState(null, '', window.location.pathname);
+    } catch {
+      return;
+    }
+    navigateTo(target);
+  }, []);
+
+  // Keep this browser registered for push so the account can be reached while the app is closed
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    enablePushNotifications(authService.getToken());
+  }, [isAuthenticated, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A pending DM hand-off only applies to the Friends tab it was made for
   useEffect(() => {
