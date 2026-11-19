@@ -13,12 +13,14 @@
 
 import { FAQ } from './src/content/landingContent.js';
 import { SEO_PAGES } from './src/content/seoPages.js';
-import { renderSeoPage, pagePath, safeJson } from './seo-pages.js';
+import { renderSeoPage, pagePath, safeJson, clarityScript } from './seo-pages.js';
 
 const NAME = 'RandomChatly';
 const DESCRIPTION =
   'Free random chat with strangers. Talk to strangers in an anonymous one-on-one text chat, no signup needed, and turn the people you click with into friends.';
 const OG_IMAGE = '/og-image.png';
+// Microsoft Clarity project id. Added to production builds only, so local dev isn't recorded.
+const CLARITY_ID = 'zg623a0jbq';
 
 export function seo({ siteUrl } = {}) {
   const site = siteUrl ? siteUrl.trim().replace(/\/+$/, '') : '';
@@ -55,7 +57,10 @@ export function seo({ siteUrl } = {}) {
     },
 
     transformIndexHtml() {
-      if (!site) return [];
+      const clarity = isBuild
+        ? [{ tag: 'script', children: clarityScript(CLARITY_ID), injectTo: 'head' }]
+        : [];
+      if (!site) return clarity;
       const home = `${site}/`;
       const image = `${site}${OG_IMAGE}`;
 
@@ -105,6 +110,7 @@ export function seo({ siteUrl } = {}) {
           children: safeJson(structuredData),
           injectTo: 'head',
         },
+        ...clarity,
       ];
     },
 
@@ -117,7 +123,7 @@ export function seo({ siteUrl } = {}) {
         this.emitFile({
           type: 'asset',
           fileName: `${page.slug}/index.html`,
-          source: renderSeoPage(page, SEO_PAGES, site),
+          source: renderSeoPage(page, SEO_PAGES, site, CLARITY_ID),
         });
       }
 

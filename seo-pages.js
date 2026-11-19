@@ -17,6 +17,13 @@ export const safeJson = (value) => JSON.stringify(value, null, 2).replace(/</g, 
 
 export const pagePath = (slug) => `/${slug}/`;
 
+/** Microsoft Clarity tracking snippet (analytics, heatmaps, session recordings). */
+export const clarityScript = (id) =>
+  `(function(c,l,a,r,i,t,y){c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};` +
+  `t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;` +
+  `y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);` +
+  `})(window, document, "clarity", "script", ${JSON.stringify(id)});`;
+
 const STYLES = `
   :root {
     color-scheme: dark;
@@ -96,7 +103,7 @@ function renderFaq(items) {
  * @param {object[]} allPages  every entry, for the footer links
  * @param {string} site  absolute origin without trailing slash, or '' when unknown
  */
-export function renderSeoPage(page, allPages, site) {
+export function renderSeoPage(page, allPages, site, clarityId) {
   const path = pagePath(page.slug);
   const url = site ? `${site}${path}` : '';
   const image = site ? `${site}/og-image.png` : '';
@@ -155,6 +162,7 @@ export function renderSeoPage(page, allPages, site) {
     '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500&display=swap" />',
     `<style>${STYLES}</style>`,
     `<script type="application/ld+json">${safeJson({ '@context': 'https://schema.org', '@graph': graph })}</script>`,
+    clarityId && `<script>${clarityScript(clarityId)}</script>`,
   ]
     .filter(Boolean)
     .join('\n    ');
