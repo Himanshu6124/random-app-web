@@ -43,6 +43,26 @@ export function useChatAutoScroll(feedRef, { threadKey, lastId, count, lastIsMin
 
   useEffect(() => () => cancelAnimationFrame(raf.current), []);
 
+  // The feed gets shorter when the on-screen keyboard opens (and taller when it closes). That
+  // resize moves the reader away from the bottom without any scroll, so if they were at the
+  // bottom a moment ago, land on the last message again.
+  useEffect(() => {
+    const el = feedRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    let last = el.clientHeight;
+    const ro = new ResizeObserver(() => {
+      const h = el.clientHeight;
+      if (h === last) return;
+      // Distance from the bottom as it was before this resize (the feed's content is unchanged).
+      const wasNearBottom = el.scrollHeight - el.scrollTop - last < NEAR_BOTTOM_PX;
+      last = h;
+      if (wasNearBottom || pinned.current) toBottom(false);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedRef, threadKey]);
+
   // Track whether the reader is at the bottom.
   useEffect(() => {
     const el = feedRef.current;

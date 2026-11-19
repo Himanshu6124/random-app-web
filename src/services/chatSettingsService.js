@@ -4,6 +4,7 @@ import { BASE_URL, handleApiResponse, getAuthHeaders } from './authService';
 /** Timers offered in the UI (seconds). 0 = off. Must match the server's allowed list. */
 export const DISAPPEAR_OPTIONS = [
   { seconds: 0, label: 'Off', short: '' },
+  { seconds: -1, label: 'After seen', short: 'Seen' },
   { seconds: 3600, label: '1 hour', short: '1h' },
   { seconds: 6 * 3600, label: '6 hours', short: '6h' },
   { seconds: 12 * 3600, label: '12 hours', short: '12h' },
@@ -12,6 +13,10 @@ export const DISAPPEAR_OPTIONS = [
 
 export const disappearLabel = (seconds) =>
   (DISAPPEAR_OPTIONS.find(o => o.seconds === seconds) || DISAPPEAR_OPTIONS[0]).label;
+
+/** "after 1 hour" / "once they have seen them", for sentences about the timer. */
+export const disappearWhen = (seconds) =>
+  seconds === -1 ? 'once they have been seen' : `after ${disappearLabel(seconds).toLowerCase()}`;
 
 export const chatSettingsService = {
   async getDisappearing(conversationId, token) {

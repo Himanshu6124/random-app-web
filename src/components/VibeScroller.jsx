@@ -16,6 +16,9 @@ export function VibeScroller({ children }) {
     const el = ref.current;
     if (!el) return undefined;
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined;
+    // Touch screens (iOS included) already swipe this natively. Writing scrollLeft every frame
+    // there fights the system's momentum scroll and makes the chips jitter, so no drift on them.
+    if (window.matchMedia?.('(hover: none) and (pointer: coarse)').matches) return undefined;
 
     let pos = el.scrollLeft;
     let dir = 1;

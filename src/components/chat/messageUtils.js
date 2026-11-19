@@ -27,6 +27,7 @@ export function previewText(msg) {
   if (msg.type === 'IMAGE') return '📷 Photo';
   if (msg.type === 'AUDIO') return '🎤 Voice note';
   if (msg.type === 'VIDEO') return '🎬 Video';
+  if (msg.viewOnce) return '👁 View once photo';
   const text = (msg.text || msg.message || '').trim();
   return text.length > 140 ? text.slice(0, 140) + '…' : text;
 }

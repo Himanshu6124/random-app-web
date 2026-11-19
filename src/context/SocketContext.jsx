@@ -6,6 +6,8 @@ import { applyReaction } from '../components/chat/messageUtils';
 import { feedback } from '../mobile/feedback';
 import { notify, pageInView, navigateTo } from '../services/notify';
 import { cleanTopicIds, formatTopics, loadSavedTopics, saveTopics } from '../content/matchTopics';
+import { useVanish, AFTER_SEEN_READ_MS } from '../components/chat/useVanish';
+import { disappearWhen } from '../services/chatSettingsService';
 
 const SocketContext = createContext();
 
@@ -147,21 +149,91 @@ export function SocketProvider({ children }) {
 
   const activeConversationId = currentPeer?.conversationId || currentPeer?.id || null;
 
+  // Random chat disappearing messages: one timer for the room, set by either person (0 = off,
+  // -1 = once seen, else seconds). Messages leave with a fade, see useVanish.
+  const [randomDisappearSeconds, setRandomDisappearSeconds] = useState(0);
+  const randomDisappearRef = useRef(0);
+  const lastRandomSeenRef = useRef(null);
+  const { leaving: randomLeaving, vanish: vanishRandomRaw } = useVanish();
+  const removeRandomMessages = useCallback((ids) => {
+    const gone = new Set(ids);
+    setMessages(prev => prev.filter(m => !gone.has(m.id)));
+  }, []);
+  const vanishRandom = useCallback((ids) => vanishRandomRaw(ids, removeRandomMessages), [vanishRandomRaw, removeRandomMessages]);
+
+  /** The newest real message from the stranger (not a system line or a failed send). */
+  const lastStrangerMessage = (list) => {
+    const myId = userRef.current?.id;
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      const m = list[i];
+      if (m.senderId && m.senderId !== myId && m.senderId !== 'system' && m.senderId !== 'game'
+        && !String(m.id).startsWith('failed_')) return m;
+    }
+    return null;
+  };
+
+  /**
+   * The stranger's messages up to `target` have now been seen: send the receipt once, and drop
+   * the stranger's "disappear after seen" messages up to that point.
+   */
+  const markRandomSeen = useCallback((target) => {
+    const convId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+    if (!convId || !target?.id) return;
+    const key = `${convId}|${target.id}`;
+    if (lastRandomSeenRef.current === key) return;
+    lastRandomSeenRef.current = key;
+    socketService.sendRandomChatSeen(convId, target.id);
+
+    const list = messagesRef.current.some(m => m.id === target.id)
+      ? messagesRef.current
+      : [...messagesRef.current, target];
+    const idx = list.findIndex(m => m.id === target.id);
+    const myId = userRef.current?.id;
+    const gone = list.slice(0, idx + 1)
+      .filter(m => m.senderId !== myId && m.disappearOnSeen)
+      .map(m => m.id);
+    vanishRandom(gone);
+  }, [vanishRandom]);
+
   // When returning to Random Match tab, clear unread notifications and send seen receipt
   useEffect(() => {
     if (activeTab === 'match') {
       setUnreadRandomCount(0);
       setLiveRandomMessage(null);
-
-      const convId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
-      if (convId) {
-        const lastPeerMsg = [...messagesRef.current].reverse().find(m => m.senderId && m.senderId !== userRef.current?.id);
-        if (lastPeerMsg?.id) {
-          socketService.sendRandomChatSeen(convId, lastPeerMsg.id);
-        }
+      // Seen only counts while the page is actually in view
+      if (pageInView()) {
+        const target = lastStrangerMessage(messagesRef.current);
+        if (target) markRandomSeen(target);
       }
     }
-  }, [activeTab]);
+  }, [activeTab, markRandomSeen]);
+
+  // Back in view (tab shown, window focused): the message that arrived while away is seen now
+  useEffect(() => {
+    const onVisible = () => {
+      if (activeTabRef.current !== 'match' || !pageInView()) return;
+      const target = lastStrangerMessage(messagesRef.current);
+      if (target) markRandomSeen(target);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [markRandomSeen]);
+
+  // Timed disappearing messages: each goes (with its fade) once its time is up.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const now = Date.now();
+      const due = messagesRef.current
+        .filter(m => m.expiresAt && Date.parse(m.expiresAt) <= now)
+        .map(m => m.id);
+      if (due.length) vanishRandom(due);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [vanishRandom]);
 
   /**
    * Called when a match is found from server CONVERSATION_DTO
@@ -186,6 +258,9 @@ export function SocketProvider({ children }) {
     setIsPeerTyping(false);
     setPeerLeft(false);
     setMatchState('matched');
+    // A new room starts with disappearing messages off
+    randomDisappearRef.current = 0;
+    setRandomDisappearSeconds(0);
 
     // Subscribe to unified room channel
     const conversationId = peerObj.conversationId || peerObj.id;
@@ -203,10 +278,18 @@ export function SocketProvider({ children }) {
     if (soundEnabledRef.current && activeTabRef.current !== 'match') playChime('match');
   }, []);
 
-  const handleMessageReceived = useCallback((msg) => {
+  const handleMessageReceived = useCallback((incoming) => {
     // Only random-chat room traffic belongs in this state; DM rooms have their own view.
     const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
-    if (!activeConvId || msg.conversationId !== activeConvId) return;
+    if (!activeConvId || incoming.conversationId !== activeConvId) return;
+
+    // The room's disappearing timer applies to every message sent while it is set (both people share it)
+    const timer = randomDisappearRef.current;
+    const msg = timer === -1
+      ? { ...incoming, disappearOnSeen: true }
+      : (timer > 0 && !incoming.expiresAt
+        ? { ...incoming, expiresAt: new Date(Date.now() + timer * 1000).toISOString() }
+        : incoming);
 
     const myId = userRef.current?.id;
     const isPeerMsg = msg.senderId !== myId;
@@ -241,11 +324,13 @@ export function SocketProvider({ children }) {
           text: msg.type === 'IMAGE' ? '📷 Photo' : (msg.text || msg.message || ''),
           conversationId: msg.conversationId
         });
-      } else {
-        // User is looking directly at Random Match: mark message seen immediately
-        if (msg.id) {
-          socketService.sendRandomChatSeen(activeConvId, msg.id);
-        }
+      } else if (pageInView()) {
+        // Looking directly at Random Match: mark it seen now (if not, it is marked when they return).
+        // A disappear-after-seen message waits a moment so it can be read first.
+        if (msg.disappearOnSeen) setTimeout(() => {
+          if (activeTabRef.current === 'match' && pageInView()) markRandomSeen(msg);
+        }, AFTER_SEEN_READ_MS);
+        else markRandomSeen(msg);
       }
 
       feedback('receive');
@@ -253,7 +338,7 @@ export function SocketProvider({ children }) {
         playChime('message');
       }
     }
-  }, []);
+  }, [markRandomSeen]);
 
   const handleMatchFoundRef = useRef(handleMatchFound);
   const handleMessageReceivedRef = useRef(handleMessageReceived);
@@ -510,6 +595,33 @@ export function SocketProvider({ children }) {
             }
             return m;
           }));
+
+          // Disappear after seen: my messages up to the one they just read go now
+          const list = messagesRef.current;
+          const idx = list.findIndex(m => m.id === payload?.messageId);
+          if (idx === -1) return;
+          const gone = list.slice(0, idx + 1)
+            .filter(m => m.senderId === myId && m.disappearOnSeen)
+            .map(m => m.id);
+          vanishRandom(gone);
+        },
+        onMessageViewed: (payload) => {
+          const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+          if (!activeConvId || payload?.conversationId !== activeConvId || !payload?.messageId) return;
+          vanishRandom([payload.messageId]);
+        },
+        onDisappearing: (payload) => {
+          const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+          if (!activeConvId || payload?.conversationId !== activeConvId) return;
+          const seconds = Number(payload.seconds) || 0;
+          randomDisappearRef.current = seconds;
+          setRandomDisappearSeconds(seconds);
+          const who = payload.changedBy === userRef.current?.id
+            ? 'You'
+            : (currentPeerRef.current?.name || 'Your chat partner');
+          setMessages(prev => [...prev, systemMessage(seconds
+            ? `${who} turned on disappearing messages. New messages disappear ${disappearWhen(seconds)}.`
+            : `${who} turned off disappearing messages.`)]);
         },
         onTypingStatus: (typing, payload) => {
           const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
@@ -867,14 +979,14 @@ export function SocketProvider({ children }) {
    * Failure becomes a visible FAILED bubble with no retry (retrying would need the file,
    * not the text) — matching the "never look sent when it is not" rule.
    */
-  const sendMedia = useCallback(({ type, objectUri, localPreviewUrl, referredMessageId = null }) => {
+  const sendMedia = useCallback(({ type, objectUri, localPreviewUrl, referredMessageId = null, viewOnce = false }) => {
     if (!currentPeer || peerLeft || !isPeerOnline) return false;
 
     const conversationId = currentPeer.conversationId || currentPeer.id;
     if (!conversationId || !objectUri) return false;
 
     const caption = type === 'IMAGE' ? '📷 Photo' : '🎤 Voice note';
-    const delivered = socketService.sendRandomChatMessage(conversationId, caption, type, objectUri, referredMessageId);
+    const delivered = socketService.sendRandomChatMessage(conversationId, caption, type, objectUri, referredMessageId, null, viewOnce && type === 'IMAGE');
 
     if (!delivered) {
       setMessages(prev => [...prev, {
@@ -895,6 +1007,21 @@ export function SocketProvider({ children }) {
     }
     return delivered;
   }, [currentPeer, isPeerOnline, peerLeft]);
+
+  /** Sets the random room's disappearing timer for both people (the server echoes it back). */
+  const setRandomDisappearing = useCallback((seconds) => {
+    const convId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+    if (!convId || peerLeftRef.current) return false;
+    return socketService.sendRandomDisappearing(convId, seconds);
+  }, []);
+
+  /** I opened a view-once photo: it goes for both people. */
+  const openRandomViewOnce = useCallback((msg) => {
+    const convId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+    if (!convId || !msg?.id) return;
+    socketService.sendViewed(convId, msg.id);
+    vanishRandom([msg.id]);
+  }, [vanishRandom]);
 
   const sendReaction = useCallback((emoji) => {
     if (peerLeftRef.current || !isPeerOnlineRef.current) return;
@@ -1003,6 +1130,10 @@ export function SocketProvider({ children }) {
     deleteMessage,
     sendIcebreaker,
     notifyTyping,
+    randomDisappearSeconds,
+    setRandomDisappearing,
+    randomLeaving,
+    openRandomViewOnce,
     floatingReactions,
     bottleGame,
     spinBottle,
@@ -1016,7 +1147,8 @@ export function SocketProvider({ children }) {
     dismissLiveRandomMessage, matchState, matchTopics, setMatchTopics, matchGender, setMatchGender, currentPeer, messages, isPeerTyping, isPeerOnline, peerLastSeen, peerLeft, resyncTick,
     startSearching, cancelSearch, skipStranger, disconnectChat, sendMessage,
     retryMessage, sendMedia, sendReaction, reactToMessage, deleteMessage, sendIcebreaker, notifyTyping, floatingReactions,
-    bottleGame, spinBottle, chooseGameOption, askGameQuestion, closeGame, connectionStatus, isLiveConnected
+    bottleGame, spinBottle, chooseGameOption, askGameQuestion, closeGame, connectionStatus, isLiveConnected,
+    randomDisappearSeconds, setRandomDisappearing, randomLeaving, openRandomViewOnce
   ]);
 
   return (

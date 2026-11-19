@@ -271,3 +271,68 @@
 .msg-delete-btn.is-confirm:hover { background: var(--danger, #e5484d); color: #fff; }
 .reaction-picker .msg-delete-btn { border-left: none; border-radius: var(--radius-full); margin-left: 0; color: var(--danger, #e5484d); }
 .reaction-picker .msg-delete-btn.is-confirm { color: #fff; height: 32px; align-self: center; }
+
+/* ─── Swipe right to reply ─── */
+.msg-bubble-hit { touch-action: pan-y; }
+.msg-swipe-hint {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--plum-4, rgba(255, 255, 255, 0.08));
+  color: var(--text-secondary);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+@media (hover: hover) {
+  .msg-swipe-hint { display: none; }
+}
+
+/* ─── Disappearing messages leave with a fade ─── */
+.is-vanishing {
+  animation: msgVanish 380ms var(--ease-out, ease-out) forwards;
+  pointer-events: none;
+  overflow: hidden;
+}
+@keyframes msgVanish {
+  0% { opacity: 1; transform: none; filter: none; }
+  55% { opacity: 0; transform: scale(0.94) translateY(-4px); filter: blur(3px); }
+  100% { opacity: 0; transform: scale(0.94) translateY(-6px); filter: blur(4px); }
+}
+
+/* ─── View once ─── */
+.view-once {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 170px;
+  padding: 10px 14px;
+  border: 1px dashed var(--border-color, rgba(255, 255, 255, 0.2));
+  border-radius: var(--radius-md, 14px);
+  background: var(--plum-4, rgba(255, 255, 255, 0.06));
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.view-once:hover { background: rgba(255, 255, 255, 0.1); }
+.view-once--sent, .view-once--done { cursor: default; }
+.view-once__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.view-once__text strong { font-size: var(--fs-md, 15px); font-weight: 600; }
+.view-once__text > span { font-size: var(--fs-xs, 12px); color: var(--text-muted); }
+.view-once--done { opacity: 0.7; }
+
+/* Composer: view-once toggle (armed = the next photo is view once) */
+.wa-icon-btn.is-armed { color: var(--accent, #f07289); background: var(--plum-4, rgba(255, 255, 255, 0.08)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .is-vanishing { animation: none; opacity: 0; }
+  .msg-swipe-hint { transition: none; }
+}

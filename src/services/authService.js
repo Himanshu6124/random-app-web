@@ -617,6 +617,8 @@ export const authService = {
           reactEmojiReceiver: m.reactEmojiReceiver || null,
           clientMessageId: m.clientMessageId || null,
           expiresAt: m.expiresAt || null,
+          viewOnce: Boolean(m.viewOnce),
+          disappearOnSeen: Boolean(m.disappearOnSeen),
           status: m.status || 'SENT',
           type: m.type || 'TEXT',
           time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),

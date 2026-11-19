@@ -22,6 +22,8 @@ import { TypingIndicator } from './chat/TypingIndicator';
 import { useChatAutoScroll } from './chat/useChatAutoScroll';
 import { useChatTheme } from './chat/chatThemes';
 import { ChatThemePicker } from './chat/ChatThemePicker';
+import { DisappearTimer } from './chat/DisappearTimer';
+import { ViewOnceBubble } from './chat/ViewOnceBubble';
 
 // AI partners we "sent" a friend request to (never sent to the server), kept across tab switches.
 const botRequestsSent = new Set();
@@ -72,6 +74,10 @@ export function ChatBox() {
     disconnectChat,
     floatingReactions,
     notifyTyping,
+    randomDisappearSeconds,
+    setRandomDisappearing,
+    randomLeaving,
+    openRandomViewOnce,
     bottleGame,
     spinBottle,
     chooseGameOption,
@@ -469,6 +475,13 @@ export function ChatBox() {
 
         {/* Action Controls: friend request + exit only; block/report live on the profile card */}
         <div className="chat-header-actions">
+          {!peerLeft && (
+            <DisappearTimer
+              seconds={randomDisappearSeconds}
+              onChange={setRandomDisappearing}
+              hint="Either of you can change it. New messages disappear for both of you."
+            />
+          )}
           <button
             id="chat-theme-btn"
             type="button"
@@ -594,10 +607,16 @@ export function ChatBox() {
           const isMe = msg.senderId === myId;
           const isFailed = msg.status === 'FAILED';
 
+          const vanishing = randomLeaving.has(msg.id);
+          const rowClass = [
+            freshIds.has(msg.id) ? `bubble-in ${isMe ? 'bubble-in--me' : 'bubble-in--them'}` : '',
+            vanishing ? 'is-vanishing' : ''
+          ].filter(Boolean).join(' ') || undefined;
+
           return (
             <div
               key={msg.id}
-              className={freshIds.has(msg.id) ? `bubble-in ${isMe ? 'bubble-in--me' : 'bubble-in--them'}` : undefined}
+              className={rowClass}
               style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -609,7 +628,7 @@ export function ChatBox() {
                 isMe={isMe}
                 myId={myId}
                 interactions={interactions}
-                enabled={isInteractive(msg) && !composerDisabled}
+                enabled={isInteractive(msg) && !composerDisabled && !vanishing}
                 onReply={startReply}
                 onReact={handleReact}
                 onDelete={isMe && !peerLeft ? (m) => deleteMessage(m.id) : undefined}
@@ -622,7 +641,9 @@ export function ChatBox() {
                     onJump={() => jumpToMessage(msg.referredMessageId)}
                   />
                 )}
-                {msg.type === 'IMAGE' || msg.type === 'AUDIO' ? (
+                {msg.viewOnce && msg.type === 'IMAGE' ? (
+                  <ViewOnceBubble msg={msg} isMe={isMe} onOpened={openRandomViewOnce} />
+                ) : msg.type === 'IMAGE' || msg.type === 'AUDIO' ? (
                   <ChatMediaMessage msg={msg} />
                 ) : (
                   <span className="chat-bubble__text">{msg.text || msg.message}</span>

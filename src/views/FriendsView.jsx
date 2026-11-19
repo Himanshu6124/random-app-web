@@ -4,8 +4,9 @@ import { useAuth } from '../context/AuthContext';
 import { useSocket, ICEBREAKER_QUESTIONS } from '../context/SocketContext';
 import { socketService, newClientMessageId } from '../services/socketService';
 import { authService } from '../services/authService';
-import { chatSettingsService, DISAPPEAR_OPTIONS, disappearLabel } from '../services/chatSettingsService';
-import { Users, UserMinus, UserPlus, MessageCircle, ArrowLeft, MoreVertical, Loader2, Ban, ChevronDown, ChevronRight, UserRound, AlertTriangle, CheckCheck, Check, X, Palette, Timer } from 'lucide-react';
+import { chatSettingsService, disappearWhen } from '../services/chatSettingsService';
+import { pageInView } from '../services/notify';
+import { Users, UserMinus, UserPlus, MessageCircle, ArrowLeft, MoreVertical, Loader2, Ban, ChevronDown, ChevronRight, UserRound, AlertTriangle, CheckCheck, Check, X, Palette } from 'lucide-react';
 import { useNewMessageIds, displayTime } from '../mobile/useNewMessageIds';
 import { DiscoverConfirmDialog } from '../components/discover/DiscoverConfirmDialog';
 import { FriendRequestDialog } from '../components/FriendRequestDialog';
@@ -23,6 +24,9 @@ import { TypingIndicator } from '../components/chat/TypingIndicator';
 import { useChatAutoScroll } from '../components/chat/useChatAutoScroll';
 import { useChatTheme, getChatTheme } from '../components/chat/chatThemes';
 import { ChatThemePicker } from '../components/chat/ChatThemePicker';
+import { DisappearTimer } from '../components/chat/DisappearTimer';
+import { ViewOnceBubble } from '../components/chat/ViewOnceBubble';
+import { useVanish, AFTER_SEEN_READ_MS } from '../components/chat/useVanish';
 import { useMessageInteractions } from '../components/chat/useMessageInteractions';
 import { feedback } from '../mobile/feedback';
 import { timeAgo, chatListTime } from '../components/discover/discoverUtils';
@@ -84,13 +88,11 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   const [showBlocked, setShowBlocked] = useState(false);
   const [unblockingId, setUnblockingId] = useState(null);
   const menuRef = useRef(null);
-  // Disappearing messages of the open chat (seconds, 0 = off) and its small picker
+  // Disappearing messages of the open chat (seconds, 0 = off, -1 = once seen)
   const [disappearSeconds, setDisappearSeconds] = useState(0);
-  const [showTimerMenu, setShowTimerMenu] = useState(false);
-  const timerMenuRef = useRef(null);
-  // Re-render now and then so messages whose time is up leave the screen on their own
-  const [nowTick, setNowTick] = useState(() => Date.now());
   const chatAreaRef = useRef(null);
+  // Messages leave with a fade (timers, seen, view once, deletes)
+  const { leaving: dmLeavingIds, vanish: vanishDm } = useVanish();
   // Phone: the DM screen is a pushed screen — Back button and edge-swipe pop it.
   useBackHandler(isMobile && mobileShowChat, () => setMobileShowChat(false));
   useEdgeSwipeBack(chatAreaRef, isMobile && mobileShowChat, () => setMobileShowChat(false));
@@ -103,6 +105,49 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   const interactions = useMessageInteractions();
   const closeInteractions = interactions.close;
 
+  // A message counts as seen only while this chat is really on screen: the chat is open (not the
+  // friends list on a phone) and the page is visible and focused. Otherwise it stays unseen.
+  const [pageVisible, setPageVisible] = useState(() => pageInView());
+  useEffect(() => {
+    const sync = () => setPageVisible(pageInView());
+    document.addEventListener('visibilitychange', sync);
+    window.addEventListener('focus', sync);
+    window.addEventListener('blur', sync);
+    return () => {
+      document.removeEventListener('visibilitychange', sync);
+      window.removeEventListener('focus', sync);
+      window.removeEventListener('blur', sync);
+    };
+  }, []);
+  const chatInView = Boolean(selectedFriend) && (!isMobile || mobileShowChat) && pageVisible;
+  const chatInViewRef = useRef(false);
+  chatInViewRef.current = chatInView;
+  // Newest seen receipt sent per conversation, so the same message is not re-announced
+  const lastSeenSentRef = useRef(new Map());
+  const seenTimerRef = useRef(null);
+
+  /** Sends the seen receipt for `messageId`, but only while the chat is in view. */
+  const sendSeenIfViewing = (conversationId, messageId) => {
+    if (!conversationId || !messageId || !chatInViewRef.current) return false;
+    if (lastSeenSentRef.current.get(conversationId) === messageId) return false;
+    const sent = socketService.sendSeen(conversationId, messageId);
+    if (sent) lastSeenSentRef.current.set(conversationId, messageId);
+    return sent;
+  };
+  /** Seen now, or after a short read time for "disappear after seen" messages. */
+  const requestSeen = (conversationId, messageId, delayMs = 0) => {
+    clearTimeout(seenTimerRef.current);
+    if (delayMs > 0) {
+      seenTimerRef.current = setTimeout(() => sendSeenIfViewing(conversationId, messageId), delayMs);
+      return;
+    }
+    sendSeenIfViewing(conversationId, messageId);
+  };
+  // Leaving the chat (or the page) cancels a pending receipt
+  useEffect(() => {
+    if (!chatInView) clearTimeout(seenTimerRef.current);
+  }, [chatInView]);
+
   // Resize listener for mobile/desktop layout
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -110,17 +155,17 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Sync active DM friend with AuthContext to prevent unread increment while viewing
+  // Sync active DM friend with AuthContext: only a chat that is really in view counts as read
   useEffect(() => {
     const friendId = selectedFriend?.id || selectedFriend?.friendUserId;
-    setActiveDmFriendId?.(friendId || null);
-    if (friendId) {
+    setActiveDmFriendId?.(chatInView && friendId ? friendId : null);
+    if (chatInView && friendId) {
       markFriendMessagesSeen?.(friendId);
     }
     return () => {
       setActiveDmFriendId?.(null);
     };
-  }, [selectedFriend?.id, selectedFriend?.friendUserId, setActiveDmFriendId, markFriendMessagesSeen]);
+  }, [selectedFriend?.id, selectedFriend?.friendUserId, chatInView, setActiveDmFriendId, markFriendMessagesSeen]);
 
   // Handle selecting a friend
   const handleSelectFriend = async (friend) => {
@@ -129,10 +174,6 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
 
     let activeFriend = { ...friend };
     const targetUserId = friend.id || friend.friendUserId;
-    if (targetUserId) {
-      markFriendMessagesSeen?.(targetUserId);
-      setActiveDmFriendId?.(targetUserId);
-    }
 
     // If conversationId is missing, create or open it via POST /conversations
     if (!activeFriend.conversationId && targetUserId) {
@@ -213,29 +254,10 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     return () => document.removeEventListener('mousedown', onDown);
   }, [showMenu]);
 
-  useEffect(() => {
-    if (!showTimerMenu) return undefined;
-    const onDown = (e) => {
-      if (timerMenuRef.current && !timerMenuRef.current.contains(e.target)) setShowTimerMenu(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('touchstart', onDown, { passive: true });
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('touchstart', onDown);
-    };
-  }, [showTimerMenu]);
-
-  useEffect(() => {
-    const id = setInterval(() => setNowTick(Date.now()), 30000);
-    return () => clearInterval(id);
-  }, []);
-
   // Disappearing-messages timer of the open chat
   useEffect(() => {
     const conversationId = selectedFriend?.conversationId;
     setDisappearSeconds(0);
-    setShowTimerMenu(false);
     if (!conversationId) return undefined;
     let alive = true;
     chatSettingsService.getDisappearing(conversationId, jwtToken || authService.getToken())
@@ -364,7 +386,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     if (!Array.isArray(apiMessages) || apiMessages.length === 0) return;
     const lastPeerMsg = [...apiMessages].reverse().find(m => m.senderId !== user?.id);
     if (lastPeerMsg?.id) {
-      socketService.sendSeen(conversationId, lastPeerMsg.id);
+      sendSeenIfViewing(conversationId, lastPeerMsg.id);
     }
     setDmMessages(prev => {
       const existingLocal = prev[conversationId] || prev[friendId] || [];
@@ -468,6 +490,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             referredMessageId: msg.referredMessageId || null,
             clientMessageId: msg.clientMessageId || null,
             expiresAt: msg.expiresAt || null,
+            viewOnce: Boolean(msg.viewOnce),
+            disappearOnSeen: Boolean(msg.disappearOnSeen),
             reactEmojiSender: msg.reactEmojiSender || null,
             reactEmojiReceiver: msg.reactEmojiReceiver || null,
             status: msg.status || 'SENT',
@@ -504,11 +528,14 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
         });
 
         if (msg.id && msg.senderId !== myId) {
-          socketService.sendSeen(conversationId, msg.id);
+          requestSeen(conversationId, msg.id, msg.disappearOnSeen ? AFTER_SEEN_READ_MS : 0);
         }
       },
       onMessageDeleted: (payload) => {
-        if (payload?.messageId) removeDmMessage(payload.messageId);
+        if (payload?.messageId) vanishDm([payload.messageId], removeDmMessages);
+      },
+      onViewed: (payload) => {
+        if (payload?.messageId) vanishDm([payload.messageId], removeDmMessages);
       },
       onDisappearing: (payload) => {
         const seconds = Number(payload?.seconds) || 0;
@@ -517,7 +544,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
           ? 'You'
           : (selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username || 'Your friend');
         const text = seconds
-          ? `${who} turned on disappearing messages. New messages disappear after ${disappearLabel(seconds)}.`
+          ? `${who} turned on disappearing messages. New messages disappear ${disappearWhen(seconds)}.`
           : `${who} turned off disappearing messages.`;
         setDmMessages(prev => ({
           ...prev,
@@ -605,12 +632,25 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
         }
       }
     });
-  }, [selectedFriend, user?.id]);
+  }, [selectedFriend, user?.id, vanishDm]);
 
   const scrollKey = selectedFriend ? (selectedFriend.conversationId || selectedFriend.id) : null;
   const scrollList = scrollKey ? (dmMessages[scrollKey] || []) : [];
   const lastDm = scrollList.length ? scrollList[scrollList.length - 1] : null;
   const chatVisible = !isMobile || mobileShowChat;
+
+  // Seen for the newest message from them, once the chat is really on screen again
+  const lastPeerDm = [...scrollList].reverse().find(m => m.senderId && m.senderId !== user?.id
+    && m.senderId !== 'system' && m.senderId !== 'game'
+    && !String(m.id).startsWith('pending_') && !String(m.id).startsWith('failed_')) || null;
+  const lastPeerDmId = lastPeerDm?.id || null;
+  const lastPeerDmAfterSeen = Boolean(lastPeerDm?.disappearOnSeen);
+  useEffect(() => {
+    const conversationId = selectedFriend?.conversationId;
+    if (!chatInView || !conversationId || !lastPeerDmId) return;
+    requestSeen(conversationId, lastPeerDmId, lastPeerDmAfterSeen ? AFTER_SEEN_READ_MS : 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatInView, selectedFriend?.conversationId, lastPeerDmId, lastPeerDmAfterSeen]);
 
   // Opening a chat lands on the last message with no scroll animation; new messages glide in.
   useChatAutoScroll(feedRef, {
@@ -797,8 +837,9 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
    * Firebase Storage first and hands us the objectUri. Friend-DM media is persisted
    * history — the backend never cleans it up.
    */
-  const handleSendMediaDm = ({ type, objectUri }) => {
+  const handleSendMediaDm = ({ type, objectUri, viewOnce = false }) => {
     if (!selectedFriend?.conversationId || !objectUri) return;
+    const sendViewOnce = Boolean(viewOnce) && type === 'IMAGE';
 
     const conversationId = selectedFriend.conversationId;
     const caption = type === 'IMAGE' ? '📷 Photo' : '🎤 Voice note';
@@ -815,6 +856,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       text: caption,
       type,
       objectUri,
+      viewOnce: sendViewOnce,
       referredMessageId,
       status: 'SENDING',
       time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
@@ -826,7 +868,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       [conversationId]: [...(prev[conversationId] || []), newMsg]
     }));
 
-    const sent = socketService.sendMessage(conversationId, caption, type, objectUri, referredMessageId, clientMessageId);
+    const sent = socketService.sendMessage(conversationId, caption, type, objectUri, referredMessageId, clientMessageId, sendViewOnce);
     if (!sent) {
       setDmMessages(prev => {
         const list = (prev[conversationId] || []).map(m => m.id === newMsg.id ? { ...m, status: 'FAILED' } : m);
@@ -892,18 +934,28 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     }, 1800);
   };
 
-  /** Drops a message from every cached list (it may sit under both the conversation and friend key). */
-  const removeDmMessage = (messageId) => {
+  /** Drops messages from every cached list (they may sit under both the conversation and friend key). */
+  const removeDmMessages = (messageIds) => {
+    const gone = new Set(messageIds);
     setDmMessages(prev => {
       let changed = false;
       const next = {};
       Object.entries(prev).forEach(([key, list]) => {
-        const kept = (list || []).filter(m => m.id !== messageId);
+        const kept = (list || []).filter(m => !gone.has(m.id));
         if (kept.length !== (list || []).length) changed = true;
         next[key] = kept;
       });
       return changed ? next : prev;
     });
+  };
+  const removeDmMessage = (messageId) => removeDmMessages([messageId]);
+
+  /** I opened a view-once photo: it goes for both people. */
+  const openDmViewOnce = (msg) => {
+    const conversationId = selectedFriend?.conversationId;
+    if (!conversationId || !msg?.id) return;
+    socketService.sendViewed(conversationId, msg.id);
+    vanishDm([msg.id], removeDmMessages);
   };
 
   /** Delete for everyone: my own, already-sent messages only. */
@@ -920,7 +972,6 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
 
   const changeDisappearing = async (seconds) => {
     const conversationId = selectedFriend?.conversationId;
-    setShowTimerMenu(false);
     if (!conversationId || seconds === disappearSeconds) return;
     const previous = disappearSeconds;
     setDisappearSeconds(seconds);
@@ -934,15 +985,30 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   };
 
   const activeKey = selectedFriend ? (selectedFriend.conversationId || selectedFriend.id) : null;
-  // Disappeared messages leave the screen even before the server's cleanup removes them.
-  const currentMessages = (activeKey ? (dmMessages[activeKey] || []) : [])
-    .filter(m => !m.expiresAt || new Date(m.expiresAt).getTime() > nowTick);
+  const currentMessages = activeKey ? (dmMessages[activeKey] || []) : [];
+
+  // Timed disappearing messages: each one fades out once its time is up (the server purges it too)
+  const dmMessagesRef = useRef(dmMessages);
+  dmMessagesRef.current = dmMessages;
+  useEffect(() => {
+    if (!activeKey) return undefined;
+    const id = setInterval(() => {
+      const now = Date.now();
+      const due = (dmMessagesRef.current[activeKey] || [])
+        .filter(m => m.expiresAt && Date.parse(m.expiresAt) <= now)
+        .map(m => m.id);
+      if (due.length) vanishDm(due, removeDmMessages);
+    }, 1000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeKey]);
   const messagesById = useMemo(() => {
     const map = new Map();
     (activeKey ? (dmMessages[activeKey] || []) : []).forEach(m => { if (m.id) map.set(m.id, m); });
     return map;
   }, [activeKey, dmMessages]);
   const freshIds = useNewMessageIds(currentMessages, activeKey);
+  const vanishingIds = dmLeavingIds;
 
   return (
     <div className="friends-view" style={{
@@ -1345,41 +1411,11 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               </div>
 
               {/* Disappearing messages: timer icon, shows the duration while on */}
-              <div ref={timerMenuRef} className="dm-timer">
-                <button
-                  type="button"
-                  className={`dm-timer__btn${disappearSeconds ? ' is-on' : ''}`}
-                  onClick={() => setShowTimerMenu(v => !v)}
-                  aria-label={disappearSeconds ? `Disappearing messages: ${disappearLabel(disappearSeconds)}` : 'Disappearing messages: off'}
-                  aria-haspopup="menu"
-                  aria-expanded={showTimerMenu}
-                  title="Disappearing messages"
-                >
-                  <Timer size={18} aria-hidden="true" />
-                  {disappearSeconds > 0 && (
-                    <span className="dm-timer__label">{DISAPPEAR_OPTIONS.find(o => o.seconds === disappearSeconds)?.short}</span>
-                  )}
-                </button>
-                {showTimerMenu && (
-                  <div className="dm-timer__menu" role="menu" aria-label="Disappearing messages">
-                    <div className="dm-timer__title">Disappearing messages</div>
-                    {DISAPPEAR_OPTIONS.map(o => (
-                      <button
-                        key={o.seconds}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={disappearSeconds === o.seconds}
-                        className={`dm-timer__opt${disappearSeconds === o.seconds ? ' is-on' : ''}`}
-                        onClick={() => changeDisappearing(o.seconds)}
-                      >
-                        {o.label}
-                        {disappearSeconds === o.seconds && <Check size={15} aria-hidden="true" />}
-                      </button>
-                    ))}
-                    <p className="dm-timer__hint">New messages disappear for both of you.</p>
-                  </div>
-                )}
-              </div>
+              <DisappearTimer
+                seconds={disappearSeconds}
+                onChange={changeDisappearing}
+                hint="New messages disappear for both of you."
+              />
 
               {/* Options Menu */}
               <div ref={menuRef} style={{ position: 'relative' }}>
@@ -1521,10 +1557,15 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                   );
                 }
                 const isMe = m.sender === 'me' || m.senderId === user?.id;
+                const vanishing = vanishingIds.has(m.id);
+                const rowClass = [
+                  freshIds.has(m.id) ? `bubble-in ${isMe ? 'bubble-in--me' : 'bubble-in--them'}` : '',
+                  vanishing ? 'is-vanishing' : ''
+                ].filter(Boolean).join(' ') || undefined;
                 return (
                   <div
                     key={m.id}
-                    className={freshIds.has(m.id) ? `bubble-in ${isMe ? 'bubble-in--me' : 'bubble-in--them'}` : undefined}
+                    className={rowClass}
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
@@ -1536,7 +1577,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                       isMe={isMe}
                       myId={user?.id}
                       interactions={interactions}
-                      enabled={isInteractive(m) && isLiveConnected}
+                      enabled={isInteractive(m) && isLiveConnected && !vanishing}
                       onReply={startReply}
                       onReact={handleReactDm}
                       onDelete={isMe ? handleDeleteDm : undefined}
@@ -1549,7 +1590,9 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                           onJump={() => jumpToMessage(m.referredMessageId)}
                         />
                       )}
-                      {(m.type === 'IMAGE' || m.type === 'AUDIO' || m.objectUri) ? (
+                      {m.viewOnce && m.type === 'IMAGE' ? (
+                        <ViewOnceBubble msg={m} isMe={isMe} onOpened={openDmViewOnce} />
+                      ) : (m.type === 'IMAGE' || m.type === 'AUDIO' || m.objectUri) ? (
                         <ChatMediaMessage msg={m} />
                       ) : (
                         <span className="chat-bubble__text">{m.text}</span>

@@ -452,7 +452,6 @@
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
-    -webkit-overflow-scrolling: touch;
     touch-action: pan-x pan-y;
     scrollbar-width: none;
     -webkit-mask-image: linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent);
@@ -465,8 +464,11 @@
     gap: 8px;
     width: max-content;
   }
-  .vibe-scroller__row { display: flex; gap: 8px; }
+  .vibe-scroller__row { display: flex; gap: 8px; transform: translateZ(0); }
   .vibe-scroller .topic-chip { flex-shrink: 0; }
+  /* No hover / press transitions on chips while the strip moves (they repaint mid-scroll on iOS) */
+  .vibe-scroller .topic-chip { transition: none; }
+  .vibe-scroller .topic-chip:active:not(:disabled) { transform: none; }
 }
 
 /* ── Toasts: swipe left / right / up to dismiss ── */

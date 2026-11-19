@@ -5,6 +5,11 @@ import '../../styles/messageExtras.css';
 import { feedback } from '../../mobile/feedback';
 
 const LONG_PRESS_MS = 420;
+// Swipe right on a bubble to reply: how far the finger must travel to lock the swipe, to
+// trigger the reply, and how far the bubble may follow the finger.
+const SWIPE_LOCK_PX = 10;
+const SWIPE_TRIGGER_PX = 56;
+const SWIPE_MAX_PX = 88;
 
 /** The quoted message shown at the top of a reply bubble. */
 export function ReplyQuote({ quoted, authorLabel, onJump }) {
@@ -78,7 +83,7 @@ export function ReactionPills({ msg, myId, isMe, onToggle }) {
 /**
  * Wraps one chat bubble with reply + react controls.
  *  - Desktop: controls appear beside the bubble on hover / focus; double-click hearts it.
- *  - Touch: long-press the bubble to show them; double-tap hearts it.
+ *  - Touch: long-press the bubble to show them; double-tap hearts it; swipe it right to reply.
  * Render <ReplyQuote> inside the bubble (children) when the message is a reply.
  */
 export function MessageShell({
@@ -98,6 +103,10 @@ export function MessageShell({
   const pressTimer = useRef(null);
   const pressStart = useRef(null);
   const longPressed = useRef(false);
+  const bubbleRef = useRef(null);
+  const hintRef = useRef(null);
+  const swipe = useRef(null);
+  const swiped = useRef(false);
   const mine = myReactionOn(msg, myId);
   // Delete for everyone: only my own messages, two taps (trash, then "Delete").
   const canDelete = Boolean(isMe && onDelete);
@@ -147,7 +156,9 @@ export function MessageShell({
   const onPointerDown = (e) => {
     if (e.pointerType === 'mouse') return;
     longPressed.current = false;
+    swiped.current = false;
     pressStart.current = { x: e.clientX, y: e.clientY };
+    swipe.current = { id: e.pointerId, x0: e.clientX, y0: e.clientY, locked: false, dead: false, dx: 0 };
     clearTimeout(pressTimer.current);
     pressTimer.current = setTimeout(() => {
       longPressed.current = true;
@@ -157,9 +168,54 @@ export function MessageShell({
     }, LONG_PRESS_MS);
   };
   const cancelPress = () => clearTimeout(pressTimer.current);
+
+  // Swipe: the bubble follows a rightward finger, a reveal arrow grows, and past the trigger the
+  // message becomes a reply. Vertical movement hands the gesture back to scrolling.
+  const showSwipe = (travel) => {
+    const bubble = bubbleRef.current;
+    const hint = hintRef.current;
+    if (bubble) {
+      bubble.style.transition = 'none';
+      bubble.style.transform = travel ? `translate3d(${travel}px, 0, 0)` : '';
+    }
+    if (hint) hint.style.opacity = String(Math.min(1, travel / SWIPE_TRIGGER_PX));
+  };
   const onPointerMove = (e) => {
     const start = pressStart.current;
     if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) cancelPress();
+
+    const s = swipe.current;
+    if (!s || s.dead || e.pointerId !== s.id) return;
+    const dx = e.clientX - s.x0;
+    const dy = e.clientY - s.y0;
+    if (!s.locked) {
+      if (Math.abs(dy) > SWIPE_LOCK_PX && Math.abs(dy) >= Math.abs(dx)) {
+        s.dead = true;
+        return;
+      }
+      if (dx > SWIPE_LOCK_PX && dx > Math.abs(dy) * 1.5) {
+        s.locked = true;
+        swiped.current = true;
+        cancelPress();
+        try { bubbleRef.current?.setPointerCapture?.(e.pointerId); } catch { /* not supported */ }
+      }
+    }
+    if (s.locked) {
+      s.dx = Math.min(Math.max(dx, 0), SWIPE_MAX_PX);
+      showSwipe(s.dx);
+    }
+  };
+  const finishSwipe = (cancelled) => {
+    const s = swipe.current;
+    swipe.current = null;
+    if (!s || !s.locked) return;
+    const reply = !cancelled && s.dx >= SWIPE_TRIGGER_PX;
+    showSwipe(0);
+    if (hintRef.current) hintRef.current.style.opacity = '0';
+    if (reply) {
+      feedback('tap');
+      onReply?.(msg);
+    }
   };
 
   return (
@@ -167,21 +223,25 @@ export function MessageShell({
       className={`msg-row ${isMe ? 'msg-row--me' : 'msg-row--them'}${isActive || pickerOpen ? ' is-active' : ''}`}
       data-msg-interactive={isActive || pickerOpen ? '' : undefined}
     >
+      <span ref={hintRef} className="msg-swipe-hint" aria-hidden="true">
+        <Reply size={16} />
+      </span>
       <div className="msg-stack">
         <div
           id={`msg-${msg.id}`}
+          ref={bubbleRef}
           className="msg-bubble-hit"
           onPointerDown={onPointerDown}
-          onPointerUp={cancelPress}
-          onPointerCancel={cancelPress}
+          onPointerUp={() => { cancelPress(); finishSwipe(false); }}
+          onPointerCancel={() => { cancelPress(); finishSwipe(true); }}
           onPointerMove={onPointerMove}
           onContextMenu={(e) => {
             // Long-press on Android fires contextmenu; keep the native menu out of the way
             if (e.nativeEvent?.pointerType !== 'mouse') e.preventDefault();
           }}
           onClickCapture={(e) => {
-            // The click that ends a long-press must not also open media / jump quotes
-            if (longPressed.current) {
+            // The click that ends a long-press or a swipe must not also open media / jump quotes
+            if (longPressed.current || swiped.current) {
               e.stopPropagation();
               e.preventDefault();
               longPressed.current = false;

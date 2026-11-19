@@ -9,6 +9,7 @@ const TABS = [
   { id: 'traffic', label: 'Traffic' },
   { id: 'engagement', label: 'Engagement' },
   { id: 'product', label: 'Product' },
+  { id: 'reports', label: 'Reports' },
   { id: 'system', label: 'Backend' },
   { id: 'live', label: 'Live' },
 ];
@@ -21,7 +22,7 @@ export default function AdminAnalyticsView({ onClose }) {
   const [nonce, setNonce] = useState(0);
 
   const choose = (setter, key) => (v) => { setter(v); sessionStorageSet(key, v); };
-  const usesRange = !['system', 'live'].includes(tab);
+  const usesRange = !['system', 'live', 'reports'].includes(tab);
 
   return (
     <div className="an-root" data-track-ignore>
@@ -58,6 +59,7 @@ export default function AdminAnalyticsView({ onClose }) {
         {tab === 'traffic' && <Traffic range={range} />}
         {tab === 'engagement' && <Engagement range={range} />}
         {tab === 'product' && <Product range={range} />}
+        {tab === 'reports' && <Reports />}
         {tab === 'system' && <SystemTab />}
         {tab === 'live' && <Live />}
       </main>
@@ -385,6 +387,39 @@ function Product({ range }) {
           <Card title="Guest logins"><GuestLogins rows={d.guestLogins} hourly={hourly} /></Card>
           <Card title="Friend DMs" sub="Messages between friends"><Dms rows={d.dms} hourly={hourly} /></Card>
         </div>
+      </>
+    )}</Loader>
+  );
+}
+
+// ------------------------------------------------------------------ reports
+
+function personLabel(p) {
+  if (!p) return '—';
+  const name = p.deleted ? 'Deleted account' : (p.name || 'No name');
+  const handle = p.username ? ` @${p.username}` : '';
+  return `${name}${handle} (…${String(p.id || '').slice(-6)})`;
+}
+
+/** People reported by users (from the block & report tools and match history), with the reason given. */
+function Reports() {
+  const rp = useAdminData('/reports', { limit: 200 }, 60000);
+  return (
+    <Loader state={rp}>{(d) => (
+      <>
+        <div className="an-kpis">
+          <Kpi label="Reports (all time)" value={d.total} />
+          <Kpi label="Shown" value={d.reports?.length} hint="Newest first, up to 200" />
+        </div>
+        <Card title="Reported people" sub="Newest first. The reported person is never told who reported them." span={2}>
+          <Table rows={d.reports} empty="No reports yet" cols={[
+            { key: 'createdAt', label: 'When', render: (r) => (r.createdAt ? new Date(r.createdAt).toLocaleString() : '—') },
+            { key: 'reported', label: 'Reported', render: (r) => personLabel(r.reported) },
+            { key: 'reason', label: 'Reason', render: (r) => r.reason || '—' },
+            { key: 'reporter', label: 'Reported by', render: (r) => personLabel(r.reporter) },
+            { key: 'reportedTotal', label: 'Total against them', num: true },
+          ]} />
+        </Card>
       </>
     )}</Loader>
   );

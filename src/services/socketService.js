@@ -584,6 +584,8 @@ export class SocketService {
           type: payload.type || 'TEXT',
           clientMessageId: payload.clientMessageId || null,
           expiresAt: payload.expiresAt || null,
+          viewOnce: Boolean(payload.viewOnce),
+          disappearOnSeen: Boolean(payload.disappearOnSeen),
           timestamp: rawTime,
           time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
         };
@@ -642,7 +644,15 @@ export class SocketService {
       }
 
       case 'DISAPPEARING': {
+        this.callbacks.onDisappearing?.(payload);
         this._emitRoom(conversationId, 'onDisappearing', payload);
+        break;
+      }
+
+      case 'VIEWED': {
+        // A view-once message was opened: it is gone for both people.
+        this.callbacks.onMessageViewed?.(payload);
+        this._emitRoom(conversationId, 'onViewed', payload);
         break;
       }
 
@@ -803,7 +813,7 @@ export class SocketService {
   /**
    * Send chat message via STOMP in normal conversation: /app/chat.send
    */
-  sendMessage(conversationId, text, type = 'TEXT', objectUri = null, referredMessageId = null, clientMessageId = null) {
+  sendMessage(conversationId, text, type = 'TEXT', objectUri = null, referredMessageId = null, clientMessageId = null, viewOnce = false) {
     if (!conversationId) return false;
     return this._publish('/app/chat.send', {
       conversationId,
@@ -811,8 +821,21 @@ export class SocketService {
       type,
       objectUri,
       referredMessageId,
-      clientMessageId: clientMessageId || newClientMessageId()
+      clientMessageId: clientMessageId || newClientMessageId(),
+      ...(viewOnce ? { viewOnce: true } : {})
     });
+  }
+
+  /** The receiver opened a view-once message: it is removed for both people. */
+  sendViewed(conversationId, messageId) {
+    if (!conversationId || !messageId) return false;
+    return this._publish('/app/chat.viewed', { conversationId, messageId });
+  }
+
+  /** Random chats keep their disappearing timer only in the room (seconds, -1 = after seen). */
+  sendRandomDisappearing(conversationId, seconds) {
+    if (!conversationId) return false;
+    return this._publish('/app/chat.disappearing', { conversationId, seconds });
   }
 
   /** Change the chat theme for both people (friend DMs persist it, random rooms relay it). */
@@ -830,7 +853,7 @@ export class SocketService {
   /**
    * Send random chat message via STOMP: /app/chat.random.send
    */
-  sendRandomChatMessage(conversationId, text, type = 'TEXT', objectUri = null, referredMessageId = null, clientMessageId = null) {
+  sendRandomChatMessage(conversationId, text, type = 'TEXT', objectUri = null, referredMessageId = null, clientMessageId = null, viewOnce = false) {
     if (!conversationId) return false;
     return this._publish('/app/chat.random.send', {
       conversationId,
@@ -838,7 +861,8 @@ export class SocketService {
       type,
       objectUri,
       referredMessageId,
-      clientMessageId: clientMessageId || newClientMessageId()
+      clientMessageId: clientMessageId || newClientMessageId(),
+      ...(viewOnce ? { viewOnce: true } : {})
     });
   }
 

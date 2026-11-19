@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Image as ImageIcon, Mic, Send, X, ArrowUp, ChevronUp, Trash2 } from 'lucide-react';
+import { Image as ImageIcon, Mic, Send, X, ArrowUp, ChevronUp, Trash2, Eye } from 'lucide-react';
 import { useMediaComposer, formatMs } from './MediaComposer';
 import { VoiceWaveform } from './VoiceWaveform';
 import { MAX_MESSAGE_LENGTH } from '../services/socketService';
@@ -45,7 +45,19 @@ export function ChatComposer({
   sendClassName = 'btn-primary'
 }) {
   const [focused, setFocused] = useState(false);
-  const media = useMediaComposer({ conversationId, onSend: onSendMedia, onError: onMediaError });
+  // View once: the next photo sent from here opens only once for the receiver, then it is gone.
+  const [viewOnceArmed, setViewOnceArmed] = useState(false);
+  const armedRef = useRef(false);
+  armedRef.current = viewOnceArmed;
+  const media = useMediaComposer({
+    conversationId,
+    onSend: (sent) => {
+      const viewOnce = armedRef.current && sent.type === 'IMAGE';
+      if (viewOnce) setViewOnceArmed(false);
+      onSendMedia?.({ ...sent, viewOnce });
+    },
+    onError: onMediaError
+  });
   const { configured, uploading, progress, recording, elapsed, micStream } = media;
 
   // Hold-to-record gesture state
@@ -258,13 +270,27 @@ export function ChatComposer({
           {uploading && (
             <span className="wa-field__progress" id="media-upload-progress">{progress}%</span>
           )}
+          {/* image/* (not a list of types) so Android's picker offers the camera too */}
           <input
             ref={media.fileInputRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
+            accept="image/*"
             style={{ display: 'none' }}
             onChange={media.onFileChange}
           />
+          <button
+            type="button"
+            id="view-once-btn"
+            className={`wa-icon-btn${viewOnceArmed ? ' is-armed' : ''}`}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setViewOnceArmed(v => !v)}
+            disabled={disabled || mediaBusy || !configured}
+            aria-pressed={viewOnceArmed}
+            aria-label={viewOnceArmed ? 'View once is on for the next photo' : 'Send the next photo as view once'}
+            title={viewOnceArmed ? 'View once is on: the next photo opens once' : 'View once for the next photo'}
+          >
+            <Eye size={18} aria-hidden="true" />
+          </button>
           <button
             type="button"
             id="attach-image-btn"
