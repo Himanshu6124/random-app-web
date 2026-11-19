@@ -383,7 +383,12 @@ export function AuthProvider({ children }) {
 
     initLandingAuth();
     return () => { isMounted = false; };
-  }, [loadFriendsFromApi, loadFriendRequests, openUpgradeModal]);
+    // Mount only. checkLandingAuth() renews the token and setJwtToken() gives loadFriendsFromApi /
+    // loadFriendRequests new identities, so listing them here re-ran this effect after every renewal:
+    // an endless refresh + /users/me loop on phones, where each round trip lands in a new second and
+    // so mints a different token. Both loaders get res.jwt explicitly; openUpgradeModal is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
 
   const sendFriendRequest = useCallback(async (targetUserId) => {
