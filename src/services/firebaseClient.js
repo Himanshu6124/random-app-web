@@ -21,7 +21,10 @@ const cfg = {
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  // Required by Firebase Messaging (getToken). A web app id is "1:<senderId>:web:<hash>", so it is
+  // derived here instead of needing another env var; the service worker does the same (pushConfig.js).
+  messagingSenderId: String(import.meta.env.VITE_FIREBASE_APP_ID || '').split(':')[1] || undefined
 };
 
 /** True when every required VITE_FIREBASE_* variable is present. */
