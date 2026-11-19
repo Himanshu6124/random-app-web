@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { authService } from '../services/authService';
+import { authService, isAuthRejection } from '../services/authService';
 import { feedback } from '../mobile/feedback';
 import { notify, pageInView } from '../services/notify';
 import {
@@ -7,6 +7,9 @@ import {
 } from '../services/firebaseClient';
 
 const AuthContext = createContext();
+
+// Backend tokens live 24h; renew well inside that so a tab left open never runs out.
+const TOKEN_REFRESH_MS = 6 * 60 * 60 * 1000;
 
 // Safety-net poll only; live updates arrive on /user/queue/notifications.
 const POLL_BASE_MS = 60000;
@@ -63,6 +66,7 @@ export function AuthProvider({ children }) {
   const clearGoogleRedirectUpgrade = useCallback(() => setGoogleRedirectUpgrade(null), []);
   // applyFirebaseSession is declared further down; the mount effect reaches it through this ref.
   const applyFirebaseSessionRef = useRef(null);
+  const performLogoutRef = useRef(null);
 
   const isGuest = Boolean(user?.isGuest);
 
@@ -265,6 +269,47 @@ export function AuthProvider({ children }) {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
   }, [isAuthenticated, jwtToken, loadFriendsFromApi, loadFriendRequests]);
+
+  // Sliding session: renew the token every few hours, and when a tab or installed app comes
+  // back after a long time hidden (timers barely run there). Only a real 401/403 logs out.
+  const lastRefreshRef = useRef(Date.now());
+  const refreshInFlightRef = useRef(false);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    lastRefreshRef.current = Date.now();
+
+    let cancelled = false;
+    const renew = async () => {
+      if (refreshInFlightRef.current) return;
+      refreshInFlightRef.current = true;
+      try {
+        const fresh = await authService.refreshToken();
+        if (cancelled) return;
+        lastRefreshRef.current = Date.now();
+        setJwtToken(fresh);
+      } catch (err) {
+        if (!cancelled && isAuthRejection(err)) performLogoutRef.current?.();
+        // Network / server errors: keep the session and try again on the next tick.
+      } finally {
+        refreshInFlightRef.current = false;
+      }
+    };
+
+    const timer = setInterval(renew, TOKEN_REFRESH_MS);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible'
+          && Date.now() - lastRefreshRef.current >= TOKEN_REFRESH_MS) {
+        renew();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [isAuthenticated]);
 
   // Initial Auth check on mount
   useEffect(() => {
@@ -732,7 +777,30 @@ export function AuthProvider({ children }) {
     setSessionEpoch(prev => prev + 1);
   }, []);
 
+  // The token-refresh effect is declared above performLogout; it reaches it through this ref.
+  useEffect(() => { performLogoutRef.current = performLogout; }, [performLogout]);
+
   const logout = useCallback(() => requestLogout(), [requestLogout]);
+
+  /**
+   * Deletes the signed-in account. The server only MARKS it deleted (the row stays), then this
+   * device signs out. Throws with a readable message when the server refuses.
+   */
+  const deleteAccount = useCallback(async () => {
+    const token = jwtToken || authService.getToken();
+    if (!user?.id || !token) throw new Error('You are not signed in.');
+    await authService.deleteAccount(user.id, token);
+    try {
+      const { signOutFirebase } = await import('../services/firebaseClient');
+      await signOutFirebase();
+    } catch (e) { /* Firebase not configured: nothing to sign out of */ }
+    try {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('chatTheme:'))
+        .forEach(k => localStorage.removeItem(k));
+    } catch (e) {}
+    performLogout();
+  }, [jwtToken, user?.id, performLogout]);
 
   const dismissLiveFriendRequest = useCallback(() => setLiveFriendRequest(null), []);
 
@@ -777,6 +845,7 @@ export function AuthProvider({ children }) {
     requestLogout,
     cancelLogout,
     performLogout,
+    deleteAccount,
     clearAuthError,
     login,
     signUp,
@@ -825,7 +894,7 @@ export function AuthProvider({ children }) {
     loadFriendsFromApi
   }), [
     isAuthenticated, isGuest, jwtToken, user, sessionEpoch, authLoading,
-    authError, showLogoutModal, requestLogout, cancelLogout, performLogout, clearAuthError,
+    authError, showLogoutModal, requestLogout, cancelLogout, performLogout, deleteAccount, clearAuthError,
     login, signUp, loginAsGuest, upgradeGuestAccount, signInWithGoogle, completeGoogleSignup,
     linkGoogleAccount, signInToExistingGoogleAccount, upgradeModalOpen, upgradeModalReason,
     pendingUpgradeAction, openUpgradeModal, closeUpgradeModal, googleRedirectLogin,

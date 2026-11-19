@@ -1,11 +1,25 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { Portal } from '../Portal';
 import { CHAT_THEMES } from './chatThemes';
 import { feedback } from '../../mobile/feedback';
 
 /** Bottom sheet (centred dialog on desktop) for choosing a chat theme. */
-export function ChatThemePicker({ open, currentId, onSelect, onClose }) {
+export function ChatThemePicker({ open, currentId, onSelect, onClose, peerName }) {
+  const [error, setError] = useState('');
+  useEffect(() => { if (open) setError(''); }, [open]);
+
+  const pick = (id) => {
+    if (id === currentId) return;
+    feedback('select');
+    if (onSelect(id) === false) {
+      feedback('error');
+      setError("Couldn't change the theme. Check your connection and try again.");
+      return;
+    }
+    setError('');
+  };
+
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -42,9 +56,10 @@ export function ChatThemePicker({ open, currentId, onSelect, onClose }) {
                   role="radio"
                   aria-checked={selected}
                   className={`ct-swatch${selected ? ' is-selected' : ''}`}
-                  onClick={() => { feedback('select'); onSelect(theme.id); }}
+                  onClick={() => pick(theme.id)}
                 >
                   <span className="ct-swatch__preview" style={{ ...theme.vars, '--ct-attach': 'scroll' }}>
+                    <span className="ct-swatch__icon" aria-hidden="true">{theme.icon}</span>
                     <span className="ct-swatch__bubble ct-swatch__bubble--them" />
                     <span className="ct-swatch__bubble ct-swatch__bubble--me" />
                     <span className="ct-swatch__bubble ct-swatch__bubble--me ct-swatch__bubble--short" />
@@ -52,12 +67,17 @@ export function ChatThemePicker({ open, currentId, onSelect, onClose }) {
                       <span className="ct-swatch__check" aria-hidden="true"><Check size={14} strokeWidth={3} /></span>
                     )}
                   </span>
-                  <span className="ct-swatch__name">{theme.name}</span>
+                  <span className="ct-swatch__name">
+                    <span aria-hidden="true">{theme.icon}</span> {theme.name}
+                  </span>
                 </button>
               );
             })}
           </div>
-          <p className="ct-picker__note">Only you see the theme you pick for this chat.</p>
+          {error && <p className="ct-picker__error" role="alert">{error}</p>}
+          <p className="ct-picker__note">
+            {peerName ? `You and ${peerName} both see the theme you pick.` : 'Both of you see the theme you pick.'}
+          </p>
         </div>
       </div>
     </Portal>

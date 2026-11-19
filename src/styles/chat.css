@@ -6,7 +6,8 @@
 
 /* ── Theme surface: themes set --ct-* vars on .chat-screen ── */
 .chat-screen .chat-feed {
-  background: var(--ct-feed-bg, transparent);
+  /* The theme's emoji motif tiles over its colours (no motif on the classic look). */
+  background: var(--ct-pattern, none) 0 0 / 168px 168px repeat, var(--ct-feed-bg, transparent);
 }
 
 /* ── Bubbles ── */
@@ -154,14 +155,39 @@
   justify-content: flex-end;
   gap: 5px;
   padding: 10px 8px;
-  background: var(--ct-feed-bg, var(--plum-1));
+  background: var(--ct-pattern, none) 0 0 / 96px 96px repeat, var(--ct-feed-bg, var(--plum-1));
   border: 2px solid var(--border-color);
   transition: border-color 0.15s ease, transform 0.15s ease;
 }
 .ct-swatch:hover .ct-swatch__preview { transform: translateY(-2px); }
 .ct-swatch.is-selected .ct-swatch__preview { border-color: var(--text-primary); }
 .ct-swatch.is-selected .ct-swatch__name { color: var(--text-primary); font-weight: 700; }
-.ct-swatch__name { font-size: var(--fs-sm); }
+.ct-swatch__name { font-size: var(--fs-sm); display: inline-flex; align-items: center; gap: 4px; }
+.ct-swatch__icon {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  transition: transform 0.2s var(--ease-out);
+}
+.ct-swatch:hover .ct-swatch__icon,
+.ct-swatch.is-selected .ct-swatch__icon { transform: translateX(-50%) scale(1.12); }
+.ct-picker__error {
+  margin: 14px 0 0;
+  font-size: var(--fs-sm);
+  color: #ff8a8f;
+  text-align: center;
+}
 .ct-swatch__bubble {
   display: block;
   height: 14px;
@@ -468,3 +494,12 @@ html.is-touch .mv-toolbar { display: none; }
 .dm-timer__opt:hover { background: rgba(255, 255, 255, 0.05); }
 .dm-timer__opt.is-on { color: var(--accent, #f07289); font-weight: 600; }
 .dm-timer__hint { margin: 4px 16px 6px; font-size: var(--fs-xs, 12px); color: var(--text-muted); line-height: 1.35; }
+
+/* The theme's own quick reaction in the strip above the composer */
+.reaction-chip--theme {
+  font-size: 17px;
+  line-height: 1;
+  box-shadow: inset 0 0 0 1px var(--ct-accent, var(--border-color));
+  animation: ct-pop 0.35s var(--ease-out);
+}
+@keyframes ct-pop { from { transform: scale(0.6); opacity: 0; } }

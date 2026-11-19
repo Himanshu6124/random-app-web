@@ -21,7 +21,7 @@ import { ChatQuickBar } from '../components/chat/ChatQuickBar';
 import { applyReaction, isInteractive, jumpToMessage, bubbleClass } from '../components/chat/messageUtils';
 import { TypingIndicator } from '../components/chat/TypingIndicator';
 import { useChatAutoScroll } from '../components/chat/useChatAutoScroll';
-import { useChatTheme } from '../components/chat/chatThemes';
+import { useChatTheme, getChatTheme } from '../components/chat/chatThemes';
 import { ChatThemePicker } from '../components/chat/ChatThemePicker';
 import { useMessageInteractions } from '../components/chat/useMessageInteractions';
 import { feedback } from '../mobile/feedback';
@@ -163,10 +163,12 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialFriendId, friends]);
 
-  // Auto-select first friend on desktop if none selected
+  // Auto-select the most recent chat on desktop if none selected
+  const sortedFriendsRef = useRef([]);
+  const friendDisplayNameRef = useRef('');
   useEffect(() => {
     if (!selectedFriend && friends.length > 0 && !isMobile && !initialFriendId) {
-      handleSelectFriend(friends[0]);
+      handleSelectFriend(sortedFriendsRef.current[0]?.f || friends[0]);
     }
   }, [friends, isMobile, selectedFriend, initialFriendId]);
 
@@ -243,6 +245,23 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   }, [selectedFriend?.conversationId, jwtToken]);
 
   const friendKey = (f) => f?.id || f?.friendUserId;
+
+  /** Latest message of a friend chat: the server copy, or a newer one sent/received on this screen. */
+  const lastActivityOf = (friend) => {
+    const id = friend.id || friend.friendUserId;
+    const localList = dmMessages[friend.conversationId] || dmMessages[id] || [];
+    const localLast = [...localList].reverse().find(m => m.senderId !== 'system' && m.senderId !== 'game') || null;
+    const serverMs = friend.lastMessageTime ? new Date(friend.lastMessageTime).getTime() : 0;
+    const localMs = localLast?.timestamp ? new Date(localLast.timestamp).getTime() : 0;
+    const localIsNewer = localMs > (Number.isFinite(serverMs) ? serverMs : 0);
+    return {
+      time: localIsNewer ? localLast.timestamp : friend.lastMessageTime,
+      ms: Math.max(Number.isFinite(serverMs) ? serverMs : 0, Number.isFinite(localMs) ? localMs : 0),
+      preview: localIsNewer
+        ? (localLast.type === 'IMAGE' ? '📷 Photo' : localLast.type === 'AUDIO' ? '🎤 Voice note' : (localLast.text || friend.lastMessage))
+        : friend.lastMessage
+    };
+  };
   const friendLabel = (f) => f?.name || f?.friendUserName || f?.username || 'this user';
 
   const askConfirm = (kind, friend) => {
@@ -320,6 +339,25 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       console.warn('[FriendsView] Could not cache direct messages locally:', e);
     }
   }, [dmMessages]);
+
+  // Friends list, most recent conversation first (like any messenger). Friends you never
+  // talked to go to the bottom, alphabetically.
+  const sortedFriends = useMemo(() => {
+    const withActivity = friends.map((f, i) => ({ f, i, a: lastActivityOf(f) }));
+    withActivity.sort((x, y) => {
+      if (y.a.ms !== x.a.ms) return y.a.ms - x.a.ms;
+      if (x.a.ms === 0) {
+        const nx = (x.f.name || x.f.friendUserName || '').toLowerCase();
+        const ny = (y.f.name || y.f.friendUserName || '').toLowerCase();
+        if (nx !== ny) return nx < ny ? -1 : 1;
+      }
+      return x.i - y.i;
+    });
+    return withActivity;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [friends, dmMessages]);
+
+  sortedFriendsRef.current = sortedFriends;
 
   // Server history merged into the local cache (local-only entries such as pending sends survive).
   const mergeApiMessages = (conversationId, friendId, apiMessages) => {
@@ -583,9 +621,28 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     pulse: isFriendTyping
   });
 
-  const [chatTheme, setChatTheme] = useChatTheme(
-    selectedFriend ? `dm:${selectedFriend.conversationId || selectedFriend.id || selectedFriend.friendUserId}` : null
-  );
+  // The theme belongs to the conversation: both friends see the same one.
+  const [chatTheme, setChatTheme] = useChatTheme(selectedFriend?.conversationId || null, {
+    persisted: true,
+    onRemoteChange: (themeId, changedBy) => {
+      const conversationId = selectedFriend?.conversationId;
+      if (!conversationId) return;
+      const picked = getChatTheme(themeId);
+      const who = changedBy === user?.id ? 'You' : (friendDisplayNameRef.current || 'Your friend');
+      const text = themeId === 'default'
+        ? `${who} changed the theme back to Classic.`
+        : `${who} changed the theme to ${picked.name} ${picked.icon}`;
+      setDmMessages(prev => ({
+        ...prev,
+        [conversationId]: [...(prev[conversationId] || []), {
+          id: 'sys_theme_' + Date.now(),
+          senderId: 'system',
+          text,
+          timestamp: new Date().toISOString()
+        }]
+      }));
+    }
+  });
 
   // A pending reply belongs to the chat it was started in.
   useEffect(() => {
@@ -647,6 +704,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   const friendDisplayName = selectedFriend
     ? (selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username)
     : '';
+  friendDisplayNameRef.current = friendDisplayName;
   const authorLabel = (m) => (m && (m.sender === 'me' || m.senderId === user?.id) ? 'You' : friendDisplayName);
 
   const startReply = (m) => {
@@ -999,17 +1057,11 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
           </div>
         ) : (
           <div className="friends-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
-            {friends.map(friend => {
+            {sortedFriends.map(({ f: friend, a: activity }) => {
               const friendId = friend.id || friend.friendUserId;
               // Messages sent from this screen are newer than the list's server copy.
-              const localList = dmMessages[friend.conversationId] || dmMessages[friendId] || [];
-              const localLast = localList.length ? localList[localList.length - 1] : null;
-              const localIsNewer = localLast?.timestamp && (!friend.lastMessageTime
-                || new Date(localLast.timestamp).getTime() > new Date(friend.lastMessageTime).getTime());
-              const lastTime = localIsNewer ? localLast.timestamp : friend.lastMessageTime;
-              const lastPreview = localIsNewer
-                ? (localLast.type === 'IMAGE' ? '📷 Photo' : (localLast.text || friend.lastMessage))
-                : friend.lastMessage;
+              const lastTime = activity.time;
+              const lastPreview = activity.preview;
               const hasUnread = (friend.unseenCount || 0) > 0;
 
               return (
@@ -1549,6 +1601,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               onEmoji={handleReactionClick}
               spinDisabled={!isLiveConnected}
               spinId="dm-spin-bottle-btn"
+              themeEmoji={chatTheme.id !== 'default' ? chatTheme.quickEmoji : null}
             />
 
             {/* Connection is down — say so instead of queueing messages silently */}
@@ -1626,6 +1679,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               currentId={chatTheme.id}
               onSelect={setChatTheme}
               onClose={() => setThemePickerOpen(false)}
+              peerName={friendDisplayName}
             />
 
             {dmGameOpen && (

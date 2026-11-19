@@ -646,6 +646,12 @@ export class SocketService {
         break;
       }
 
+      case 'CHAT_THEME': {
+        // One of the two people changed the chat theme; both chats switch to it.
+        this._emitRoom(conversationId, 'onChatTheme', payload);
+        break;
+      }
+
       case 'GAME': {
         // Spin the Bottle: the server already decided the outcome, clients only play it.
         this.callbacks.onGameEvent?.(payload);
@@ -807,6 +813,12 @@ export class SocketService {
       referredMessageId,
       clientMessageId: clientMessageId || newClientMessageId()
     });
+  }
+
+  /** Change the chat theme for both people (friend DMs persist it, random rooms relay it). */
+  sendChatTheme(conversationId, themeId) {
+    if (!conversationId || !themeId) return false;
+    return this._publish('/app/chat.theme', { conversationId, themeId });
   }
 
   /** Delete one of my own messages for both people (friend chats and random rooms). */

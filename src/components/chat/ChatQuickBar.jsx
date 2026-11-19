@@ -13,7 +13,9 @@ const QUICK_EMOJIS = [
  * The strip above the message bar, shared by the random chat and friend DMs:
  * Icebreaker + Truth & Dare on the left, quick emojis (horizontally scrollable) on the right.
  */
-export function ChatQuickBar({ onIcebreaker, onSpin, onEmoji, disabled = false, spinDisabled = disabled, spinId }) {
+export function ChatQuickBar({ onIcebreaker, onSpin, onEmoji, disabled = false, spinDisabled = disabled, spinId, themeEmoji }) {
+  // Like Instagram, the chat theme brings its own quick reaction, shown first.
+  const showThemeEmoji = themeEmoji && !QUICK_EMOJIS.some(q => q.emoji === themeEmoji);
   return (
     <div className="chat-subbar" style={{
       padding: '10px 20px',
@@ -52,6 +54,17 @@ export function ChatQuickBar({ onIcebreaker, onSpin, onEmoji, disabled = false, 
       </div>
 
       <div className="chat-subbar-reactions" style={{ display: 'flex', gap: '6px' }}>
+        {showThemeEmoji && (
+          <button
+            type="button"
+            onClick={(e) => onEmoji(e, themeEmoji)}
+            disabled={disabled}
+            className="reaction-chip reaction-chip--theme"
+            aria-label={`Send ${themeEmoji}`}
+          >
+            <span aria-hidden="true">{themeEmoji}</span>
+          </button>
+        )}
         {QUICK_EMOJIS.map(({ Icon, emoji }) => (
           <button
             key={emoji}

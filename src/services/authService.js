@@ -43,6 +43,14 @@ async function handleApiResponse(response) {
 }
 
 /**
+ * True only when the backend actually rejected the session (bad/expired token, user gone).
+ * Network failures and 5xx have no such status, so they must never log anyone out.
+ */
+function isAuthRejection(err) {
+  return err?.status === 401 || err?.status === 403;
+}
+
+/**
  * Returns auth headers including Bearer token if present.
  */
 function getAuthHeaders(token) {
@@ -58,7 +66,7 @@ function getAuthHeaders(token) {
 }
 
 // Shared with discoverService so every REST client parses errors and auth the same way.
-export { BASE_URL, handleApiResponse, getAuthHeaders };
+export { BASE_URL, handleApiResponse, getAuthHeaders, isAuthRejection };
 
 export const authService = {
   getToken() {
@@ -101,6 +109,31 @@ export const authService = {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_ID_KEY);
     localStorage.removeItem(USER_KEY);
+  },
+
+  /**
+   * POST /auth/refresh
+   * Swaps a still-valid token for one with a fresh expiry and stores it.
+   * Throws with err.status 401/403 when the session is no longer valid.
+   */
+  async refreshToken(token) {
+    const activeToken = token || this.getToken();
+    if (!activeToken) {
+      const err = new Error('No session to refresh');
+      err.status = 401;
+      throw err;
+    }
+    const response = await fetch(`${BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: getAuthHeaders(activeToken)
+    });
+    const data = await handleApiResponse(response);
+    if (!data?.jwt) throw new Error('Refresh returned no token');
+    // Only store it if this tab still holds the session we refreshed (no logout/login meanwhile).
+    if (this.getToken() === activeToken) {
+      localStorage.setItem(TOKEN_KEY, data.jwt);
+    }
+    return data.jwt;
   },
 
   // ==========================================
@@ -856,13 +889,38 @@ export const authService = {
       return { isAuthenticated: false, user: null, jwt: null };
     }
 
+    // 1. Renew first, so a user who opens the app at least once per token lifetime stays signed in.
+    let jwt = token;
     try {
-      const user = await this.getCurrentUser(token);
-      this.setSession({ userId: user.id, jwt: token }, user);
-      return { isAuthenticated: true, user, jwt: token };
+      jwt = await this.refreshToken(token);
     } catch (err) {
-      console.warn('Token verification failed:', err);
-      this.clearSession();
+      if (isAuthRejection(err)) {
+        console.warn('Session expired or was revoked:', err);
+        this.clearSession();
+        return { isAuthenticated: false, user: null, jwt: null };
+      }
+      // Offline, backend restarting, or an older backend without /auth/refresh: keep the token.
+      console.warn('Token refresh unavailable, keeping current session:', err);
+    }
+
+    // 2. Load the profile. Only a real rejection logs out; a flaky network falls back to the cache.
+    try {
+      const user = await this.getCurrentUser(jwt);
+      this.setSession({ userId: user.id, jwt }, user);
+      return { isAuthenticated: true, user, jwt };
+    } catch (err) {
+      if (isAuthRejection(err) || err?.status === 404) {
+        console.warn('Token verification failed:', err);
+        this.clearSession();
+        return { isAuthenticated: false, user: null, jwt: null };
+      }
+      const cached = this.getUser();
+      if (cached) {
+        console.warn('Could not reach /users/me, using cached profile:', err);
+        return { isAuthenticated: true, user: cached, jwt };
+      }
+      // Nothing to show yet, but keep the stored session so the next load can retry.
+      console.warn('Could not verify session, will retry on next load:', err);
       return { isAuthenticated: false, user: null, jwt: null };
     }
   }

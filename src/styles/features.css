@@ -475,3 +475,33 @@
 .rc-toast.is-dragging .rc-toast__timer { animation-play-state: paused; }
 .rc-toast.is-touched { animation: none; }
 .rc-toast.is-settling { transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.22s ease-out; }
+
+/* ── Profile: delete account ── */
+.profile-danger-zone {
+  margin-top: 28px;
+  padding: 16px 18px;
+  border: 1px solid var(--danger-line);
+  border-radius: var(--radius-md);
+  background: var(--danger-tint);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.profile-danger-zone h3 { font-size: var(--fs-body); font-weight: 700; margin: 0 0 4px; color: var(--danger); }
+.profile-danger-zone p { font-size: var(--fs-sm); color: var(--text-secondary); margin: 0; max-width: 46ch; }
+.profile-danger-zone__btn { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.delete-account-dialog__input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--plum-1);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-md);
+}
+.delete-account-dialog__input:focus { outline: none; border-color: var(--danger-line); box-shadow: 0 0 0 3px var(--danger-tint); }
+.delete-account-dialog__error { color: var(--danger) !important; }
+.delete-account-dialog .dc-btn--danger:disabled { opacity: 0.5; cursor: not-allowed; }

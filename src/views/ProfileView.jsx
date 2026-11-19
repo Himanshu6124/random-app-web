@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Portal } from '../components/Portal';
+import '../styles/discover.css';
 import { useAuth } from '../context/AuthContext';
-import { User, Check, Save, Lock, AlertCircle, Download, UserRound } from 'lucide-react';
+import { User, Check, Save, Lock, AlertCircle, Download, UserRound, Trash2 } from 'lucide-react';
 
 const GENDER_OPTIONS = [['boy', 'Male'], ['girl', 'Female'], ['other', 'Other']];
 
 export function ProfileView() {
-  const { user, isGuest, updateUserProfile, logout, openUpgradeModal } = useAuth();
+  const { user, isGuest, updateUserProfile, logout, openUpgradeModal, deleteAccount } = useAuth();
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const [username, setUsername] = useState(user?.username || '');
   const [name, setName] = useState(user?.name || user?.username || '');
@@ -451,7 +454,104 @@ export function ProfileView() {
             </div>
           </div>
         </form>
+
+        {!isGuest && (
+          <section className="profile-danger-zone" aria-labelledby="profile-danger-title">
+            <div>
+              <h3 id="profile-danger-title">Delete account</h3>
+              <p>Your profile disappears for everyone and you're signed out. This can't be undone.</p>
+            </div>
+            <button type="button" className="btn-danger profile-danger-zone__btn" onClick={() => setDeleteOpen(true)}>
+              <Trash2 size={16} aria-hidden="true" />
+              <span>Delete account</span>
+            </button>
+          </section>
+        )}
       </div>
+
+      <DeleteAccountDialog
+        open={deleteOpen}
+        username={user.username}
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={deleteAccount}
+      />
     </div>
+  );
+}
+
+/** Asks the user to type their username before the account is deleted. */
+function DeleteAccountDialog({ open, username, onCancel, onConfirm }) {
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    setTyped('');
+    setError('');
+    setBusy(false);
+    setTimeout(() => inputRef.current?.focus(), 30);
+    const onKey = (e) => { if (e.key === 'Escape') onCancel(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onCancel]);
+
+  if (!open) return null;
+  const matches = typed.trim() === username;
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!matches || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await onConfirm();
+    } catch (err) {
+      setError(err?.message || "Couldn't delete your account. Please try again.");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Portal>
+      <div className="dc-dialog-backdrop" onClick={busy ? undefined : onCancel}>
+        <form
+          className="dc-dialog delete-account-dialog"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="delete-account-title"
+          onClick={(e) => e.stopPropagation()}
+          onSubmit={submit}
+        >
+          <h2 id="delete-account-title">Delete your account?</h2>
+          <p>
+            Your friends, chats and requests will no longer see you, and you'll be signed out
+            on this device. To confirm, type <strong>{username}</strong> below.
+          </p>
+          <input
+            ref={inputRef}
+            className="delete-account-dialog__input"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder={username}
+            aria-label="Type your username to confirm"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            disabled={busy}
+          />
+          {error && <p role="alert" className="delete-account-dialog__error">{error}</p>}
+          <div className="dc-dialog-actions">
+            <button type="button" className="dc-btn dc-btn--ghost dc-btn--sm" onClick={onCancel} disabled={busy}>
+              Cancel
+            </button>
+            <button type="submit" className="dc-btn dc-btn--sm dc-btn--danger" disabled={!matches || busy}>
+              {busy ? 'Deleting…' : 'Delete account'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Portal>
   );
 }

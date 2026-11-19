@@ -89,7 +89,8 @@ export function ChatBox() {
   const closeInteractions = interactions.close;
   const messagesEndRef = useRef(null);
   const feedRef = useRef(null);
-  const [chatTheme, setChatTheme] = useChatTheme('random');
+  // The random room's theme is shared with the stranger and lasts for this match only.
+  const [chatTheme, setChatTheme] = useChatTheme(currentPeer?.conversationId || currentPeer?.id || null);
   const [themePickerOpen, setThemePickerOpen] = useState(false);
   const typingTimerRef = useRef(null);
   const inputRef = useRef(null);
@@ -706,6 +707,7 @@ export function ChatBox() {
         onEmoji={handleReactionClick}
         disabled={composerDisabled}
         spinId="spin-bottle-btn"
+        themeEmoji={chatTheme.id !== 'default' ? chatTheme.quickEmoji : null}
       />
 
       {/* Peer left on purpose (Next / Exit / blocked) or never came back: this chat is over */}
@@ -831,6 +833,7 @@ export function ChatBox() {
         currentId={chatTheme.id}
         onSelect={setChatTheme}
         onClose={() => setThemePickerOpen(false)}
+        peerName={peerName}
       />
 
       {/* Truth & Dare: a dialog over this chat screen only; the chat behind it is blurred. */}
