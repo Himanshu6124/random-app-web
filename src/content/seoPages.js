@@ -351,7 +351,8 @@ export const SEO_PAGES = [
           'Turn location sharing off at any time.',
           'Delete messages, or turn on disappearing messages in a chat with a friend.',
           'Block anyone, at any time.',
-          `Ask us for a copy of your data, to correct it, or to delete your account by emailing ${CONTACT_EMAIL} from the email linked to your account.`,
+          'Delete your account at any time from your Profile. This removes your profile, friends and chats.',
+          `Ask us for a copy of your data or to correct it by emailing ${CONTACT_EMAIL} from the email linked to your account.`,
         ],
       },
       {
