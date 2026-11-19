@@ -8,6 +8,7 @@
 import { authService } from './authService';
 import { getFirebaseApp, isFirebaseConfigured } from './firebaseClient';
 import { getVapidKey } from './pushConfig';
+import { notificationsOff } from './notify';
 
 export function pushSupported() {
   return typeof window !== 'undefined'
@@ -24,7 +25,7 @@ export function pushSupported() {
  * app start: the server keeps one token per account and moves it off any other account that held it.
  */
 export async function enablePushNotifications(jwt) {
-  if (!jwt || !pushSupported() || Notification.permission !== 'granted') return null;
+  if (!jwt || !pushSupported() || Notification.permission !== 'granted' || notificationsOff()) return null;
   try {
     const { getMessaging, getToken } = await import('firebase/messaging');
     const registration = await navigator.serviceWorker.ready;

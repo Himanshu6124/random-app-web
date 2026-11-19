@@ -507,3 +507,64 @@
 .delete-account-dialog__input:focus { outline: none; border-color: var(--danger-line); box-shadow: 0 0 0 3px var(--danger-tint); }
 .delete-account-dialog__error { color: var(--danger) !important; }
 .delete-account-dialog .dc-btn--danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Profile: notifications on/off */
+.profile-notify-settings {
+  margin-top: 28px;
+  padding: 16px 18px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--plum-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.profile-notify-settings__text { min-width: 0; }
+.profile-notify-settings h3 {
+  display: flex; align-items: center; gap: 8px;
+  font-size: var(--fs-body); font-weight: 700; margin: 0 0 4px; color: var(--text-primary);
+}
+.profile-notify-settings p { font-size: var(--fs-sm); color: var(--text-secondary); margin: 0; max-width: 46ch; }
+.profile-notify-settings + .profile-danger-zone { margin-top: 16px; }
+
+.rc-switch {
+  /* 44px tall tap target (touch rule); the visible 46x26 track is drawn by ::before */
+  position: relative;
+  flex-shrink: 0;
+  width: 50px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.rc-switch::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 9px;
+  width: 46px;
+  height: 26px;
+  box-sizing: border-box;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--plum-3);
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+.rc-switch__thumb {
+  position: absolute;
+  top: 12px;
+  left: 5px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  transition: transform 0.18s ease, background-color 0.18s ease;
+}
+.rc-switch.is-on::before { background: var(--accent); border-color: var(--accent); }
+.rc-switch.is-on .rc-switch__thumb { transform: translateX(20px); background: var(--accent-ink); }
+.rc-switch:disabled { opacity: 0.45; cursor: not-allowed; }
+.rc-switch:focus-visible { outline: none; }
+.rc-switch:focus-visible::before { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -11,6 +11,7 @@
 const TOAST_MS = 4500;
 const MAX_TOASTS = 3;
 const DISMISS_KEY = 'rc.notifyPromptDismissed';
+const OFF_KEY = 'rc.notificationsOff';
 
 const toastListeners = new Set();
 const navigateListeners = new Set();
@@ -76,13 +77,25 @@ export function dismissPrompt() {
   try { localStorage.setItem(DISMISS_KEY, '1'); } catch { /* private mode */ }
 }
 
+/** The user switched notifications off in Profile (per browser). In-app toasts still show. */
+export function notificationsOff() {
+  try { return localStorage.getItem(OFF_KEY) === '1'; } catch { return false; }
+}
+
+export function setNotificationsOff(off) {
+  try {
+    if (off) localStorage.setItem(OFF_KEY, '1');
+    else localStorage.removeItem(OFF_KEY);
+  } catch { /* private mode */ }
+}
+
 export function pageInView() {
   if (typeof document === 'undefined') return true;
   return document.visibilityState === 'visible' && (typeof document.hasFocus !== 'function' || document.hasFocus());
 }
 
 async function showSystemNotification({ key, title, body, icon, target }) {
-  if (notificationPermission() !== 'granted') return;
+  if (notificationPermission() !== 'granted' || notificationsOff()) return;
   const options = {
     body,
     icon: icon || '/icon-192.png',

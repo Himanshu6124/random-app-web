@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MessageCircle, UserPlus, UserCheck, Sparkles, X, Bell } from 'lucide-react';
 import {
   subscribeToasts, dismissToast, navigateTo,
-  notificationPermission, requestNotificationPermission, isPromptDismissed, dismissPrompt
+  notificationPermission, requestNotificationPermission, isPromptDismissed, dismissPrompt,
+  notificationsOff
 } from '../services/notify';
 import { authService } from '../services/authService';
 import { enablePushNotifications } from '../services/pushClient';
@@ -135,7 +136,7 @@ export function NotificationPermissionPrompt() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (notificationPermission() !== 'default' || isPromptDismissed()) return undefined;
+    if (notificationPermission() !== 'default' || isPromptDismissed() || notificationsOff()) return undefined;
     // Wait a little so it does not compete with the first screen.
     const timer = setTimeout(() => setVisible(true), 4000);
     return () => clearTimeout(timer);

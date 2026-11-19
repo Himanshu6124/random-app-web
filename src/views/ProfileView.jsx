@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Portal } from '../components/Portal';
+import { NotificationSettings } from '../components/NotificationSettings';
 import '../styles/discover.css';
 import { useAuth } from '../context/AuthContext';
 import { User, Check, Save, Lock, AlertCircle, Download, UserRound, Trash2 } from 'lucide-react';
@@ -454,6 +455,8 @@ export function ProfileView() {
             </div>
           </div>
         </form>
+
+        <NotificationSettings />
 
         {!isGuest && (
           <section className="profile-danger-zone" aria-labelledby="profile-danger-title">
