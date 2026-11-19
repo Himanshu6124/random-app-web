@@ -3,7 +3,7 @@ import { Bell, BellOff } from 'lucide-react';
 import {
   notificationPermission, requestNotificationPermission, notificationsOff, setNotificationsOff
 } from '../services/notify';
-import { enablePushNotifications, disablePushNotifications, pushSupported } from '../services/pushClient';
+import { enablePushNotifications, disablePushNotifications, pushSupported, getLastPushError, pushUnsupportedReason } from '../services/pushClient';
 import { authService } from '../services/authService';
 import { isIOS } from '../mobile/nativeShell';
 
@@ -23,16 +23,20 @@ export function NotificationSettings() {
   const [busy, setBusy] = useState(false);
   // null = not checked yet, true = registered for push, false = only while the app is open
   const [pushOk, setPushOk] = useState(null);
+  const [pushError, setPushError] = useState('');
 
   const on = permission === 'granted' && !off;
 
   // Re-check registration whenever alerts are on (also repairs a missing server token).
   useEffect(() => {
     if (!on) { setPushOk(null); return undefined; }
-    if (!pushSupported()) { setPushOk(false); return undefined; }
+    if (!pushSupported()) { setPushOk(false); setPushError(pushUnsupportedReason()); return undefined; }
     let cancelled = false;
     enablePushNotifications(authService.getToken()).then((token) => {
-      if (!cancelled) setPushOk(Boolean(token));
+      if (!cancelled) {
+        setPushOk(Boolean(token));
+        setPushError(token ? '' : getLastPushError());
+      }
     });
     return () => { cancelled = true; };
   }, [on]);
@@ -88,6 +92,9 @@ export function NotificationSettings() {
           <span>Notifications</span>
         </h3>
         <p>{hint}</p>
+        {pushOk === false && pushError && (
+          <p className="profile-notify-settings__error">{pushError}</p>
+        )}
       </div>
       <button
         type="button"

@@ -568,3 +568,4 @@
 .rc-switch:disabled { opacity: 0.45; cursor: not-allowed; }
 .rc-switch:focus-visible { outline: none; }
 .rc-switch:focus-visible::before { outline: 2px solid var(--accent); outline-offset: 2px; }
+.profile-notify-settings__error { margin-top: 6px !important; font-size: var(--fs-xs, 12px) !important; color: var(--text-tertiary, var(--text-secondary)) !important; word-break: break-word; }

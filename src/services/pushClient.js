@@ -10,6 +10,25 @@ import { getFirebaseApp, isFirebaseConfigured } from './firebaseClient';
 import { getVapidKey } from './pushConfig';
 import { notificationsOff } from './notify';
 
+let lastPushError = '';
+
+/** Why the last registration attempt failed ('' if it worked or never ran). Shown in Profile. */
+export function getLastPushError() {
+  return lastPushError;
+}
+
+/** Which requirement for push is missing on this browser ('' when all are met). */
+export function pushUnsupportedReason() {
+  if (typeof window === 'undefined') return 'no window';
+  if (!window.isSecureContext) return 'page is not served over HTTPS';
+  if (!('serviceWorker' in navigator)) return 'no service worker support';
+  if (!('PushManager' in window)) return 'no Push API in this browser';
+  if (!('Notification' in window)) return 'no Notification API';
+  if (!isFirebaseConfigured()) return 'Firebase web config missing in this build';
+  if (!getVapidKey()) return 'VAPID key missing in this build';
+  return '';
+}
+
 export function pushSupported() {
   return typeof window !== 'undefined'
     && window.isSecureContext
@@ -34,11 +53,16 @@ export async function enablePushNotifications(jwt) {
       vapidKey: getVapidKey(),
       serviceWorkerRegistration: registration
     });
-    if (!token) return null;
+    if (!token) {
+      lastPushError = 'No push token returned';
+      return null;
+    }
     await authService.updateFcmToken(token, jwt);
+    lastPushError = '';
     return token;
   } catch (e) {
-    console.warn('[push] Could not enable browser push:', e?.message || e);
+    lastPushError = [e?.code, e?.message || String(e)].filter(Boolean).join(': ');
+    console.warn('[push] Could not enable browser push:', lastPushError);
     return null;
   }
 }
