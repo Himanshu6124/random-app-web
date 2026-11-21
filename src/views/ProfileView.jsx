@@ -266,6 +266,8 @@ export function ProfileView() {
                 </span>
               )}
             </div>
+            <div className="pv-handle">
+            <span className="pv-handle__at" aria-hidden="true">@</span>
             <input
               id="profile-username-input"
               type="text"
@@ -278,7 +280,7 @@ export function ProfileView() {
               pattern="[a-zA-Z0-9_]+"
               style={{
                 width: '100%',
-                padding: '12px 18px',
+                padding: '12px 18px 12px 34px',
                 borderRadius: 'var(--radius-md)',
                 background: isGuest ? 'rgba(255, 255, 255, 0.05)' : 'var(--bg-input)',
                 border: '1px solid var(--border-color)',
@@ -288,6 +290,7 @@ export function ProfileView() {
                 cursor: isGuest ? 'pointer' : 'text'
               }}
             />
+            </div>
           </div>
 
           {/* Display Name */}
@@ -315,49 +318,39 @@ export function ProfileView() {
             />
           </div>
 
-          {/* Gender: chosen once at first sign-in, then fixed */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ fontSize: 'var(--fs-md)', color: 'var(--text-secondary)', marginBottom: '8px', display: 'block' }}>
-              Gender
-            </label>
+          {/* Gender: chosen once at first sign-in, then fixed. One compact row. */}
+          <div className="pv-gender">
+            <span className="pv-gender__label" id="profile-gender-label">Gender</span>
             {user.gender ? (
-              <div
+              <span
                 id="profile-gender-value"
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
-                  padding: '12px 14px', borderRadius: 'var(--radius-md)',
-                  background: 'var(--bg-input)', border: '1px solid var(--border-color)'
-                }}
+                className="pv-gender__value"
+                title="Gender can't be changed once saved"
               >
-                <span style={{ fontWeight: 600 }}>
-                  {(GENDER_OPTIONS.find(([g]) => g === currentGender) || [null, currentGender])[1]}
-                </span>
-                <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Lock size={12} aria-hidden="true" /> Can't be changed
-                </span>
-              </div>
+                {(GENDER_OPTIONS.find(([g]) => g === currentGender) || [null, currentGender])[1]}
+                <Lock size={12} aria-label="Can't be changed" />
+              </span>
             ) : (
-              <>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              {GENDER_OPTIONS.map(([g, label]) => (
-                <button
-                  key={g}
-                  id={`gender-select-${g}`}
-                  type="button"
-                  onClick={() => handleGenderChange(g)}
-                  className={currentGender === g ? 'btn-secondary is-selected' : 'btn-secondary'}
-                  style={{ flex: 1, padding: '10px', fontSize: 'var(--fs-md)', textTransform: 'capitalize' }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-                <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', marginTop: '6px' }}>
-                  Pick carefully: you can't change your gender once it's saved.
-                </p>
-              </>
+              <div className="pv-gender__seg" role="radiogroup" aria-labelledby="profile-gender-label">
+                {GENDER_OPTIONS.map(([g, label]) => (
+                  <button
+                    key={g}
+                    id={`gender-select-${g}`}
+                    type="button"
+                    role="radio"
+                    aria-checked={currentGender === g}
+                    onClick={() => handleGenderChange(g)}
+                    className={currentGender === g ? 'is-selected' : ''}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
+          {!user.gender && (
+            <p className="pv-gender__hint">Pick carefully: you can't change your gender once it's saved.</p>
+          )}
 
           {/* Bio Input */}
           <div

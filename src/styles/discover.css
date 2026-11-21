@@ -940,7 +940,8 @@
 
 .nearby-popover {
   position: absolute;
-  width: 250px;
+  width: 280px;
+  max-width: calc(100% - 24px);
   padding: 14px;
   border-radius: var(--radius-lg);
   background: #2a1a27;
@@ -1757,6 +1758,17 @@
   border: 1px solid var(--dc-line);
   cursor: pointer;
   text-align: center;
+}
+.nearby-popover-actions {
+  display: flex;
+  gap: 8px;
+}
+.nearby-popover-actions > * { flex: 1 1 0; min-width: 0; }
+.nearby-popover-actions .dc-btn { width: 100%; justify-content: center; padding-left: 10px; padding-right: 10px; white-space: nowrap; }
+.nearby-card--loading {
+  justify-content: center;
+  flex-basis: 64px !important;
+  border-style: dashed !important;
 }
 .nearby-card.is-selected { border-color: rgba(240, 114, 137, 0.7); }
 .nearby-card__name {

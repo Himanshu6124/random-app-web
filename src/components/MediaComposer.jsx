@@ -6,6 +6,7 @@ import {
   startVoiceRecording,
   newMessageId
 } from '../services/mediaService';
+import { newClientMessageId } from '../services/socketService';
 
 export const formatMs = (ms) => {
   const total = Math.floor(ms / 1000);
@@ -21,13 +22,18 @@ export const hasSeparateCameraPicker = typeof navigator !== 'undefined' && /Andr
  * buttons go. A picked photo is not sent straight away: it lands in `pickedFile` for the photo
  * editor, which calls `sendImage` with the final picture, caption and view-once choice.
  *
+ * Sending is WhatsApp style: the chat gets the bubble straight away (onPending, shown with a
+ * clock) and the upload runs in the background, so the composer is never blocked.
+ *
  * - conversationId: current conversation (uploads are namespaced under it)
- * - onSend:         ({ type, objectUri, localPreviewUrl, caption?, viewOnce? }) => void, after upload
+ * - onPending:      ({ clientMessageId, type, localPreviewUrl, caption?, viewOnce? }) => void, instantly
+ * - onSend:         ({ clientMessageId, type, objectUri, localPreviewUrl, caption?, viewOnce? }) => void, after upload
+ * - onFailed:       (clientMessageId, message) => void, the background upload failed
  * - onError:        (message) => void, inline error surfacing (never silent)
  */
-export function useMediaComposer({ conversationId, onSend, onError }) {
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
+export function useMediaComposer({ conversationId, onPending, onSend, onFailed, onError }) {
+  // Number of photos / voice notes still uploading in the background.
+  const [uploading, setUploading] = useState(0);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [micStream, setMicStream] = useState(null);
@@ -38,8 +44,12 @@ export function useMediaComposer({ conversationId, onSend, onError }) {
   const tickRef = useRef(null);
   const onSendRef = useRef(onSend);
   const onErrorRef = useRef(onError);
+  const onPendingRef = useRef(onPending);
+  const onFailedRef = useRef(onFailed);
   onSendRef.current = onSend;
   onErrorRef.current = onError;
+  onPendingRef.current = onPending;
+  onFailedRef.current = onFailed;
 
   useEffect(() => () => {
     // Unmount mid-recording must never leak the mic.
@@ -66,29 +76,38 @@ export function useMediaComposer({ conversationId, onSend, onError }) {
   const clearPicked = useCallback(() => setPickedFile(null), []);
 
   /**
-   * Uploads the edited photo and sends it. Resolves true when sent; on failure the error is
-   * reported through onError and it resolves false (the editor stays open to retry).
+   * Background upload of one already-shown media bubble. Counts toward `uploading` (used only
+   * for a quiet indicator) but never blocks the composer.
+   */
+  const uploadInBackground = useCallback(async (clientMessageId, prepare, meta) => {
+    setUploading(n => n + 1);
+    try {
+      const blob = await prepare();
+      const objectUri = await uploadChatMedia(blob, conversationId, newMessageId());
+      onSendRef.current?.({ ...meta, clientMessageId, objectUri });
+    } catch (err) {
+      const message = err?.message || (meta.type === 'IMAGE' ? 'Photo upload failed.' : 'Voice note upload failed.');
+      if (onFailedRef.current) onFailedRef.current(clientMessageId, message);
+      onErrorRef.current?.(message);
+    } finally {
+      setUploading(n => Math.max(0, n - 1));
+    }
+  }, [conversationId]);
+
+  /**
+   * Sends the edited photo: the bubble shows at once (from the local file) and the editor
+   * closes; compression + upload continue in the background. Resolves true.
    */
   const sendImage = useCallback(async (image, { caption = '', viewOnce = false } = {}) => {
     if (!image || !conversationId) return false;
-    setUploading(true);
-    setProgress(0);
-    try {
-      const { blob } = await prepareImage(image);
-      const messageId = newMessageId();
-      const localPreviewUrl = URL.createObjectURL(blob);
-      const objectUri = await uploadChatMedia(blob, conversationId, messageId, { onProgress: setProgress });
-      onSendRef.current?.({ type: 'IMAGE', objectUri, localPreviewUrl, caption: caption.trim(), viewOnce: Boolean(viewOnce) });
-      setPickedFile(null);
-      return true;
-    } catch (err) {
-      onErrorRef.current?.(err?.message || 'Image upload failed.');
-      return false;
-    } finally {
-      setUploading(false);
-      setProgress(0);
-    }
-  }, [conversationId]);
+    const clientMessageId = newClientMessageId();
+    const localPreviewUrl = URL.createObjectURL(image);
+    const meta = { type: 'IMAGE', localPreviewUrl, caption: caption.trim(), viewOnce: Boolean(viewOnce) };
+    onPendingRef.current?.({ ...meta, clientMessageId });
+    setPickedFile(null);
+    uploadInBackground(clientMessageId, async () => (await prepareImage(image)).blob, meta);
+    return true;
+  }, [conversationId, uploadInBackground]);
 
   const startRecording = useCallback(async () => {
     if (!conversationId || recorderRef.current) return false;
@@ -118,22 +137,19 @@ export function useMediaComposer({ conversationId, onSend, onError }) {
     setRecording(false);
     setMicStream(null);
 
-    setUploading(true);
-    setProgress(0);
+    let blob;
     try {
-      const { blob } = await controller.stop();
-      const messageId = newMessageId();
-      const objectUri = await uploadChatMedia(blob, conversationId, messageId, { onProgress: setProgress });
-      onSendRef.current?.({ type: 'AUDIO', objectUri, localPreviewUrl: null });
+      ({ blob } = await controller.stop());
     } catch (err) {
-      if (err?.message !== 'cancelled') {
-        onErrorRef.current?.(err?.message || 'Voice note upload failed.');
-      }
-    } finally {
-      setUploading(false);
-      setProgress(0);
+      if (err?.message !== 'cancelled') onErrorRef.current?.(err?.message || 'Voice note failed.');
+      return;
     }
-  }, [conversationId]);
+    // The note is playable right away from the local recording while it uploads.
+    const clientMessageId = newClientMessageId();
+    const meta = { type: 'AUDIO', localPreviewUrl: URL.createObjectURL(blob) };
+    onPendingRef.current?.({ ...meta, clientMessageId });
+    uploadInBackground(clientMessageId, async () => blob, meta);
+  }, [uploadInBackground]);
 
   const cancelRecording = useCallback(() => {
     const controller = recorderRef.current;
@@ -146,8 +162,7 @@ export function useMediaComposer({ conversationId, onSend, onError }) {
 
   return {
     configured,
-    uploading,
-    progress,
+    uploading: uploading > 0,
     recording,
     elapsed,
     micStream,

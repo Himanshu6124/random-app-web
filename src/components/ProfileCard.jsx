@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { X, UserPlus, UserCheck, Clock, MessageCircle, UserMinus, Ban, Flag, MapPin, UserRound, ArrowLeft } from 'lucide-react';
+import { X, UserPlus, UserCheck, Clock, MessageCircle, UserMinus, Ban, Flag, MapPin, UserRound, ArrowLeft, PenLine } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/authService';
 import { navigateTo } from '../services/notify';
@@ -8,6 +8,10 @@ import { PeerAbout } from './chat/PeerAbout';
 import { timeAgo } from './discover/discoverUtils';
 import { feedback } from '../mobile/feedback';
 import { isBotUserId, useResolvedFriendStatus } from '../services/botPeers';
+import { useSwipeDownToClose } from '../mobile/useSwipeDownToClose';
+
+/** Longest note that can go with a friend request (mirrored server-side). */
+const REQUEST_NOTE_MAX = 140;
 
 const ProfileCardContext = createContext({ openProfile: () => {}, closeProfile: () => {} });
 
@@ -66,6 +70,9 @@ function ProfileCard({ person: initial, options, onClose }) {
   const [confirm, setConfirm] = useState(null);
   const [reason, setReason] = useState(REPORT_REASONS[0]);
   const [details, setDetails] = useState('');
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const swipe = useSwipeDownToClose(onClose);
 
   const isFriend = friends.some(f => (f.id || f.friendUserId) === id);
   const resolvedStatus = useResolvedFriendStatus(user?.id, id, status || 'NONE');
@@ -133,11 +140,13 @@ function ProfileCard({ person: initial, options, onClose }) {
     if (needsAccount(`Sign in to add ${name} as a friend.`, 'SEND_FRIEND')) return;
     run(async () => {
       try {
-        await sendFriendRequest(id);
+        await sendFriendRequest(id, note.trim() || undefined);
       } catch (err) {
         if (!(err?.status === 409 || /already exists/i.test(err?.message || ''))) throw err;
       }
       setStatus('PENDING_SENT');
+      setNoteOpen(false);
+      setNote('');
       feedback('success');
     });
   };
@@ -197,10 +206,43 @@ function ProfileCard({ person: initial, options, onClose }) {
       case 'BLOCKED':
         return <div className="pc-pill"><Ban size={16} aria-hidden="true" />Blocked</div>;
       default:
+        // Bots can't receive notes (their requests stay on this device), so they get the plain button.
+        if (isBotUserId(id)) {
+          return (
+            <button type="button" className="btn-primary pc-btn" onClick={addFriend} disabled={busy}>
+              <UserPlus size={17} aria-hidden="true" />Add friend
+            </button>
+          );
+        }
         return (
-          <button type="button" className="btn-primary pc-btn" onClick={addFriend} disabled={busy}>
-            <UserPlus size={17} aria-hidden="true" />Add friend
-          </button>
+          <>
+            {noteOpen && (
+              <div className="pc-note">
+                <textarea
+                  className="pc-note__input"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value.slice(0, REQUEST_NOTE_MAX))}
+                  placeholder={`Say hi to ${name.split(' ')[0]}…`}
+                  maxLength={REQUEST_NOTE_MAX}
+                  rows={2}
+                  autoFocus
+                  aria-label="Note with your friend request (optional)"
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addFriend(); } }}
+                />
+                <span className={`pc-note__count${note.length >= REQUEST_NOTE_MAX ? ' is-full' : ''}`}>
+                  {note.length}/{REQUEST_NOTE_MAX}
+                </span>
+              </div>
+            )}
+            <button type="button" className="btn-primary pc-btn" onClick={addFriend} disabled={busy}>
+              <UserPlus size={17} aria-hidden="true" />{noteOpen && note.trim() ? 'Send request' : 'Add friend'}
+            </button>
+            {!noteOpen && !isGuest && (
+              <button type="button" className="pc-note-toggle" onClick={() => setNoteOpen(true)}>
+                <PenLine size={14} aria-hidden="true" />Add a note
+              </button>
+            )}
+          </>
         );
     }
   };
@@ -229,7 +271,7 @@ function ProfileCard({ person: initial, options, onClose }) {
         className="m-sheet-backdrop pc-backdrop"
         onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       >
-        <div className="glass-panel m-sheet pc-card" role="dialog" aria-modal="true" aria-label={`${name}'s profile`}>
+        <div className="glass-panel m-sheet pc-card" role="dialog" aria-modal="true" aria-label={`${name}'s profile`} {...swipe}>
           <button type="button" className="pc-close" onClick={onClose} aria-label="Close">
             <X size={18} aria-hidden="true" />
           </button>
@@ -292,17 +334,18 @@ function ProfileCard({ person: initial, options, onClose }) {
                   {name}
                   {guestPeer && <span className="pc-badge pc-badge--muted">Guest</span>}
                 </h2>
-                {person.username && <div className="pc-username">@{person.username}</div>}
+                {person.username && <div className="pc-username"><span className="at-prefix">@</span>{person.username}</div>}
                 <div className={`pc-presence${online ? ' is-online' : ''}`}>{presenceLabel(online, lastSeen)}</div>
               </div>
 
               {(genderLabel || distanceKm !== null) && (
                 <div className="pc-facts">
                   {genderLabel && <span className="pc-fact">{genderLabel}</span>}
+                  {genderLabel && distanceKm !== null && <span className="pc-fact-sep" aria-hidden="true">·</span>}
                   {distanceKm !== null && (
                     <span className="pc-fact">
-                      <MapPin size={13} aria-hidden="true" />
-                      {distanceKm < 1 ? 'Less than 1 km away' : `${distanceKm} km away`}
+                      <MapPin size={12} aria-hidden="true" />
+                      {distanceKm < 1 ? '<1 km away' : `${distanceKm} km away`}
                     </span>
                   )}
                 </div>

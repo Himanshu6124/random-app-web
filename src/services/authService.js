@@ -732,7 +732,8 @@ export const authService = {
         name: r.name || r.username,
         photoUrl: r.photoUrl || '',
         bio: r.bio || '',
-        gender: r.gender || ''
+        gender: r.gender || '',
+        requestMessage: r.requestMessage || ''
       })) : [];
     } catch (e) {
       console.warn('[authService] getPendingFriendRequests failed:', e);
@@ -759,10 +760,12 @@ export const authService = {
   /**
    * POST /friendships/requests/{friendId}
    */
-  async sendFriendRequest(friendId, token) {
+  async sendFriendRequest(friendId, token, message) {
+    const note = (message || '').trim();
     const response = await fetch(`${BASE_URL}/friendships/requests/${encodeURIComponent(friendId)}`, {
       method: 'POST',
-      headers: getAuthHeaders(token)
+      headers: getAuthHeaders(token),
+      body: note ? JSON.stringify({ message: note }) : undefined
     });
     return await handleApiResponse(response);
   },

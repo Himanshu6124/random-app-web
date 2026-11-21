@@ -63,6 +63,8 @@ export function ChatBox() {
     isLiveConnected,
     sendMessage,
     sendMedia,
+    addPendingMedia,
+    failPendingMedia,
     retryMessage,
     sendReaction,
     reactToMessage,
@@ -299,11 +301,13 @@ export function ChatBox() {
     reactToMessage(m.id, emoji);
   };
 
-  const handleSendMedia = (media) => {
-    const ok = sendMedia({ ...media, referredMessageId: replyTarget?.id || null });
+  // The bubble appears instantly (with the reply it was sent as); the upload finishes later.
+  const handleMediaPending = (pending) => {
+    addPendingMedia({ ...pending, referredMessageId: replyTarget?.id || null });
     setReplyTarget(null);
-    return ok;
   };
+
+  const handleSendMedia = (media) => sendMedia(media);
 
   // Whoever spins, both players are pulled onto the table to watch the bottle.
   useEffect(() => {
@@ -698,7 +702,7 @@ export function ChatBox() {
                       {msg.status === 'SEEN' ? (
                         <span style={{ color: 'var(--text-secondary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}><CheckCheck size={13} aria-hidden="true" />Seen</span>
                       ) : msg.status === 'SENDING' ? (
-                        <span>Sending...</span>
+                        <span className="msg-pending" aria-label="Sending"><Clock size={12} aria-hidden="true" /></span>
                       ) : (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><Check size={13} aria-hidden="true" />Sent</span>
                       )}
@@ -829,6 +833,8 @@ export function ChatBox() {
         conversationId={currentPeer?.conversationId || currentPeer?.id}
         peerName={peerName}
         onSendMedia={handleSendMedia}
+        onMediaPending={handleMediaPending}
+        onMediaFailed={failPendingMedia}
         onMediaError={setMediaError}
         leading={(
           <button

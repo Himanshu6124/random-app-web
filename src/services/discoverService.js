@@ -79,6 +79,19 @@ export const discoverService = {
     };
   },
 
+  /**
+   * Everyone visible anywhere (not only in the map view), one page at a time:
+   * online first, then recently active, each group nearest first.
+   */
+  async getNearbyPeople({ offset = 0, limit = 30, gender }, token, signal) {
+    const g = gender && gender !== 'all' ? gender : undefined;
+    const data = await request(`/location/people${qs({ offset, limit, gender: g })}`, { token, signal });
+    return {
+      ...data,
+      people: (data?.people || []).map(p => ({ ...normalizeFriend(p), friend: Boolean(p?.friend), friendshipStatus: p?.friendshipStatus || 'NONE' }))
+    };
+  },
+
   async getNearbyFriends(radiusKm, token) {
     const data = await request(`/location/friends/nearby${qs({ radiusKm })}`, { token });
     return {

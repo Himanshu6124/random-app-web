@@ -404,7 +404,8 @@ export function AuthProvider({ children }) {
   }, []);
 
 
-  const sendFriendRequest = useCallback(async (targetUserId) => {
+  /** message: optional short note shown to the receiver with the request. */
+  const sendFriendRequest = useCallback(async (targetUserId, message) => {
     const token = jwtToken || authService.getToken();
     if (!token || !targetUserId) {
       throw new Error('User token or target user id missing.');
@@ -414,7 +415,7 @@ export function AuthProvider({ children }) {
       return;
     }
     try {
-      await authService.sendFriendRequest(targetUserId, token);
+      await authService.sendFriendRequest(targetUserId, token, message);
     } catch (err) {
       if (err.status === 409 || (err.message && err.message.toLowerCase().includes('already exists'))) {
         // Request or friendship already exists on server, treat gracefully

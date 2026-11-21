@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, Minus, LocateFixed, MessageCircle, ShieldCheck } from 'lucide-react';
+import { Plus, Minus, LocateFixed, MessageCircle, ShieldCheck, UserRound } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { DiscoverAvatar } from './DiscoverAvatar';
@@ -72,6 +72,8 @@ export function NearbyMap({
   onMessage,
   onStatusChange,
   onError,
+  onViewProfile,
+  focusTarget,
   updatedAt,
   overlay,
 }) {
@@ -234,13 +236,29 @@ export function NearbyMap({
     return () => map.off('move zoom', updatePopover);
   }, [updatePopover]);
 
-  // Bring the selected person into view
+  // Bring the selected person into view (far-away picks from the list fly there below instead).
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !selected || selected.latitude == null || selected.longitude == null) return;
+    if (!map.getBounds().contains([selected.latitude, selected.longitude])) return;
     map.panTo([selected.latitude, selected.longitude], { animate: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
+
+  // Fly to a requested spot: a person picked from the list, or (withMe) the nearest person
+  // together with you when your own area is empty.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focusTarget || focusTarget.latitude == null) return;
+    const target = L.latLng(focusTarget.latitude, focusTarget.longitude);
+    if (focusTarget.withMe && me?.latitude != null) {
+      const bounds = L.latLngBounds([target, L.latLng(me.latitude, me.longitude)]);
+      map.flyToBounds(bounds, { padding: [80, 80], maxZoom: 13, duration: 1.2 });
+      return;
+    }
+    map.flyTo(target, Math.max(map.getZoom(), 12), { duration: 0.9 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusTarget?.key]);
 
   const handleCenter = () => {
     showAroundMe(true);
@@ -248,7 +266,10 @@ export function NearbyMap({
   };
 
   const popoverBelow = popoverPos && popoverPos.y < 200;
-  const popoverLeft = popoverPos ? Math.max(12, popoverPos.x - 125) : 0;
+  const mapWidth = containerRef.current?.clientWidth || 0;
+  const popoverLeft = popoverPos
+    ? Math.max(12, Math.min(popoverPos.x - 140, (mapWidth || popoverPos.x + 292) - 292))
+    : 0;
 
   return (
     <div className="nearby-map">
@@ -277,14 +298,22 @@ export function NearbyMap({
             </div>
           </div>
           {selected.friend ? (
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="nearby-popover-actions">
               <button type="button" className="dc-btn dc-btn--primary dc-btn--sm" onClick={() => onMessage(selected.id)}>
                 <MessageCircle size={16} aria-hidden="true" />
                 Message
               </button>
+              <button type="button" className="dc-btn dc-btn--soft dc-btn--sm" onClick={() => onViewProfile?.(selected)}>
+                <UserRound size={16} aria-hidden="true" />
+                Profile
+              </button>
             </div>
           ) : (
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="nearby-popover-actions">
+              <button type="button" className="dc-btn dc-btn--soft dc-btn--sm" onClick={() => onViewProfile?.(selected)}>
+                <UserRound size={16} aria-hidden="true" />
+                View profile
+              </button>
               <FriendshipButton
                 personId={selected.id}
                 name={selected.name}

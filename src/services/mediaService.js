@@ -7,10 +7,13 @@
  * with the chat message so object and message correspond.
  *
  * Limits (mirrored server-side):
- * - images: jpeg/png/webp/gif, downscaled to max 1920px on the long edge (GIF skipped to
- *   preserve animation), hard cap 5 MB after processing
- * - voice notes: max 2 minutes, hard cap 5 MB, codec = best MediaRecorder supports
- *   (webm/opus first, mp4/aac fallback for Safari) — never assume webm
+ * - images: jpeg/png/webp/gif, downscaled to max 1600px on the long edge and re-encoded as
+ *   WebP (~80%; JPEG where the browser cannot write WebP). GIF is skipped to preserve
+ *   animation. Hard cap 5 MB after processing.
+ * - voice notes: max 2 minutes, hard cap 5 MB, ~32 kbps (plenty for speech with Opus), codec =
+ *   best MediaRecorder supports (webm/opus first, mp4/aac fallback for Safari) — never assume webm
+ * - delivery: Cloudinary images are fetched through optimizedMediaUrl() (f_auto,q_auto + width),
+ *   so phones download a small modern-format copy, not the stored original.
  */
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_PRESET = import.meta.env.VITE_CLOUDINARY_PRESET;
@@ -18,7 +21,9 @@ const CLOUDINARY_PRESET = import.meta.env.VITE_CLOUDINARY_PRESET;
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_VOICE_BYTES = 5 * 1024 * 1024;
 export const MAX_VOICE_MS = 2 * 60 * 1000;
-export const MAX_IMAGE_EDGE_PX = 1920;
+export const MAX_IMAGE_EDGE_PX = 1600;
+const IMAGE_QUALITY = 0.8;
+const VOICE_BITS_PER_SECOND = 32000;
 
 export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
@@ -39,7 +44,8 @@ function extensionFor(blob) {
     'audio/ogg': 'ogg',
     'audio/wav': 'wav'
   };
-  return map[blob.type] || (blob.type.startsWith('image/') ? 'img' : 'aud');
+  const type = (blob.type || '').split(';')[0].trim();
+  return map[type] || (type.startsWith('image/') ? 'img' : 'aud');
 }
 
 export function newMessageId() {
@@ -104,6 +110,34 @@ function canvasToBlob(canvas, type, quality) {
 }
 
 /**
+ * WebP when the browser can write it (it silently falls back to PNG otherwise, so the result
+ * type is checked); else `fallbackType`.
+ */
+async function encodeCompact(canvas, fallbackType) {
+  const webp = await canvasToBlob(canvas, 'image/webp', IMAGE_QUALITY);
+  if (webp && webp.type === 'image/webp' && webp.size > 0) return webp;
+  return canvasToBlob(canvas, fallbackType, fallbackType === 'image/jpeg' ? 0.82 : undefined);
+}
+
+/**
+ * Delivery URL for a stored chat image: Cloudinary picks the best format the viewer's browser
+ * supports (AVIF/WebP), tunes quality and caps the width. Anything that is not a Cloudinary
+ * image upload URL (local previews, audio, other hosts) is returned unchanged. Only used for
+ * display: the stored objectUri stays the original link.
+ */
+export function optimizedMediaUrl(url, { width } = {}) {
+  if (typeof url !== 'string' || !url.startsWith('https://res.cloudinary.com/')) return url;
+  const marker = '/image/upload/';
+  const at = url.indexOf(marker);
+  if (at === -1) return url;
+  const rest = url.slice(at + marker.length);
+  // Already transformed (first segment holds comma-separated params like f_auto,q_auto).
+  if (/^[a-z]{1,3}_[^/]*\//.test(rest) && !/^v\d+\//.test(rest)) return url;
+  const params = ['f_auto', 'q_auto', width ? `w_${Math.round(width)},c_limit` : null].filter(Boolean).join(',');
+  return `${url.slice(0, at + marker.length)}${params}/${rest}`;
+}
+
+/**
  * Validates and normalizes an image file. Returns { blob, width, height }.
  * Rejects non-images and anything over the cap AFTER processing (never silently drops).
  *
@@ -162,7 +196,8 @@ export async function prepareImage(file) {
 
       let blob;
       if (hasAlpha) {
-        blob = await canvasToBlob(canvas, 'image/png');
+        // WebP keeps transparency too and is far smaller than PNG.
+        blob = await encodeCompact(canvas, 'image/png');
       } else {
         // Opaque: paint on white first so no stray transparent pixel can turn black.
         const flat = document.createElement('canvas');
@@ -172,9 +207,13 @@ export async function prepareImage(file) {
         fctx.fillStyle = '#ffffff';
         fctx.fillRect(0, 0, width, height);
         fctx.drawImage(canvas, 0, 0);
-        blob = await canvasToBlob(flat, 'image/jpeg', 0.9);
+        blob = await encodeCompact(flat, 'image/jpeg');
       }
       if (!blob || blob.size === 0) return sendOriginal();
+      // Never send a re-encode that came out bigger than an already-small original.
+      if (scale === 1 && file.size <= blob.size && file.size <= MAX_IMAGE_BYTES && file.type !== 'image/png') {
+        return { blob: file, width, height };
+      }
       if (blob.size <= MAX_IMAGE_BYTES) return { blob, width, height };
       edge = Math.round(edge * 0.7);
     }
@@ -218,7 +257,8 @@ export function startVoiceRecording() {
 
     let recorder;
     try {
-      recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const opts = { audioBitsPerSecond: VOICE_BITS_PER_SECOND };
+      recorder = new MediaRecorder(stream, mimeType ? { ...opts, mimeType } : opts);
     } catch (e) {
       stream.getTracks().forEach(t => t.stop());
       throw new Error('Voice recording could not start in this browser.');

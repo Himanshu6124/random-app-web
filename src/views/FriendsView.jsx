@@ -6,7 +6,7 @@ import { socketService, newClientMessageId } from '../services/socketService';
 import { authService } from '../services/authService';
 import { chatSettingsService, disappearNotice } from '../services/chatSettingsService';
 import { pageInView } from '../services/notify';
-import { Users, UserMinus, UserPlus, MessageCircle, ArrowLeft, MoreVertical, Loader2, Ban, ChevronDown, ChevronRight, UserRound, AlertTriangle, CheckCheck, Check, X, Palette } from 'lucide-react';
+import { Users, UserMinus, UserPlus, MessageCircle, ArrowLeft, MoreVertical, Loader2, Ban, ChevronDown, ChevronRight, UserRound, AlertTriangle, CheckCheck, Check, X, Palette, Clock } from 'lucide-react';
 import { useNewMessageIds, displayTime } from '../mobile/useNewMessageIds';
 import { DiscoverConfirmDialog } from '../components/discover/DiscoverConfirmDialog';
 import { FriendRequestDialog } from '../components/FriendRequestDialog';
@@ -353,6 +353,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       return {};
     }
   });
+  const dmMessagesRef = useRef(dmMessages);
+  dmMessagesRef.current = dmMessages;
 
   useEffect(() => {
     try {
@@ -848,48 +850,69 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   };
 
   /**
-   * Sends an uploaded media message into a friend DM (B2). MediaComposer uploads to
-   * Firebase Storage first and hands us the objectUri. Friend-DM media is persisted
-   * history — the backend never cleans it up.
+   * WhatsApp-style media in a friend DM: the photo / voice note shows at once from the local
+   * file with a clock (status SENDING); the upload runs in the background and then
+   * handleSendMediaDm sends it with the same clientMessageId, so the server echo replaces it.
+   * Friend-DM media is persisted history — the backend never cleans it up.
    */
-  const handleSendMediaDm = ({ type, objectUri, viewOnce = false, caption: typedCaption = '' }) => {
-    if (!selectedFriend?.conversationId || !objectUri) return;
+  const pendingMediaConvRef = useRef({});
+  const handleMediaPendingDm = ({ clientMessageId, type, localPreviewUrl, viewOnce = false, caption: typedCaption = '' }) => {
+    const conversationId = selectedFriend?.conversationId;
+    if (!conversationId || !clientMessageId) return;
+    pendingMediaConvRef.current[clientMessageId] = conversationId;
     const sendViewOnce = Boolean(viewOnce) && type === 'IMAGE';
-
-    const conversationId = selectedFriend.conversationId;
     const caption = type === 'IMAGE' ? (typedCaption.trim() || '📷 Photo') : '🎤 Voice note';
     const rawTime = new Date().toISOString();
     const referredMessageId = replyTarget?.id || null;
     setReplyTarget(null);
-
-    const clientMessageId = newClientMessageId();
-    const newMsg = {
-      id: 'pending_' + clientMessageId,
-      clientMessageId,
-      sender: 'me',
-      senderId: user?.id || 'me',
-      text: caption,
-      type,
-      objectUri,
-      viewOnce: sendViewOnce,
-      referredMessageId,
-      status: 'SENDING',
-      time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-      timestamp: rawTime
-    };
+    feedback('send');
 
     setDmMessages(prev => ({
       ...prev,
-      [conversationId]: [...(prev[conversationId] || []), newMsg]
+      [conversationId]: [...(prev[conversationId] || []), {
+        id: 'pending_' + clientMessageId,
+        clientMessageId,
+        sender: 'me',
+        senderId: user?.id || 'me',
+        text: caption,
+        type,
+        localPreviewUrl,
+        viewOnce: sendViewOnce,
+        referredMessageId,
+        status: 'SENDING',
+        time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+        timestamp: rawTime
+      }]
     }));
+  };
 
-    const sent = socketService.sendMessage(conversationId, caption, type, objectUri, referredMessageId, clientMessageId, sendViewOnce);
-    if (!sent) {
-      setDmMessages(prev => {
-        const list = (prev[conversationId] || []).map(m => m.id === newMsg.id ? { ...m, status: 'FAILED' } : m);
-        return { ...prev, [conversationId]: list };
-      });
-    }
+  const markDmMedia = (conversationId, clientMessageId, patch) => {
+    setDmMessages(prev => ({
+      ...prev,
+      [conversationId]: (prev[conversationId] || []).map(m => (
+        m.clientMessageId === clientMessageId && m.status === 'SENDING' ? { ...m, ...patch } : m
+      ))
+    }));
+  };
+
+  const handleMediaFailedDm = (clientMessageId) => {
+    const conversationId = pendingMediaConvRef.current[clientMessageId];
+    delete pendingMediaConvRef.current[clientMessageId];
+    if (conversationId) markDmMedia(conversationId, clientMessageId, { status: 'FAILED' });
+  };
+
+  /** The upload finished: send it into the conversation it was started in. */
+  const handleSendMediaDm = ({ clientMessageId, type, objectUri, viewOnce = false, caption: typedCaption = '' }) => {
+    const conversationId = pendingMediaConvRef.current[clientMessageId];
+    delete pendingMediaConvRef.current[clientMessageId];
+    if (!conversationId || !objectUri) return;
+    const pending = (dmMessagesRef.current[conversationId] || []).find(m => m.clientMessageId === clientMessageId);
+    const sendViewOnce = Boolean(viewOnce) && type === 'IMAGE';
+    const caption = type === 'IMAGE' ? (typedCaption.trim() || '📷 Photo') : '🎤 Voice note';
+
+    markDmMedia(conversationId, clientMessageId, { objectUri });
+    const sent = socketService.sendMessage(conversationId, caption, type, objectUri, pending?.referredMessageId || null, clientMessageId, sendViewOnce);
+    if (!sent) markDmMedia(conversationId, clientMessageId, { status: 'FAILED' });
   };
 
   const handleIcebreakerClick = (e) => {
@@ -1084,7 +1107,12 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               const reqName = req.name || req.username || 'Someone';
               return (
                 <div key={reqId} className="friend-requests-inline__row">
-                  <span className="friend-requests-inline__name" title={reqName}>{reqName}</span>
+                  <span className="friend-requests-inline__who">
+                    <span className="friend-requests-inline__name" title={reqName}>{reqName}</span>
+                    {req.requestMessage && (
+                      <span className="fr-note" title={req.requestMessage}>“{req.requestMessage}”</span>
+                    )}
+                  </span>
                   <button
                     type="button"
                     className="friend-requests-inline__accept"
@@ -1616,7 +1644,11 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                       {m.status === 'FAILED' ? (
                         'Not delivered'
                       ) : m.status === 'SENDING' ? (
-                        'Sending...'
+                        <>
+                          <span>{displayTime(m.time)}</span>
+                          <span>•</span>
+                          <span className="msg-pending" aria-label="Sending"><Clock size={12} aria-hidden="true" /></span>
+                        </>
                       ) : (
                         <>
                           <span>{displayTime(m.time)}</span>
@@ -1718,6 +1750,8 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               placeholder={isLiveConnected ? `Message ${friendDisplayName}...` : 'Reconnecting…'}
               conversationId={selectedFriend?.conversationId}
               onSendMedia={handleSendMediaDm}
+              onMediaPending={handleMediaPendingDm}
+              onMediaFailed={handleMediaFailedDm}
               peerName={selectedFriend?.name || selectedFriend?.friendUserName || selectedFriend?.username || ''}
               onMediaError={setMediaError}
               sendClassName="btn-cyan"

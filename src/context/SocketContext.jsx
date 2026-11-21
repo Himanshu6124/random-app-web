@@ -281,6 +281,16 @@ export function SocketProvider({ children }) {
       if (prev.some(m => m.id === msg.id)) {
         return prev;
       }
+      // Our own photo / voice note shown instantly while uploading: swap in the server copy
+      // in place, keeping the local preview so the picture does not blink while it reloads.
+      if (msg.clientMessageId) {
+        const idx = prev.findIndex(m => m.clientMessageId === msg.clientMessageId && m.status === 'SENDING');
+        if (idx !== -1) {
+          const next = [...prev];
+          next[idx] = { ...msg, localPreviewUrl: prev[idx].localPreviewUrl };
+          return next;
+        }
+      }
       return [...prev, msg];
     });
 
@@ -570,7 +580,7 @@ export function SocketProvider({ children }) {
 
           const myId = userRef.current?.id;
           setMessages(prev => {
-            const seen = prev.map(m => (m.senderId === myId && m.status !== 'SEEN' ? { ...m, status: 'SEEN' } : m));
+            const seen = prev.map(m => (m.senderId === myId && m.status !== 'SEEN' && m.status !== 'SENDING' && m.status !== 'FAILED' ? { ...m, status: 'SEEN' } : m));
             // Disappear after seen: my messages up to the one they just read go a few seconds from now
             return startAfterSeenCountdown(seen, payload?.messageId, m => m.senderId === myId);
           });
@@ -684,7 +694,7 @@ export function SocketProvider({ children }) {
             key: `friend-request-${senderId}`,
             kind: 'request',
             title: sender?.name || sender?.username || 'Someone',
-            body: 'sent you a friend request',
+            body: sender?.requestMessage ? `sent you a friend request: “${sender.requestMessage}”` : 'sent you a friend request',
             icon: sender?.photoUrl || '',
             target: { tab: 'friends' },
             action: senderId ? {
@@ -947,15 +957,60 @@ export function SocketProvider({ children }) {
    * Failure becomes a visible FAILED bubble with no retry (retrying would need the file,
    * not the text) — matching the "never look sent when it is not" rule.
    */
-  const sendMedia = useCallback(({ type, objectUri, localPreviewUrl, referredMessageId = null, viewOnce = false, caption: typedCaption = '' }) => {
-    if (!currentPeer || peerLeft || !isPeerOnline) return false;
-
-    const conversationId = currentPeer.conversationId || currentPeer.id;
-    if (!conversationId || !objectUri) return false;
-
+  /**
+   * A photo / voice note appears in the chat the moment it is sent (WhatsApp style) with a
+   * clock instead of "Sent"; the upload runs in the background and sendMedia() follows.
+   */
+  const addPendingMedia = useCallback(({ clientMessageId, type, localPreviewUrl, caption: typedCaption = '', viewOnce = false, referredMessageId = null }) => {
+    const conversationId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
+    if (!conversationId || !clientMessageId) return;
     const caption = type === 'IMAGE' ? (typedCaption.trim() || '📷 Photo') : '🎤 Voice note';
-    const delivered = socketService.sendRandomChatMessage(conversationId, caption, type, objectUri, referredMessageId, null, viewOnce && type === 'IMAGE');
+    setMessages(prev => [...prev, {
+      id: 'pending_' + clientMessageId,
+      clientMessageId,
+      conversationId,
+      senderId: userRef.current?.id,
+      text: caption,
+      message: caption,
+      type,
+      localPreviewUrl,
+      viewOnce: Boolean(viewOnce) && type === 'IMAGE',
+      referredMessageId,
+      status: 'SENDING',
+      timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    }]);
+  }, []);
 
+  /** The background upload failed: the bubble stays, marked "Not delivered". */
+  const failPendingMedia = useCallback((clientMessageId) => {
+    setMessages(prev => prev.map(m => (m.clientMessageId === clientMessageId && m.status === 'SENDING'
+      ? { ...m, status: 'FAILED', serverRefused: true } : m)));
+  }, []);
+
+  /**
+   * Sends an uploaded media message (image or voice note) into the random chat.
+   * With a clientMessageId the instant bubble from addPendingMedia is reused and the server
+   * echo replaces it; failure turns it into a FAILED bubble with no retry (retrying would need
+   * the file, not the text) — matching the "never look sent when it is not" rule.
+   */
+  const sendMedia = useCallback(({ type, objectUri, localPreviewUrl, clientMessageId = null, referredMessageId = null, viewOnce = false, caption: typedCaption = '' }) => {
+    const conversationId = currentPeer?.conversationId || currentPeer?.id;
+    if (!currentPeer || peerLeft || !isPeerOnline || !conversationId || !objectUri) {
+      if (clientMessageId) failPendingMedia(clientMessageId);
+      return false;
+    }
+
+    const pending = clientMessageId ? messagesRef.current.find(m => m.clientMessageId === clientMessageId) : null;
+    const replyTo = pending ? pending.referredMessageId : referredMessageId;
+    const caption = type === 'IMAGE' ? (typedCaption.trim() || '📷 Photo') : '🎤 Voice note';
+    const delivered = socketService.sendRandomChatMessage(conversationId, caption, type, objectUri, replyTo, clientMessageId, viewOnce && type === 'IMAGE');
+
+    if (pending) {
+      setMessages(prev => prev.map(m => (m.clientMessageId === clientMessageId && m.status === 'SENDING'
+        ? (delivered ? { ...m, objectUri } : { ...m, objectUri, status: 'FAILED', serverRefused: true })
+        : m)));
+      return delivered;
+    }
     if (!delivered) {
       setMessages(prev => [...prev, {
         id: 'failed_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
@@ -974,7 +1029,7 @@ export function SocketProvider({ children }) {
       }]);
     }
     return delivered;
-  }, [currentPeer, isPeerOnline, peerLeft]);
+  }, [currentPeer, isPeerOnline, peerLeft, failPendingMedia]);
 
   /** Sets the random room's disappearing timer for both people (the server echoes it back). */
   const setRandomDisappearing = useCallback((seconds) => {
@@ -1092,6 +1147,8 @@ export function SocketProvider({ children }) {
     disconnectChat,
     sendMessage,
     sendMedia,
+    addPendingMedia,
+    failPendingMedia,
     retryMessage,
     sendReaction,
     reactToMessage,
@@ -1114,7 +1171,7 @@ export function SocketProvider({ children }) {
     activeTab, setActiveTab, unreadRandomCount, clearUnreadRandomCount, liveRandomMessage,
     dismissLiveRandomMessage, matchState, matchTopics, setMatchTopics, matchGender, setMatchGender, currentPeer, messages, isPeerTyping, isPeerOnline, peerLastSeen, peerLeft, resyncTick,
     startSearching, cancelSearch, skipStranger, disconnectChat, sendMessage,
-    retryMessage, sendMedia, sendReaction, reactToMessage, deleteMessage, sendIcebreaker, notifyTyping, floatingReactions,
+    retryMessage, sendMedia, addPendingMedia, failPendingMedia, sendReaction, reactToMessage, deleteMessage, sendIcebreaker, notifyTyping, floatingReactions,
     bottleGame, spinBottle, chooseGameOption, askGameQuestion, closeGame, connectionStatus, isLiveConnected,
     randomDisappearSeconds, setRandomDisappearing, randomLeaving, openRandomViewOnce
   ]);

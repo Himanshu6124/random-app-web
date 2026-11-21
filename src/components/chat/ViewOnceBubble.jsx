@@ -1,3 +1,4 @@
+import { optimizedMediaUrl } from '../../services/mediaService';
 import React, { useState } from 'react';
 import { MediaViewer } from './MediaViewer';
 
@@ -77,7 +78,7 @@ export function ViewOnceBubble({ msg, isMe, onOpened }) {
         // The viewer is portalled, but React events still bubble to this bubble's message row.
         <span onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
           <MediaViewer
-            src={msg.objectUri}
+            src={optimizedMediaUrl(msg.objectUri, { width: 2048 })}
             alt="View once photo"
             onClose={() => {
               setOpen(false);

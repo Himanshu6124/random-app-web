@@ -45,6 +45,8 @@ export function ChatComposer({
   leading = null,
   conversationId,
   onSendMedia,
+  onMediaPending,
+  onMediaFailed,
   onMediaError,
   sendClassName = 'btn-primary',
   peerName = ''
@@ -52,10 +54,12 @@ export function ChatComposer({
   const [focused, setFocused] = useState(false);
   const media = useMediaComposer({
     conversationId,
+    onPending: (pending) => onMediaPending?.({ ...pending, viewOnce: Boolean(pending.viewOnce) && pending.type === 'IMAGE' }),
     onSend: (sent) => onSendMedia?.({ ...sent, viewOnce: Boolean(sent.viewOnce) && sent.type === 'IMAGE' }),
+    onFailed: onMediaFailed,
     onError: onMediaError
   });
-  const { configured, uploading, progress, recording, elapsed, micStream } = media;
+  const { configured, recording, elapsed, micStream } = media;
 
   // Hold-to-record gesture state
   const [holding, setHolding] = useState(false);   // finger / mouse is down on the mic
@@ -68,7 +72,8 @@ export function ChatComposer({
 
   const hasText = value.trim().length > 0;
   const showSend = !recording && !holding && (hasText || !configured);
-  const mediaBusy = uploading || recording;
+  // Background uploads never block: only an active recording does.
+  const mediaBusy = recording;
   const mediaTitle = configured ? null : 'Media sharing is not configured yet';
   const holdMode = holding || (recording && press.current?.hold);
 
@@ -264,9 +269,6 @@ export function ChatComposer({
             enterKeyHint="send"
             aria-label="Message"
           />
-          {uploading && !media.pickedFile && (
-            <span className="wa-field__progress" id="media-upload-progress">{progress}%</span>
-          )}
           <input
             ref={media.fileInputRef}
             type="file"
@@ -343,7 +345,7 @@ export function ChatComposer({
           onPointerDown={onMicPointerDown}
           onClick={onMicClick}
           onContextMenu={(e) => e.preventDefault()}
-          disabled={disabled || (uploading && !holding)}
+          disabled={disabled}
           aria-label="Hold to record a voice note, release to send"
           title="Hold to record, release to send (max 2 min)"
           style={holding ? { transform: `translateY(${-Math.min(slideY, CANCEL_SLIDE_PX)}px) scale(1.28)` } : undefined}
@@ -363,8 +365,6 @@ export function ChatComposer({
         <PhotoEditor
           file={media.pickedFile}
           peerName={peerName}
-          uploading={uploading}
-          progress={progress}
           onCancel={media.clearPicked}
           onSend={({ image, caption, viewOnce }) => media.sendImage(image, { caption, viewOnce })}
         />

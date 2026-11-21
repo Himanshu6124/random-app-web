@@ -565,3 +565,16 @@ html.is-touch .mv-toolbar { display: none; }
   animation: ct-pop 0.35s var(--ease-out);
 }
 @keyframes ct-pop { from { transform: scale(0.6); opacity: 0; } }
+
+/* WhatsApp-style "waiting to send" clock where Sent / Seen normally sits. */
+.msg-pending {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  animation: msg-pending-tick 1.6s ease-in-out infinite;
+}
+@keyframes msg-pending-tick { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .msg-pending { animation: none; } }
+
+/* A photo still uploading: slightly dimmed until the server has it. */
+.chat-media--image.is-pending .chat-media__img { opacity: 0.82; transition: opacity 0.3s ease; }

@@ -7,9 +7,12 @@ import { DiscoverAvatar } from './DiscoverAvatar';
 import { FriendshipButton } from './FriendshipButton';
 import { NearbyMap } from './NearbyMap';
 import { presenceLabel } from './discoverUtils';
+import { useProfileCard } from '../ProfileCard';
 
 const REFRESH_MS = 2 * 60 * 1000;
 const PAGE_SIZE = 100;
+/** People list under the map: loaded a page at a time as the strip scrolls. */
+const LIST_PAGE_SIZE = 30;
 const VIEW_DEBOUNCE_MS = 300;
 const GENDERS = [
   { id: 'all', label: 'All' },
@@ -34,16 +37,17 @@ function getDevicePosition() {
   });
 }
 
-const lastSeenMs = (p) => (p.isOnline ? Date.now() : new Date(p.lastOnline || p.locationUpdatedAt || 0).getTime());
-
 /**
- * Nearby: All / Male / Female / Other filter, a big map, and a horizontal strip of the people on it
- * (online first, then most recently active, then closest). The first visit asks once to turn on
+ * Nearby: All / Male / Female / Other filter, a big map, and a horizontal strip of everyone
+ * sharing a location (not only those in view), paged as it scrolls: online first, then recently
+ * active, each group nearest first. Tapping one flies the map to them. When nobody is in the first
+ * view, the map zooms out to the nearest person. The first visit asks once to turn on
  * your own (rounded) location, since seeing others requires sharing yours; after that it stays on.
  */
 export function NearbyPanel({ onOpenChat }) {
   const { jwtToken, user } = useAuth();
   const botRelationsVersion = useBotRelationsVersion();
+  const { openProfile } = useProfileCard();
   const [me, setMe] = useState(null);
   const [view, setView] = useState(null);
   const [data, setData] = useState(null);
@@ -54,7 +58,12 @@ export function NearbyPanel({ onOpenChat }) {
   const [selected, setSelected] = useState(null);
   const [statusOverrides, setStatusOverrides] = useState({});
   const [reloadTick, setReloadTick] = useState(0);
+  const [list, setList] = useState({ items: [], hasMore: false, total: 0, nearest: null, loaded: false });
+  const [listLoading, setListLoading] = useState(false);
+  const [focusTarget, setFocusTarget] = useState(null);
   const stripRef = useRef(null);
+  const listReqRef = useRef(0);
+  const autoZoomedRef = useRef(false);
 
   const sharing = Boolean(me?.sharing);
 
@@ -115,6 +124,64 @@ export function NearbyPanel({ onOpenChat }) {
     return () => { clearTimeout(timer); controller.abort(); };
   }, [sharing, viewQuery, me?.latitude, me?.longitude, gender, reloadTick, jwtToken]);
 
+  // The people list: everyone visible anywhere, a page at a time.
+  const loadList = useCallback(async (reset) => {
+    if (!sharing || me?.latitude == null) return;
+    const reqId = ++listReqRef.current;
+    setListLoading(true);
+    try {
+      const offset = reset ? 0 : list.items.length;
+      const res = await discoverService.getNearbyPeople({ offset, limit: LIST_PAGE_SIZE, gender }, jwtToken);
+      if (reqId !== listReqRef.current) return;
+      setList(prev => {
+        const base = reset ? [] : prev.items;
+        const seen = new Set(base.map(p => p.id));
+        return {
+          items: [...base, ...res.people.filter(p => !seen.has(p.id))],
+          hasMore: Boolean(res.hasMore),
+          total: res.total ?? 0,
+          nearest: res.nearestLatitude != null ? { latitude: res.nearestLatitude, longitude: res.nearestLongitude } : null,
+          loaded: true
+        };
+      });
+    } catch (err) {
+      if (reqId === listReqRef.current) setError(err.message || 'Could not load people nearby.');
+    } finally {
+      if (reqId === listReqRef.current) setListLoading(false);
+    }
+  }, [sharing, me?.latitude, list.items.length, gender, jwtToken]);
+
+  // Fresh first page whenever sharing, position or filter changes.
+  useEffect(() => {
+    if (!sharing || me?.latitude == null) {
+      setList({ items: [], hasMore: false, total: 0, nearest: null, loaded: false });
+      return;
+    }
+    loadList(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharing, me?.latitude, me?.longitude, gender, jwtToken]);
+
+  useEffect(() => { autoZoomedRef.current = false; }, [gender]);
+
+  // Nobody in the first view: zoom out just far enough to show the nearest person (once per filter).
+  useEffect(() => {
+    if (autoZoomedRef.current || !data || !list.loaded) return;
+    autoZoomedRef.current = true;
+    if ((data.markers || []).length === 0 && list.nearest) {
+      setFocusTarget({ ...list.nearest, withMe: true, key: Date.now() });
+    }
+  }, [data, list.loaded, list.nearest]);
+
+  const onStripScroll = (e) => {
+    const el = e.currentTarget;
+    if (list.hasMore && !listLoading && el.scrollLeft + el.clientWidth > el.scrollWidth - 320) loadList(false);
+  };
+
+  const pickFromList = (p) => {
+    setSelected(p);
+    setFocusTarget({ latitude: p.latitude, longitude: p.longitude, key: Date.now() });
+  };
+
   const setSharing = async (enabled) => {
     setToggling(true);
     setError('');
@@ -146,14 +213,11 @@ export function NearbyPanel({ onOpenChat }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data, withStatus, user?.id, botRelationsVersion]
   );
-  // Online first, then most recently active, then closest.
+  // Already ordered by the server: online, then recently active, each group nearest first.
   const people = useMemo(
-    () => (data?.people || []).filter(p => !isBotBlocked(user?.id, p.id)).map(withStatus).sort((a, b) =>
-      (Number(b.isOnline) - Number(a.isOnline))
-      || (lastSeenMs(b) - lastSeenMs(a))
-      || (a.distanceKm - b.distanceKm)),
+    () => list.items.filter(p => !isBotBlocked(user?.id, p.id)).map(withStatus),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data, withStatus, user?.id, botRelationsVersion]
+    [list.items, withStatus, user?.id, botRelationsVersion]
   );
   const selectedNow = selected ? withStatus(selected) : null;
 
@@ -208,30 +272,32 @@ export function NearbyPanel({ onOpenChat }) {
         onMessage={onOpenChat}
         onStatusChange={onStatusChange}
         onError={setError}
+        onViewProfile={(p) => openProfile(p)}
+        focusTarget={focusTarget}
         updatedAt={me?.updatedAt}
         overlay={overlay}
       />
 
       {sharing && (
-        <div className="nearby-strip" ref={stripRef} aria-label="People nearby">
-          {data && people.length === 0 && (
-            <div className="nearby-strip__empty">Nobody here right now. Zoom out to look farther.</div>
+        <div className="nearby-strip" ref={stripRef} aria-label="People nearby" onScroll={onStripScroll}>
+          {list.loaded && people.length === 0 && (
+            <div className="nearby-strip__empty">Nobody is sharing their location yet. Check back soon.</div>
           )}
           {people.map(p => (
             <div
               key={p.id}
               data-person={p.id}
               className={`nearby-card${selected?.id === p.id ? ' is-selected' : ''}`}
-              onClick={() => setSelected(p)}
+              onClick={() => pickFromList(p)}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter') setSelected(p); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') pickFromList(p); }}
             >
               <DiscoverAvatar id={p.id} name={p.name} photoUrl={p.photoUrl} online={p.isOnline} size={48} />
               <span className="nearby-card__name">
                 {p.name}
               </span>
-              <span className="nearby-card__sub">{p.distanceKm} km · {p.isOnline ? 'Online' : presenceLabel(p).replace('Active ', '')}</span>
+              <span className="nearby-card__sub">{formatKm(p.distanceKm)} · {p.isOnline ? 'Online' : presenceLabel(p).replace('Active ', '')}</span>
               <span onClick={(e) => e.stopPropagation()}>
                 {p.friend ? (
                   <button type="button" className="dc-btn dc-btn--soft dc-btn--sm" onClick={() => onOpenChat(p.id)}>
@@ -251,8 +317,21 @@ export function NearbyPanel({ onOpenChat }) {
               </span>
             </div>
           ))}
+          {listLoading && list.items.length > 0 && (
+            <div className="nearby-card nearby-card--loading" aria-live="polite">
+              <span className="dc-spinner" aria-hidden="true" />
+            </div>
+          )}
         </div>
       )}
     </div>
   );
+}
+
+/** "800 m", "4.2 km", "1,240 km": short and readable for near and far people alike. */
+function formatKm(km) {
+  if (km == null) return '';
+  if (km < 1) return '<1 km';
+  if (km >= 100) return `${Math.round(km).toLocaleString()} km`;
+  return `${km} km`;
 }

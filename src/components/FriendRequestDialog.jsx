@@ -157,7 +157,12 @@ export function FriendRequestDialog({
                           overflow: 'hidden',
                           textOverflow: 'ellipsis'
                         }}>
-                          @{request.username}
+                          <span className="at-prefix">@</span>{request.username}
+                        </div>
+                      )}
+                      {request.requestMessage && (
+                        <div className="fr-note" title={request.requestMessage}>
+                          “{request.requestMessage}”
                         </div>
                       )}
                     </div>

@@ -437,6 +437,12 @@
   align-items: center;
   gap: 8px;
 }
+.friend-requests-inline__who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
 .friend-requests-inline__name {
   flex: 1;
   min-width: 0;
@@ -659,3 +665,80 @@
 
 /* Profile avatar picker: one sideways-scrolling row */
 .avatar-scroll-row { scrollbar-width: thin; overscroll-behavior-x: contain; }
+
+/* Optional note sent with a friend request: one quiet italic line. */
+.fr-note {
+  display: block;
+  max-width: 100%;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  font-style: italic;
+  color: var(--text-secondary);
+}
+/* Greyed "@" before usernames. */
+.at-prefix {
+  color: var(--text-muted);
+  opacity: 0.7;
+  margin-right: 1px;
+}
+
+/* Profile: "@" sits greyed inside the username field. */
+.pv-handle { position: relative; }
+.pv-handle__at {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  opacity: 0.75;
+  font-size: var(--fs-body);
+  pointer-events: none;
+}
+
+/* Profile: gender as one compact row instead of a full-width block. */
+.pv-gender {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+}
+.pv-gender__label { font-size: var(--fs-md); color: var(--text-secondary); }
+.pv-gender__value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.pv-gender__value svg { color: var(--text-muted); }
+.pv-gender__seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: var(--radius-full);
+  background: var(--plum-3);
+}
+.pv-gender__seg button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.pv-gender__seg button.is-selected { background: var(--accent); color: var(--accent-ink); }
+.pv-gender:has(.pv-gender__seg) { margin-bottom: 6px; }
+.pv-gender__hint { margin: 0 0 20px; font-size: var(--fs-xs); color: var(--text-muted); }
