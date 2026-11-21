@@ -6,8 +6,21 @@ import { notify, pageInView } from '../services/notify';
 import {
   startGoogleSignIn, consumeGoogleRedirect, ensureAnonymousFirebaseSession, isFirebaseConfigured
 } from '../services/firebaseClient';
+import { isBotUserId, setBotRelation } from '../services/botPeers';
 
 const AuthContext = createContext();
+
+/**
+ * Sends a friend request as `viewerId`. A request to a bot is recorded on this device only and
+ * never reaches the server (see services/botPeers).
+ */
+async function requestFriendship(targetUserId, jwt, viewerId) {
+  if (isBotUserId(targetUserId)) {
+    setBotRelation(viewerId, targetUserId, 'PENDING_SENT');
+    return;
+  }
+  await authService.sendFriendRequest(targetUserId, jwt);
+}
 
 // Backend tokens live 24h; renew well inside that so a tab left open never runs out.
 const TOKEN_REFRESH_MS = 6 * 60 * 60 * 1000;
@@ -396,6 +409,10 @@ export function AuthProvider({ children }) {
     if (!token || !targetUserId) {
       throw new Error('User token or target user id missing.');
     }
+    if (isBotUserId(targetUserId)) {
+      await requestFriendship(targetUserId, token, user?.id);
+      return;
+    }
     try {
       await authService.sendFriendRequest(targetUserId, token);
     } catch (err) {
@@ -406,7 +423,7 @@ export function AuthProvider({ children }) {
       throw err;
     }
     await loadFriendRequests(token);
-  }, [jwtToken, loadFriendRequests]);
+  }, [jwtToken, user?.id, loadFriendRequests]);
 
   const acceptFriendRequest = useCallback(async (targetUserId) => {
     const token = jwtToken || authService.getToken();
@@ -440,13 +457,17 @@ export function AuthProvider({ children }) {
   const cancelFriendRequest = useCallback(async (targetUserId) => {
     const token = jwtToken || authService.getToken();
     if (!token || !targetUserId) return;
+    if (isBotUserId(targetUserId)) {
+      setBotRelation(user?.id, targetUserId, null);
+      return;
+    }
     try {
       await authService.removeFriendApi(targetUserId, token);
       await loadFriendRequests(token);
     } catch (e) {
       console.warn('Failed to cancel friend request:', e);
     }
-  }, [jwtToken, loadFriendRequests]);
+  }, [jwtToken, user?.id, loadFriendRequests]);
 
   const removeFriend = useCallback(async (friendId) => {
     const token = jwtToken || authService.getToken();
@@ -467,6 +488,11 @@ export function AuthProvider({ children }) {
   const blockUser = useCallback(async (targetUserId) => {
     const token = jwtToken || authService.getToken();
     if (!token || !targetUserId) return;
+    // Bots: blocked on this device only, nothing is sent to the server.
+    if (isBotUserId(targetUserId)) {
+      setBotRelation(user?.id, targetUserId, 'BLOCKED');
+      return;
+    }
     await authService.blockUser(targetUserId, token);
     const notTarget = (u) => u.id !== targetUserId && u.friendUserId !== targetUserId;
     setFriends(prev => prev.filter(notTarget));
@@ -474,13 +500,29 @@ export function AuthProvider({ children }) {
     setLiveFriendRequest(prev => (prev && !notTarget(prev) ? null : prev));
     loadFriendsFromApi(token);
     loadFriendRequests(token);
-  }, [jwtToken, loadFriendsFromApi, loadFriendRequests]);
+  }, [jwtToken, user?.id, loadFriendsFromApi, loadFriendRequests]);
 
   const unblockUser = useCallback(async (targetUserId) => {
     const token = jwtToken || authService.getToken();
     if (!token || !targetUserId) return;
+    if (isBotUserId(targetUserId)) {
+      setBotRelation(user?.id, targetUserId, null);
+      return;
+    }
     await authService.unblockUser(targetUserId, token);
-  }, [jwtToken]);
+  }, [jwtToken, user?.id]);
+
+  // Block & report. A bot is only blocked on this device: no report or block reaches the server.
+  const reportUser = useCallback(async (targetUserId, reason) => {
+    const token = jwtToken || authService.getToken();
+    if (!token || !targetUserId) return;
+    if (isBotUserId(targetUserId)) {
+      setBotRelation(user?.id, targetUserId, 'BLOCKED');
+      return;
+    }
+    await authService.reportUser(targetUserId, reason, token);
+    loadFriendsFromApi(token);
+  }, [jwtToken, user?.id, loadFriendsFromApi]);
 
   const addFriend = useCallback(async (newFriend) => {
     const targetUserId = newFriend.id || newFriend.friendUserId;
@@ -568,7 +610,7 @@ export function AuthProvider({ children }) {
           }
         } else if (actionToExecute.action === 'SEND_FRIEND' && actionToExecute.targetUserId) {
           try {
-            await authService.sendFriendRequest(actionToExecute.targetUserId, res.authResponse.jwt);
+            await requestFriendship(actionToExecute.targetUserId, res.authResponse.jwt, res.user?.id);
           } catch (err) {
             console.warn('[AuthContext] Error auto-sending friend request after upgrade:', err);
           }
@@ -666,7 +708,7 @@ export function AuthProvider({ children }) {
       (err?.message && err.message.toLowerCase().includes('already exists'));
     const send = async () => {
       try {
-        await authService.sendFriendRequest(targetUserId, jwt);
+        await requestFriendship(targetUserId, jwt, selfId);
       } catch (err) {
         if (!alreadyExists(err)) throw err;
       }
@@ -899,6 +941,7 @@ export function AuthProvider({ children }) {
     removeFriend,
     blockUser,
     unblockUser,
+    reportUser,
     loadFriendsFromApi
   }), [
     isAuthenticated, isGuest, jwtToken, user, sessionEpoch, authLoading,
@@ -911,7 +954,7 @@ export function AuthProvider({ children }) {
     activeDmFriendId, setActiveDmFriendId, friendRequests, friendRequestsLoading, liveFriendRequest,
     dismissLiveFriendRequest, acceptLiveFriendRequest, applyFriendPresence, addFriend,
     sendFriendRequest, cancelFriendRequest, loadFriendRequests, acceptFriendRequest,
-    rejectFriendRequest, removeFriend, blockUser, unblockUser, loadFriendsFromApi
+    rejectFriendRequest, removeFriend, blockUser, unblockUser, reportUser, loadFriendsFromApi
   ]);
 
   return (

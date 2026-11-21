@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { X, UserPlus, UserCheck, Clock, MessageCircle, UserMinus, Ban, Flag, MapPin, Sparkles, UserRound, ArrowLeft } from 'lucide-react';
+import { X, UserPlus, UserCheck, Clock, MessageCircle, UserMinus, Ban, Flag, MapPin, UserRound, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/authService';
 import { navigateTo } from '../services/notify';
@@ -7,6 +7,7 @@ import { Portal } from './Portal';
 import { PeerAbout } from './chat/PeerAbout';
 import { timeAgo } from './discover/discoverUtils';
 import { feedback } from '../mobile/feedback';
+import { isBotUserId, useResolvedFriendStatus } from '../services/botPeers';
 
 const ProfileCardContext = createContext({ openProfile: () => {}, closeProfile: () => {} });
 
@@ -16,7 +17,7 @@ const ProfileCardContext = createContext({ openProfile: () => {}, closeProfile: 
  *
  *   person:  { id, name, username, photoUrl, bio, gender, isOnline, lastOnline, isGuest }
  *            (only id is required; the rest renders instantly and is refreshed from the server)
- *   options: { isAi, topics, sharedTopics, presence: { online, lastSeen }, inChat,
+ *   options: { topics, sharedTopics, presence: { online, lastSeen }, inChat,
  *              onBlocked, onRemoved }
  */
 export function ProfileCardProvider({ children }) {
@@ -51,11 +52,10 @@ function presenceLabel(online, lastSeen) {
 function ProfileCard({ person: initial, options, onClose }) {
   const {
     user, jwtToken, isGuest, openUpgradeModal, friends,
-    sendFriendRequest, cancelFriendRequest, acceptFriendRequest, removeFriend, blockUser, loadFriendsFromApi
+    sendFriendRequest, cancelFriendRequest, acceptFriendRequest, removeFriend, blockUser, reportUser
   } = useAuth();
   const id = initial.id || initial.friendUserId;
   const isSelf = id === user?.id;
-  const isAi = Boolean(options.isAi) || (typeof id === 'string' && id.startsWith('bot-'));
 
   const [person, setPerson] = useState(initial);
   const [status, setStatus] = useState(null); // NONE | PENDING_SENT | PENDING_RECEIVED | ACCEPTED | BLOCKED
@@ -68,7 +68,8 @@ function ProfileCard({ person: initial, options, onClose }) {
   const [details, setDetails] = useState('');
 
   const isFriend = friends.some(f => (f.id || f.friendUserId) === id);
-  const effectiveStatus = isFriend ? 'ACCEPTED' : (status || 'NONE');
+  const resolvedStatus = useResolvedFriendStatus(user?.id, id, status || 'NONE');
+  const effectiveStatus = isFriend ? 'ACCEPTED' : resolvedStatus;
 
   // Close on Escape, like every other sheet.
   useEffect(() => {
@@ -77,8 +78,7 @@ function ProfileCard({ person: initial, options, onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Fresh profile, friendship and distance from the server. AI partners listed in Discover
-  // (id "bot-<name>") have a profile and a distance too; they just can't be befriended.
+  // Fresh profile, friendship and distance from the server, the same for every person.
   useEffect(() => {
     if (!id) return undefined;
     let cancelled = false;
@@ -88,7 +88,8 @@ function ProfileCard({ person: initial, options, onClose }) {
     authService.getUserById(id, token)
       .then(u => { if (!cancelled && u) setPerson(prev => ({ ...prev, ...u, name: u.name || prev.name, photoUrl: u.photoUrl || prev.photoUrl })); })
       .catch(() => {});
-    if (!isSelf && !isAi) {
+    // A bot's friendship status lives on this device (services/botPeers), not on the server.
+    if (!isSelf && !isBotUserId(id)) {
       authService.getFriendshipStatus(id, token)
         .then(res => { if (!cancelled && res?.status) setStatus(res.status); })
         .catch(() => {});
@@ -99,7 +100,7 @@ function ProfileCard({ person: initial, options, onClose }) {
         .catch(() => {});
     }
     return () => { cancelled = true; };
-  }, [id, isAi, isSelf, jwtToken]);
+  }, [id, isSelf, jwtToken]);
 
   const name = person.name || person.friendUserName || person.username || 'Someone';
   const online = options.presence ? Boolean(options.presence.online) : Boolean(person.isOnline ?? person.online);
@@ -161,8 +162,7 @@ function ProfileCard({ person: initial, options, onClose }) {
     }
     if (confirm === 'report') {
       const text = details.trim() ? `${reason}: ${details.trim()}` : reason;
-      await authService.reportUser(id, text, jwtToken || authService.getToken());
-      loadFriendsFromApi?.();
+      await reportUser(id, text);
     } else {
       await blockUser(id);
     }
@@ -172,7 +172,7 @@ function ProfileCard({ person: initial, options, onClose }) {
   });
 
   const primaryAction = () => {
-    if (isSelf || isAi) return null;
+    if (isSelf) return null;
     switch (effectiveStatus) {
       case 'ACCEPTED':
         return options.inChat ? (
@@ -290,13 +290,10 @@ function ProfileCard({ person: initial, options, onClose }) {
                 </div>
                 <h2 className="pc-name">
                   {name}
-                  {isAi && <span className="pc-badge"><Sparkles size={12} aria-hidden="true" />AI</span>}
-                  {guestPeer && !isAi && <span className="pc-badge pc-badge--muted">Guest</span>}
+                  {guestPeer && <span className="pc-badge pc-badge--muted">Guest</span>}
                 </h2>
-                {person.username && !isAi && <div className="pc-username">@{person.username}</div>}
-                {(!isAi || lastSeen || online) && (
-                  <div className={`pc-presence${online ? ' is-online' : ''}`}>{presenceLabel(online, lastSeen)}</div>
-                )}
+                {person.username && <div className="pc-username">@{person.username}</div>}
+                <div className={`pc-presence${online ? ' is-online' : ''}`}>{presenceLabel(online, lastSeen)}</div>
               </div>
 
               {(genderLabel || distanceKm !== null) && (
@@ -321,13 +318,9 @@ function ProfileCard({ person: initial, options, onClose }) {
                 </div>
               )}
 
-              {isAi && (
-                <p className="pc-note">This is an AI chat partner. It can't be added, blocked or reported like a real person.</p>
-              )}
-
               {error && <div className="pc-error" role="alert">{error}</div>}
 
-              {!isSelf && !isAi && (
+              {!isSelf && (
                 <>
                   <div className="pc-actions">{primaryAction()}</div>
                   <div className="pc-danger">

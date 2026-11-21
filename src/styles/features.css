@@ -312,7 +312,6 @@
   color: var(--text-secondary);
 }
 .pc-about { padding: 12px 14px; border-radius: var(--radius-md); background: var(--plum-3); }
-.pc-note { font-size: var(--fs-sm); color: var(--text-secondary); text-align: center; }
 .pc-error { font-size: var(--fs-sm); color: var(--danger); text-align: center; }
 .pc-actions { display: flex; flex-direction: column; gap: 8px; }
 .pc-btn {

@@ -25,9 +25,7 @@ import { ChatThemePicker, ChatBackdrop } from './chat/ChatThemePicker';
 import { DisappearTimer } from './chat/DisappearTimer';
 import { ViewOnceBubble } from './chat/ViewOnceBubble';
 import { ExpiryFuse } from './chat/ExpiryFuse';
-
-// AI partners we "sent" a friend request to (never sent to the server), kept across tab switches.
-const botRequestsSent = new Set();
+import { isBotUserId, useResolvedFriendStatus } from '../services/botPeers';
 
 /** "last seen 3m ago", re-rendered every 30s so it keeps counting. */
 function LastSeen({ value, prefix = 'last seen' }) {
@@ -87,7 +85,7 @@ export function ChatBox() {
   } = useSocket();
 
   const [inputMsg, setInputMsg] = useState('');
-  const [friendStatus, setFriendStatus] = useState('NONE'); // 'NONE' | 'PENDING_SENT' | 'PENDING_RECEIVED' | 'ACCEPTED'
+  const [serverFriendStatus, setFriendStatus] = useState('NONE'); // 'NONE' | 'PENDING_SENT' | 'PENDING_RECEIVED' | 'ACCEPTED'
   const [actionLoading, setActionLoading] = useState(false);
   const [mediaError, setMediaError] = useState('');
   const [gameOpen, setGameOpen] = useState(false);
@@ -106,8 +104,8 @@ export function ChatBox() {
   const peerName = extractPeerName(currentPeer);
   // Peer IDENTITY is the stable user id. currentPeer.username/name are display only.
   const peerId = currentPeer ? (currentPeer.friendUserId || currentPeer.peerId || currentPeer.id || '') : '';
-  // Server-side bot partners have ids like "bot-ananya-3f9c2a1b"; they are labelled as AI.
-  const isAiPeer = typeof peerId === 'string' && peerId.startsWith('bot-');
+  // Same status for every peer; a request to a bot partner is tracked on this device (see botPeers).
+  const friendStatus = useResolvedFriendStatus(user?.id, peerId, serverFriendStatus);
 
   // Derive membership from stable booleans, so a refreshed list identity does not
   // re-query the friendship status endpoint.
@@ -138,9 +136,9 @@ export function ChatBox() {
       return;
     }
 
-    // AI partners are not real accounts: their friend status lives only on this screen.
-    if (isAiPeer) {
-      setFriendStatus(botRequestsSent.has(peerId) ? 'PENDING_SENT' : 'NONE');
+    // A bot's status lives on this device (services/botPeers): never ask the server.
+    if (isBotUserId(peerId)) {
+      setFriendStatus('NONE');
       return;
     }
 
@@ -160,19 +158,10 @@ export function ChatBox() {
     return () => {
       isCancelled = true;
     };
-  }, [peerId, isFriend, isIncomingRequest, jwtToken, isAiPeer]);
+  }, [peerId, isFriend, isIncomingRequest, jwtToken]);
 
   const handleFriendActionClick = async () => {
     if (actionLoading || !peerId) return;
-
-    // AI partner: show the request as sent (or cancelled) like a real one, but never call the
-    // server, since a bot cannot receive or accept friend requests.
-    if (isAiPeer) {
-      if (botRequestsSent.has(peerId)) botRequestsSent.delete(peerId);
-      else botRequestsSent.add(peerId);
-      setFriendStatus(botRequestsSent.has(peerId) ? 'PENDING_SENT' : 'NONE');
-      return;
-    }
 
     if (friendStatus === 'ACCEPTED') {
       return;
@@ -245,7 +234,6 @@ export function ChatBox() {
       bio: currentPeer.peerBio,
       isGuest: currentPeer.peerGuest
     }, {
-      isAi: isAiPeer,
       topics: currentPeer.peerTopics,
       sharedTopics: currentPeer.sharedTopics,
       presence: { online: isPeerOnline && !peerLeft, lastSeen: peerLastSeen },

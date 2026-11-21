@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MapPin, MessageCircle, Sparkles } from 'lucide-react';
+import { MapPin, MessageCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { isBotBlocked, useBotRelationsVersion } from '../../services/botPeers';
 import { discoverService } from '../../services/discoverService';
 import { DiscoverAvatar } from './DiscoverAvatar';
 import { FriendshipButton } from './FriendshipButton';
@@ -41,7 +42,8 @@ const lastSeenMs = (p) => (p.isOnline ? Date.now() : new Date(p.lastOnline || p.
  * your own (rounded) location, since seeing others requires sharing yours; after that it stays on.
  */
 export function NearbyPanel({ onOpenChat }) {
-  const { jwtToken } = useAuth();
+  const { jwtToken, user } = useAuth();
+  const botRelationsVersion = useBotRelationsVersion();
   const [me, setMe] = useState(null);
   const [view, setView] = useState(null);
   const [data, setData] = useState(null);
@@ -136,17 +138,22 @@ export function NearbyPanel({ onOpenChat }) {
   }, [statusOverrides]);
   const onStatusChange = (id, status) => setStatusOverrides(s => ({ ...s, [id]: status }));
 
+  // The server hides people you blocked from Nearby; bots blocked on this device are hidden here.
   const markers = useMemo(
-    () => (data?.markers || []).map(m => (m.person ? { ...m, person: withStatus(m.person) } : m)),
-    [data, withStatus]
+    () => (data?.markers || [])
+      .filter(m => !(m.person && isBotBlocked(user?.id, m.person.id)))
+      .map(m => (m.person ? { ...m, person: withStatus(m.person) } : m)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data, withStatus, user?.id, botRelationsVersion]
   );
   // Online first, then most recently active, then closest.
   const people = useMemo(
-    () => (data?.people || []).map(withStatus).sort((a, b) =>
+    () => (data?.people || []).filter(p => !isBotBlocked(user?.id, p.id)).map(withStatus).sort((a, b) =>
       (Number(b.isOnline) - Number(a.isOnline))
       || (lastSeenMs(b) - lastSeenMs(a))
       || (a.distanceKm - b.distanceKm)),
-    [data, withStatus]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data, withStatus, user?.id, botRelationsVersion]
   );
   const selectedNow = selected ? withStatus(selected) : null;
 
@@ -223,11 +230,10 @@ export function NearbyPanel({ onOpenChat }) {
               <DiscoverAvatar id={p.id} name={p.name} photoUrl={p.photoUrl} online={p.isOnline} size={48} />
               <span className="nearby-card__name">
                 {p.name}
-                {String(p.id).startsWith('bot-') && <span className="dc-ai-badge"><Sparkles size={10} aria-hidden="true" />AI</span>}
               </span>
               <span className="nearby-card__sub">{p.distanceKm} km · {p.isOnline ? 'Online' : presenceLabel(p).replace('Active ', '')}</span>
               <span onClick={(e) => e.stopPropagation()}>
-                {String(p.id).startsWith('bot-') ? null : p.friend ? (
+                {p.friend ? (
                   <button type="button" className="dc-btn dc-btn--soft dc-btn--sm" onClick={() => onOpenChat(p.id)}>
                     <MessageCircle size={14} aria-hidden="true" />Chat
                   </button>

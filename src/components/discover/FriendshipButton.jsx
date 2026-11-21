@@ -2,15 +2,18 @@ import React, { useState } from 'react';
 import { UserPlus, UserCheck, Clock, Check, Ban } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { authService } from '../../services/authService';
+import { isBotUserId, useResolvedFriendStatus } from '../../services/botPeers';
 
 /**
  * The relationship action for one person, driven by the backend's friendship status
  * (NONE, PENDING_SENT, PENDING_RECEIVED, ACCEPTED, BLOCKED). Reports the new status upward.
+ * Works the same for every listed profile, bots included (see services/botPeers).
  */
 export function FriendshipButton({ personId, name, status = 'NONE', onStatusChange, onMessage, onError, size = 'md' }) {
-  const { jwtToken, isGuest, openUpgradeModal, sendFriendRequest, cancelFriendRequest, acceptFriendRequest, loadFriendsFromApi } = useAuth();
+  const { user, jwtToken, isGuest, openUpgradeModal, sendFriendRequest, cancelFriendRequest, acceptFriendRequest, unblockUser, loadFriendsFromApi } = useAuth();
   const [busy, setBusy] = useState(false);
   const sm = size === 'sm' ? ' dc-btn--sm' : '';
+  const shownStatus = useResolvedFriendStatus(user?.id, personId, status);
 
   const run = async (action, nextStatus) => {
     // Friends need an account: a guest is asked to sign in, and the request goes out afterwards.
@@ -32,7 +35,7 @@ export function FriendshipButton({ personId, name, status = 'NONE', onStatusChan
     }
   };
 
-  switch (status) {
+  switch (shownStatus) {
     case 'PENDING_SENT':
       return (
         <button
@@ -79,6 +82,10 @@ export function FriendshipButton({ personId, name, status = 'NONE', onStatusChan
           title="Unblock"
           aria-label={`${name} is blocked. Unblock`}
           onClick={() => run(async () => {
+            if (isBotUserId(personId)) {
+              await unblockUser(personId); // device-only for bots
+              return;
+            }
             await authService.removeFriendApi(personId, jwtToken || authService.getToken());
             await loadFriendsFromApi?.();
           }, 'NONE')}

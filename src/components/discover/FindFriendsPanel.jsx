@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Search, X, Sparkles } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { discoverService } from '../../services/discoverService';
 import { DiscoverAvatar } from './DiscoverAvatar';
@@ -19,9 +19,6 @@ function PresenceLine({ online, lastOnline }) {
   const ago = timeAgo(lastOnline);
   return <span className="dc-person-sub">{ago ? `Last seen ${ago}` : 'Offline'}</span>;
 }
-
-/** AI chat partners are listed like everyone else but carry an AI badge and can't be added. */
-const isBotId = (id) => typeof id === 'string' && id.startsWith('bot-');
 
 const MIN_CHARS = 1;
 const PAGE_SIZE = 20;
@@ -176,19 +173,18 @@ export function FindFriendsPanel({ onOpenChat }) {
                     <span className="dc-person-text">
                       <span className="dc-person-name">
                         {highlight(person.name, term)}
-                        {isBotId(person.id) && <span className="dc-ai-badge"><Sparkles size={10} aria-hidden="true" />AI</span>}
                       </span>
                       <PresenceLine online={person.isOnline} lastOnline={person.lastOnline} />
                     </span>
                   </button>
-                  {!isBotId(person.id) && <FriendshipButton
+                  <FriendshipButton
                     personId={person.id}
                     name={person.name}
                     status={person.friendshipStatus}
                     onStatusChange={(s) => setStatus(person.id, s)}
                     onMessage={() => onOpenChat(person.id)}
                     onError={setError}
-                  />}
+                  />
                 </li>
               ))}
             </ul>
