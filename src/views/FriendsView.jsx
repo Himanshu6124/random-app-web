@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSocket, ICEBREAKER_QUESTIONS } from '../context/SocketContext';
 import { socketService, newClientMessageId } from '../services/socketService';
 import { authService } from '../services/authService';
-import { chatSettingsService, disappearWhen } from '../services/chatSettingsService';
+import { chatSettingsService, disappearNotice } from '../services/chatSettingsService';
 import { pageInView } from '../services/notify';
 import { Users, UserMinus, UserPlus, MessageCircle, ArrowLeft, MoreVertical, Loader2, Ban, ChevronDown, ChevronRight, UserRound, AlertTriangle, CheckCheck, Check, X, Palette } from 'lucide-react';
 import { useNewMessageIds, displayTime } from '../mobile/useNewMessageIds';
@@ -27,7 +27,7 @@ import { ChatThemePicker, ChatBackdrop } from '../components/chat/ChatThemePicke
 import { DisappearTimer } from '../components/chat/DisappearTimer';
 import { ViewOnceBubble } from '../components/chat/ViewOnceBubble';
 import { ExpiryFuse } from '../components/chat/ExpiryFuse';
-import { useVanish, startAfterSeenCountdown, markViewOnceOpened } from '../components/chat/useVanish';
+import { useDisappearingFeed, startAfterSeenCountdown, markViewOnceOpened } from '../components/chat/useVanish';
 import { useMessageInteractions } from '../components/chat/useMessageInteractions';
 import { feedback } from '../mobile/feedback';
 import { timeAgo, chatListTime } from '../components/discover/discoverUtils';
@@ -92,8 +92,12 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   // Disappearing messages of the open chat (seconds, 0 = off, -1 = once seen)
   const [disappearSeconds, setDisappearSeconds] = useState(0);
   const chatAreaRef = useRef(null);
-  // Messages leave with a fade (timers, seen, view once, deletes)
-  const { leaving: dmLeavingIds, vanish: vanishDm } = useVanish();
+  // Messages leave with a fade (timers, seen, view once, deletes); expired ones go on their own.
+  // The closures run after render, so the helpers declared further down are ready by then.
+  const { leaving: vanishingIds, vanish: vanishDm } = useDisappearingFeed(
+    () => (activeKey ? dmMessages[activeKey] : null),
+    (ids) => removeDmMessages(ids)
+  );
   // Phone: the DM screen is a pushed screen — Back button and edge-swipe pop it.
   useBackHandler(isMobile && mobileShowChat, () => setMobileShowChat(false));
   useEdgeSwipeBack(chatAreaRef, isMobile && mobileShowChat, () => setMobileShowChat(false));
@@ -253,17 +257,22 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     return () => document.removeEventListener('mousedown', onDown);
   }, [showMenu]);
 
-  // Disappearing-messages timer of the open chat
+  // Disappearing-messages timer of the open chat. Fetched again whenever the chat comes back into
+  // view, so a change the friend made while this chat was closed or in the background shows up.
+  const disappearConvRef = useRef(null);
   useEffect(() => {
     const conversationId = selectedFriend?.conversationId;
-    setDisappearSeconds(0);
-    if (!conversationId) return undefined;
+    if (disappearConvRef.current !== conversationId) {
+      disappearConvRef.current = conversationId;
+      setDisappearSeconds(0);
+    }
+    if (!conversationId || !chatInView) return undefined;
     let alive = true;
     chatSettingsService.getDisappearing(conversationId, jwtToken || authService.getToken())
       .then(sec => { if (alive) setDisappearSeconds(sec); })
       .catch(() => {});
     return () => { alive = false; };
-  }, [selectedFriend?.conversationId, jwtToken]);
+  }, [selectedFriend?.conversationId, jwtToken, chatInView]);
 
   const friendKey = (f) => f?.id || f?.friendUserId;
 
@@ -459,7 +468,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       isSubscribed = false;
       socketService.unsubscribeRoom(conversationId);
     };
-  }, [selectedFriend?.conversationId, jwtToken]);
+  }, [selectedFriend?.conversationId, jwtToken, chatInView]);
 
   // Follow this conversation through a scoped room listener; mutating the global
   // callbacks would steal the random chat's events.
@@ -533,7 +542,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
         }
       },
       onMessageDeleted: (payload) => {
-        if (payload?.messageId) vanishDm([payload.messageId], removeDmMessages);
+        if (payload?.messageId) vanishDm([payload.messageId]);
       },
       onViewed: (payload) => {
         if (!payload?.messageId) return;
@@ -549,9 +558,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
         const who = payload?.changedBy === myId
           ? 'You'
           : (selectedFriend.name || selectedFriend.friendUserName || selectedFriend.username || 'Your friend');
-        const text = seconds
-          ? `${who} turned on disappearing messages. New messages disappear ${disappearWhen(seconds)}.`
-          : `${who} turned off disappearing messages.`;
+        const text = disappearNotice(who, seconds);
         setDmMessages(prev => ({
           ...prev,
           [conversationId]: [...(prev[conversationId] || []), {
@@ -999,28 +1006,12 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   const activeKey = selectedFriend ? (selectedFriend.conversationId || selectedFriend.id) : null;
   const currentMessages = activeKey ? (dmMessages[activeKey] || []) : [];
 
-  // Timed disappearing messages: each one fades out once its time is up (the server purges it too)
-  const dmMessagesRef = useRef(dmMessages);
-  dmMessagesRef.current = dmMessages;
-  useEffect(() => {
-    if (!activeKey) return undefined;
-    const id = setInterval(() => {
-      const now = Date.now();
-      const due = (dmMessagesRef.current[activeKey] || [])
-        .filter(m => m.expiresAt && Date.parse(m.expiresAt) <= now)
-        .map(m => m.id);
-      if (due.length) vanishDm(due, removeDmMessages);
-    }, 1000);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeKey]);
   const messagesById = useMemo(() => {
     const map = new Map();
     (activeKey ? (dmMessages[activeKey] || []) : []).forEach(m => { if (m.id) map.set(m.id, m); });
     return map;
   }, [activeKey, dmMessages]);
   const freshIds = useNewMessageIds(currentMessages, activeKey);
-  const vanishingIds = dmLeavingIds;
 
   return (
     <div className="friends-view" style={{

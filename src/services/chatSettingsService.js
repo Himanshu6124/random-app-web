@@ -18,6 +18,11 @@ export const disappearLabel = (seconds) =>
 export const disappearWhen = (seconds) =>
   seconds === -1 ? 'once they have been seen' : `after ${disappearLabel(seconds).toLowerCase()}`;
 
+/** The chat line shown when someone changes the timer ("You turned on ..."). */
+export const disappearNotice = (who, seconds) => (seconds
+  ? `${who} turned on disappearing messages. New messages disappear ${disappearWhen(seconds)}.`
+  : `${who} turned off disappearing messages.`);
+
 export const chatSettingsService = {
   async getDisappearing(conversationId, token) {
     const res = await fetch(`${BASE_URL}/conversations/${encodeURIComponent(conversationId)}/disappearing`, {

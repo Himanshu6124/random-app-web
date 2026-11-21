@@ -6,8 +6,8 @@ import { applyReaction } from '../components/chat/messageUtils';
 import { feedback } from '../mobile/feedback';
 import { notify, pageInView, navigateTo } from '../services/notify';
 import { cleanTopicIds, formatTopics, loadSavedTopics, saveTopics } from '../content/matchTopics';
-import { useVanish, startAfterSeenCountdown, markViewOnceOpened } from '../components/chat/useVanish';
-import { disappearWhen } from '../services/chatSettingsService';
+import { useDisappearingFeed, startAfterSeenCountdown, markViewOnceOpened } from '../components/chat/useVanish';
+import { disappearNotice } from '../services/chatSettingsService';
 
 const SocketContext = createContext();
 
@@ -154,12 +154,14 @@ export function SocketProvider({ children }) {
   const [randomDisappearSeconds, setRandomDisappearSeconds] = useState(0);
   const randomDisappearRef = useRef(0);
   const lastRandomSeenRef = useRef(null);
-  const { leaving: randomLeaving, vanish: vanishRandomRaw } = useVanish();
-  const removeRandomMessages = useCallback((ids) => {
-    const gone = new Set(ids);
-    setMessages(prev => prev.filter(m => !gone.has(m.id)));
-  }, []);
-  const vanishRandom = useCallback((ids) => vanishRandomRaw(ids, removeRandomMessages), [vanishRandomRaw, removeRandomMessages]);
+  // Timed disappearing messages go (with their fade) once their time is up.
+  const { leaving: randomLeaving } = useDisappearingFeed(
+    () => messagesRef.current,
+    (ids) => {
+      const gone = new Set(ids);
+      setMessages(prev => prev.filter(m => !gone.has(m.id)));
+    }
+  );
 
   /** The newest real message from the stranger (not a system line or a failed send). */
   const lastStrangerMessage = (list) => {
@@ -215,18 +217,6 @@ export function SocketProvider({ children }) {
       window.removeEventListener('focus', onVisible);
     };
   }, [markRandomSeen]);
-
-  // Timed disappearing messages: each goes (with its fade) once its time is up.
-  useEffect(() => {
-    const id = setInterval(() => {
-      const now = Date.now();
-      const due = messagesRef.current
-        .filter(m => m.expiresAt && Date.parse(m.expiresAt) <= now)
-        .map(m => m.id);
-      if (due.length) vanishRandom(due);
-    }, 1000);
-    return () => clearInterval(id);
-  }, [vanishRandom]);
 
   /**
    * Called when a match is found from server CONVERSATION_DTO
@@ -599,9 +589,7 @@ export function SocketProvider({ children }) {
           const who = payload.changedBy === userRef.current?.id
             ? 'You'
             : (currentPeerRef.current?.name || 'Your chat partner');
-          setMessages(prev => [...prev, systemMessage(seconds
-            ? `${who} turned on disappearing messages. New messages disappear ${disappearWhen(seconds)}.`
-            : `${who} turned off disappearing messages.`)]);
+          setMessages(prev => [...prev, systemMessage(disappearNotice(who, seconds))]);
         },
         onTypingStatus: (typing, payload) => {
           const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;

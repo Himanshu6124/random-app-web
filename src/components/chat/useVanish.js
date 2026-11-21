@@ -86,3 +86,33 @@ export function useVanish() {
 
   return { leaving, vanish };
 }
+
+/** True when a timed disappearing message's time is up (ISO string or epoch ms). */
+const isDue = (m, now) => {
+  if (!m?.expiresAt) return false;
+  const at = typeof m.expiresAt === 'number' ? m.expiresAt : Date.parse(m.expiresAt);
+  return Number.isFinite(at) && at <= now;
+};
+
+/**
+ * Disappearing messages of one chat feed, shared by random chats and friend DMs.
+ * `getList()` returns the feed's current messages, `remove(ids)` drops them from it. Every second
+ * the expired ones dissolve (see {@link useVanish}); `vanish(ids)` does the same on demand.
+ */
+export function useDisappearingFeed(getList, remove) {
+  const { leaving, vanish: vanishRaw } = useVanish();
+  const src = useRef({ getList, remove });
+  src.current = { getList, remove };
+  const vanish = useCallback((ids) => vanishRaw(ids, (gone) => src.current.remove(gone)), [vanishRaw]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const now = Date.now();
+      const due = (src.current.getList() || []).filter(m => isDue(m, now)).map(m => m.id);
+      if (due.length) vanish(due);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [vanish]);
+
+  return { leaving, vanish };
+}
