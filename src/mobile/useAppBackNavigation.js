@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useBackHandler } from './useBackHandler';
+import { useBackHandler, exitApp } from './useBackHandler';
 
 /**
  * Back button and closing the site, app-wide:
  * - Back returns to the tab you came from (match → friends → profile, Back → friends → match).
- * - On the first tab, during a random chat, Back asks before leaving the chat instead of
- *   leaving the site, and closing / reloading the page shows the browser's "Leave site?" prompt.
+ * - With nowhere left to go back to, Back always asks before leaving the site (and ends the
+ *   random chat if one is going). During a random chat, closing / reloading the page shows the
+ *   browser's own "Leave site?" prompt too.
  */
 export function useAppBackNavigation({ enabled, activeTab, setActiveTab, inRandomChat, endRandomChat }) {
   const [trail, setTrail] = useState([]);
@@ -40,17 +41,19 @@ export function useAppBackNavigation({ enabled, activeTab, setActiveTab, inRando
     return t.length > 1;
   });
 
-  // Nothing left to go back to: guard the random chat instead of leaving the site.
+  // Nothing left to go back to: ask before leaving the site.
   const [leaveOpen, setLeaveOpen] = useState(false);
-  useBackHandler(enabled && inRandomChat && trail.length === 0, () => {
+  useBackHandler(enabled && trail.length === 0, () => {
     setLeaveOpen(true);
     return true;
   });
-  useEffect(() => { if (!inRandomChat) setLeaveOpen(false); }, [inRandomChat]);
 
+  // Set once the user confirmed leaving, so the browser does not ask a second time.
+  const exitingRef = useRef(false);
   useEffect(() => {
     if (!enabled || !inRandomChat) return undefined;
     const onBeforeUnload = (e) => {
+      if (exitingRef.current) return;
       e.preventDefault();
       e.returnValue = '';
     };
@@ -61,8 +64,12 @@ export function useAppBackNavigation({ enabled, activeTab, setActiveTab, inRando
   const stay = useCallback(() => setLeaveOpen(false), []);
   const leave = useCallback(() => {
     setLeaveOpen(false);
-    endRandomChat();
-  }, [endRandomChat]);
+    exitingRef.current = true;
+    if (inRandomChat) endRandomChat();
+    exitApp();
+    // Still here (no page to go back to): ask again next time.
+    setTimeout(() => { exitingRef.current = false; }, 1500);
+  }, [inRandomChat, endRandomChat]);
 
   return { leaveOpen, stay, leave };
 }

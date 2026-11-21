@@ -28,11 +28,12 @@ function AppContent() {
   const { user, isAuthenticated, authLoading, showLogoutModal, cancelLogout, performLogout } = useAuth();
   const { activeTab, setActiveTab, matchState, currentPeer, peerLeft, disconnectChat } = useSocket();
   // Back goes to the previous tab; leaving during a random chat asks first
+  const inRandomChat = matchState === 'matched' && Boolean(currentPeer) && !peerLeft;
   const backNav = useAppBackNavigation({
     enabled: isAuthenticated,
     activeTab,
     setActiveTab,
-    inRandomChat: matchState === 'matched' && Boolean(currentPeer) && !peerLeft,
+    inRandomChat,
     endRandomChat: disconnectChat
   });
   // Friend to open in the Friends tab when another view (Discover, notifications) asks for a DM
@@ -161,9 +162,11 @@ function AppContent() {
       )}
       <DiscoverConfirmDialog
         open={backNav.leaveOpen}
-        title="Leave this chat?"
-        body="Your random chat will end and this stranger will be gone."
-        confirmLabel="Leave chat"
+        title={inRandomChat ? 'End chat and leave?' : 'Leave RandomChatly?'}
+        body={inRandomChat
+          ? 'Your random chat will end and this stranger will be gone.'
+          : 'You can come back anytime.'}
+        confirmLabel={inRandomChat ? 'End chat & leave' : 'Leave'}
         danger
         onConfirm={backNav.leave}
         onCancel={backNav.stay}
