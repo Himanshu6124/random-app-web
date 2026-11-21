@@ -34,12 +34,13 @@ async function handleApiResponse(response) {
     throw error;
   }
 
-  // Handle 204 No Content
+  // No content (204, or a 200 with an empty body): nothing to parse.
   if (response.status === 204) {
     return null;
   }
-
-  return response.json();
+  const body = await response.text();
+  if (!body.trim()) return null;
+  return JSON.parse(body);
 }
 
 /**
@@ -618,6 +619,7 @@ export const authService = {
           clientMessageId: m.clientMessageId || null,
           expiresAt: m.expiresAt || null,
           viewOnce: Boolean(m.viewOnce),
+          viewedAt: m.viewedAt || null,
           disappearOnSeen: Boolean(m.disappearOnSeen),
           status: m.status || 'SENT',
           type: m.type || 'TEXT',

@@ -12,12 +12,17 @@ export const formatMs = (ms) => {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 };
 
+/** Android's file picker no longer offers the camera, so it gets its own button there. */
+export const hasSeparateCameraPicker = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '');
+
 /**
  * Image + voice-note sending shared by the random chat and friend DMs (B2-3): upload state,
- * the hidden file picker and the recorder. The composer decides where the buttons go.
+ * the hidden file pickers (gallery + camera) and the recorder. The composer decides where the
+ * buttons go. A picked photo is not sent straight away: it lands in `pickedFile` for the photo
+ * editor, which calls `sendImage` with the final picture, caption and view-once choice.
  *
  * - conversationId: current conversation (uploads are namespaced under it)
- * - onSend:         ({ type, objectUri, localPreviewUrl }) => void, fired after upload
+ * - onSend:         ({ type, objectUri, localPreviewUrl, caption?, viewOnce? }) => void, after upload
  * - onError:        (message) => void, inline error surfacing (never silent)
  */
 export function useMediaComposer({ conversationId, onSend, onError }) {
@@ -26,7 +31,9 @@ export function useMediaComposer({ conversationId, onSend, onError }) {
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [micStream, setMicStream] = useState(null);
+  const [pickedFile, setPickedFile] = useState(null);
   const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
   const recorderRef = useRef(null);
   const tickRef = useRef(null);
   const onSendRef = useRef(onSend);
@@ -43,22 +50,40 @@ export function useMediaComposer({ conversationId, onSend, onError }) {
   const configured = isMediaSupported();
 
   const pickImage = useCallback(() => fileInputRef.current?.click(), []);
+  const pickCamera = useCallback(() => cameraInputRef.current?.click(), []);
 
-  const onFileChange = useCallback(async (e) => {
+  const onFileChange = useCallback((e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !conversationId) return;
+    if (file.type && !file.type.startsWith('image/')) {
+      onErrorRef.current?.('That file is not a photo.');
+      return;
+    }
+    setPickedFile(file);
+  }, [conversationId]);
 
+  const clearPicked = useCallback(() => setPickedFile(null), []);
+
+  /**
+   * Uploads the edited photo and sends it. Resolves true when sent; on failure the error is
+   * reported through onError and it resolves false (the editor stays open to retry).
+   */
+  const sendImage = useCallback(async (image, { caption = '', viewOnce = false } = {}) => {
+    if (!image || !conversationId) return false;
     setUploading(true);
     setProgress(0);
     try {
-      const { blob } = await prepareImage(file);
+      const { blob } = await prepareImage(image);
       const messageId = newMessageId();
       const localPreviewUrl = URL.createObjectURL(blob);
       const objectUri = await uploadChatMedia(blob, conversationId, messageId, { onProgress: setProgress });
-      onSendRef.current?.({ type: 'IMAGE', objectUri, localPreviewUrl });
+      onSendRef.current?.({ type: 'IMAGE', objectUri, localPreviewUrl, caption: caption.trim(), viewOnce: Boolean(viewOnce) });
+      setPickedFile(null);
+      return true;
     } catch (err) {
       onErrorRef.current?.(err?.message || 'Image upload failed.');
+      return false;
     } finally {
       setUploading(false);
       setProgress(0);
@@ -127,8 +152,13 @@ export function useMediaComposer({ conversationId, onSend, onError }) {
     elapsed,
     micStream,
     fileInputRef,
+    cameraInputRef,
     pickImage,
+    pickCamera,
     onFileChange,
+    pickedFile,
+    clearPicked,
+    sendImage,
     startRecording,
     stopRecording,
     cancelRecording

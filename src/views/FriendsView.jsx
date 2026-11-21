@@ -23,10 +23,11 @@ import { applyReaction, isInteractive, jumpToMessage, bubbleClass } from '../com
 import { TypingIndicator } from '../components/chat/TypingIndicator';
 import { useChatAutoScroll } from '../components/chat/useChatAutoScroll';
 import { useChatTheme, getChatTheme } from '../components/chat/chatThemes';
-import { ChatThemePicker } from '../components/chat/ChatThemePicker';
+import { ChatThemePicker, ChatBackdrop } from '../components/chat/ChatThemePicker';
 import { DisappearTimer } from '../components/chat/DisappearTimer';
 import { ViewOnceBubble } from '../components/chat/ViewOnceBubble';
-import { useVanish, AFTER_SEEN_READ_MS } from '../components/chat/useVanish';
+import { ExpiryFuse } from '../components/chat/ExpiryFuse';
+import { useVanish, startAfterSeenCountdown, markViewOnceOpened } from '../components/chat/useVanish';
 import { useMessageInteractions } from '../components/chat/useMessageInteractions';
 import { feedback } from '../mobile/feedback';
 import { timeAgo, chatListTime } from '../components/discover/discoverUtils';
@@ -124,29 +125,27 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   chatInViewRef.current = chatInView;
   // Newest seen receipt sent per conversation, so the same message is not re-announced
   const lastSeenSentRef = useRef(new Map());
-  const seenTimerRef = useRef(null);
 
-  /** Sends the seen receipt for `messageId`, but only while the chat is in view. */
+  /**
+   * Sends the seen receipt for `messageId`, but only while the chat is in view. Their "disappear
+   * after seen" messages up to it then stay a few seconds before they dissolve (the server agrees).
+   */
   const sendSeenIfViewing = (conversationId, messageId) => {
     if (!conversationId || !messageId || !chatInViewRef.current) return false;
     if (lastSeenSentRef.current.get(conversationId) === messageId) return false;
     const sent = socketService.sendSeen(conversationId, messageId);
-    if (sent) lastSeenSentRef.current.set(conversationId, messageId);
+    if (sent) {
+      lastSeenSentRef.current.set(conversationId, messageId);
+      const myId = user?.id;
+      setDmMessages(prev => {
+        const list = prev[conversationId];
+        const next = startAfterSeenCountdown(list, messageId, m => m.senderId !== myId);
+        return next === list ? prev : { ...prev, [conversationId]: next };
+      });
+    }
     return sent;
   };
-  /** Seen now, or after a short read time for "disappear after seen" messages. */
-  const requestSeen = (conversationId, messageId, delayMs = 0) => {
-    clearTimeout(seenTimerRef.current);
-    if (delayMs > 0) {
-      seenTimerRef.current = setTimeout(() => sendSeenIfViewing(conversationId, messageId), delayMs);
-      return;
-    }
-    sendSeenIfViewing(conversationId, messageId);
-  };
-  // Leaving the chat (or the page) cancels a pending receipt
-  useEffect(() => {
-    if (!chatInView) clearTimeout(seenTimerRef.current);
-  }, [chatInView]);
+  const requestSeen = (conversationId, messageId) => sendSeenIfViewing(conversationId, messageId);
 
   // Resize listener for mobile/desktop layout
   useEffect(() => {
@@ -385,9 +384,6 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   const mergeApiMessages = (conversationId, friendId, apiMessages) => {
     if (!Array.isArray(apiMessages) || apiMessages.length === 0) return;
     const lastPeerMsg = [...apiMessages].reverse().find(m => m.senderId !== user?.id);
-    if (lastPeerMsg?.id) {
-      sendSeenIfViewing(conversationId, lastPeerMsg.id);
-    }
     setDmMessages(prev => {
       const existingLocal = prev[conversationId] || prev[friendId] || [];
       const mergedMap = new Map();
@@ -413,6 +409,10 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
       });
       return { ...prev, [conversationId]: mergedList, [friendId]: mergedList };
     });
+    // After the merge, so an "after seen" countdown finds the fetched messages
+    if (lastPeerMsg?.id) {
+      sendSeenIfViewing(conversationId, lastPeerMsg.id);
+    }
   };
 
   // Back from the background / reconnected: messages pushed meanwhile were missed, refetch.
@@ -491,6 +491,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
             clientMessageId: msg.clientMessageId || null,
             expiresAt: msg.expiresAt || null,
             viewOnce: Boolean(msg.viewOnce),
+            viewedAt: msg.viewedAt || null,
             disappearOnSeen: Boolean(msg.disappearOnSeen),
             reactEmojiSender: msg.reactEmojiSender || null,
             reactEmojiReceiver: msg.reactEmojiReceiver || null,
@@ -528,14 +529,19 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
         });
 
         if (msg.id && msg.senderId !== myId) {
-          requestSeen(conversationId, msg.id, msg.disappearOnSeen ? AFTER_SEEN_READ_MS : 0);
+          requestSeen(conversationId, msg.id);
         }
       },
       onMessageDeleted: (payload) => {
         if (payload?.messageId) vanishDm([payload.messageId], removeDmMessages);
       },
       onViewed: (payload) => {
-        if (payload?.messageId) vanishDm([payload.messageId], removeDmMessages);
+        if (!payload?.messageId) return;
+        setDmMessages(prev => {
+          const list = prev[conversationId];
+          const next = markViewOnceOpened(list, payload.messageId, payload.viewedAt);
+          return next === list ? prev : { ...prev, [conversationId]: next };
+        });
       },
       onDisappearing: (payload) => {
         const seconds = Number(payload?.seconds) || 0;
@@ -563,16 +569,19 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
           return { ...prev, [conversationId]: currentList.map(m => applyReaction(m, payload)) };
         });
       },
-      onSeen: (_payload) => {
+      onSeen: (payload) => {
+        if (payload?.senderId === myId) return;
         setDmMessages(prev => {
           const currentList = prev[conversationId] || [];
           const updated = currentList.map(m => {
-            if (m.sender === 'me' || m.senderId === myId) {
+            if ((m.sender === 'me' || m.senderId === myId) && m.status !== 'SEEN' && m.status !== 'SENDING' && m.status !== 'FAILED') {
               return { ...m, status: 'SEEN' };
             }
             return m;
           });
-          return { ...prev, [conversationId]: updated };
+          // Disappear after seen: my messages up to the one they just read go a few seconds from now
+          const counted = startAfterSeenCountdown(updated, payload?.messageId, m => m.senderId === myId);
+          return { ...prev, [conversationId]: counted };
         });
       },
       onTyping: (typing, payload) => {
@@ -644,13 +653,12 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
     && m.senderId !== 'system' && m.senderId !== 'game'
     && !String(m.id).startsWith('pending_') && !String(m.id).startsWith('failed_')) || null;
   const lastPeerDmId = lastPeerDm?.id || null;
-  const lastPeerDmAfterSeen = Boolean(lastPeerDm?.disappearOnSeen);
   useEffect(() => {
     const conversationId = selectedFriend?.conversationId;
     if (!chatInView || !conversationId || !lastPeerDmId) return;
-    requestSeen(conversationId, lastPeerDmId, lastPeerDmAfterSeen ? AFTER_SEEN_READ_MS : 0);
+    requestSeen(conversationId, lastPeerDmId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatInView, selectedFriend?.conversationId, lastPeerDmId, lastPeerDmAfterSeen]);
+  }, [chatInView, selectedFriend?.conversationId, lastPeerDmId]);
 
   // Opening a chat lands on the last message with no scroll animation; new messages glide in.
   useChatAutoScroll(feedRef, {
@@ -837,12 +845,12 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
    * Firebase Storage first and hands us the objectUri. Friend-DM media is persisted
    * history — the backend never cleans it up.
    */
-  const handleSendMediaDm = ({ type, objectUri, viewOnce = false }) => {
+  const handleSendMediaDm = ({ type, objectUri, viewOnce = false, caption: typedCaption = '' }) => {
     if (!selectedFriend?.conversationId || !objectUri) return;
     const sendViewOnce = Boolean(viewOnce) && type === 'IMAGE';
 
     const conversationId = selectedFriend.conversationId;
-    const caption = type === 'IMAGE' ? '📷 Photo' : '🎤 Voice note';
+    const caption = type === 'IMAGE' ? (typedCaption.trim() || '📷 Photo') : '🎤 Voice note';
     const rawTime = new Date().toISOString();
     const referredMessageId = replyTarget?.id || null;
     setReplyTarget(null);
@@ -950,12 +958,16 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
   };
   const removeDmMessage = (messageId) => removeDmMessages([messageId]);
 
-  /** I opened a view-once photo: it goes for both people. */
+  /** I opened a view-once photo: both chats now show it as "Opened". */
   const openDmViewOnce = (msg) => {
     const conversationId = selectedFriend?.conversationId;
     if (!conversationId || !msg?.id) return;
     socketService.sendViewed(conversationId, msg.id);
-    vanishDm([msg.id], removeDmMessages);
+    setDmMessages(prev => {
+      const list = prev[conversationId];
+      const next = markViewOnceOpened(list, msg.id);
+      return next === list ? prev : { ...prev, [conversationId]: next };
+    });
   };
 
   /** Delete for everyone: my own, already-sent messages only. */
@@ -1323,6 +1335,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
         overflow: 'hidden',
         position: 'relative'
       }}>
+        <ChatBackdrop theme={chatTheme} />
         {/* Floating Animated Reactions */}
         {floatingReactions.map(r => (
           <div
@@ -1597,6 +1610,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
                       ) : (
                         <span className="chat-bubble__text">{m.text}</span>
                       )}
+                      <ExpiryFuse expiresAt={m.expiresAt} />
                     </div>
                     </MessageShell>
                     <span style={{
@@ -1713,6 +1727,7 @@ export function FriendsView({ onStartMatch, initialFriendId, onInitialFriendHand
               placeholder={isLiveConnected ? `Message ${friendDisplayName}...` : 'Reconnecting…'}
               conversationId={selectedFriend?.conversationId}
               onSendMedia={handleSendMediaDm}
+              peerName={selectedFriend?.name || selectedFriend?.friendUserName || selectedFriend?.username || ''}
               onMediaError={setMediaError}
               sendClassName="btn-cyan"
             />

@@ -64,7 +64,7 @@ function readAsImage(file) {
 }
 
 /** Decodes an image, honouring EXIF rotation. createImageBitmap is the most reliable path. */
-async function decodeImage(file) {
+export async function decodeImage(file) {
   if (typeof createImageBitmap === 'function') {
     try {
       const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });

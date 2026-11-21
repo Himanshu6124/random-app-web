@@ -1,32 +1,60 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
 import { MediaViewer } from './MediaViewer';
 
+/** WhatsApp's view-once mark: a "1" in a circle. `opened` draws the dashed, spent version. */
+export function ViewOnceIcon({ size = 20, opened = false, filled = false, className = '' }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="9.25"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeDasharray={opened ? '3.2 2.6' : undefined}
+        strokeLinecap="round"
+        fill={filled ? 'currentColor' : 'none'}
+      />
+      {!opened && (
+        <path
+          d="M10.3 9.2 12.6 7.6V16.4"
+          stroke={filled ? 'var(--vo-fill-text, #111)' : 'currentColor'}
+          strokeWidth="1.9"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+    </svg>
+  );
+}
+
 /**
- * A view-once photo. The receiver sees a tap-to-open card; the photo opens once and the message
- * is removed for both people when the viewer closes it. The sender only sees that it waits.
+ * A view-once photo, like WhatsApp:
+ * - receiver: "Photo" with the 1-icon; tap opens it full screen exactly once,
+ * - after that both people keep the message, shown as "Opened" (the photo itself is gone),
+ * - sender: "Photo" until the other person opens it, then "Opened".
  */
 export function ViewOnceBubble({ msg, isMe, onOpened }) {
   const [open, setOpen] = useState(false);
-  const [opened, setOpened] = useState(false);
+  const opened = Boolean(msg.viewedAt);
+  const caption = (msg.text || msg.message || '').trim();
+  const showCaption = caption && caption !== '📷 Photo';
 
-  if (isMe) {
+  if (opened || isMe) {
     return (
-      <div className="view-once view-once--sent" aria-label="View once photo, waiting to be opened">
-        <Eye size={18} aria-hidden="true" />
+      <div className={`view-once view-once--static${opened ? ' is-opened' : ''}`}>
+        <ViewOnceIcon opened={opened} />
         <span className="view-once__text">
-          <strong>View once photo</strong>
-          <span>Disappears after they open it</span>
+          <strong>{opened ? 'Opened' : 'Photo'}</strong>
+          {showCaption && !opened && <span className="view-once__caption">{caption}</span>}
         </span>
-      </div>
-    );
-  }
-
-  if (opened) {
-    return (
-      <div className="view-once view-once--done">
-        <EyeOff size={18} aria-hidden="true" />
-        <span className="view-once__text"><strong>Opened</strong></span>
       </div>
     );
   }
@@ -36,13 +64,13 @@ export function ViewOnceBubble({ msg, isMe, onOpened }) {
       <button
         type="button"
         className="view-once"
-        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+        onClick={(e) => { e.stopPropagation(); if (msg.objectUri) setOpen(true); }}
         aria-label="View once photo. Tap to open, it can only be opened once"
       >
-        <Eye size={18} aria-hidden="true" />
+        <ViewOnceIcon />
         <span className="view-once__text">
           <strong>Photo</strong>
-          <span>Tap to view once</span>
+          {showCaption && <span className="view-once__caption">{caption}</span>}
         </span>
       </button>
       {open && (
@@ -53,7 +81,6 @@ export function ViewOnceBubble({ msg, isMe, onOpened }) {
             alt="View once photo"
             onClose={() => {
               setOpen(false);
-              setOpened(true);
               onOpened?.(msg);
             }}
           />

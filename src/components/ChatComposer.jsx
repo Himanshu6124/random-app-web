@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Image as ImageIcon, Mic, Send, X, ArrowUp, ChevronUp, Trash2, Eye } from 'lucide-react';
-import { useMediaComposer, formatMs } from './MediaComposer';
+import { Image as ImageIcon, Camera, Mic, Send, X, ArrowUp, ChevronUp, Trash2 } from 'lucide-react';
+import { useMediaComposer, formatMs, hasSeparateCameraPicker } from './MediaComposer';
+import { PhotoEditor } from './chat/PhotoEditor';
 import { VoiceWaveform } from './VoiceWaveform';
 import { MAX_MESSAGE_LENGTH } from '../services/socketService';
 import { feedback } from '../mobile/feedback';
@@ -22,8 +23,11 @@ const markCoachSeen = () => {
  *
  *   [leading]  ( message …            [image] )  [mic | send]
  *
- * The round button is a mic by default and turns into Send as soon as the message field is
- * focused or has text.
+ * The round button is a mic by default and turns into Send only once the message field has
+ * at least one typed character (focusing the empty field keeps the mic).
+ *
+ * Photos: the gallery button (plus a camera button on Android, whose picker has no camera option)
+ * opens the photo editor: crop, stickers, text, drawing, a caption and the view-once switch.
  *
  * Voice notes: press and HOLD the mic to record, release to send, slide up to cancel.
  * A quick tap explains the gesture. Keyboard users (Enter / Space on the mic) get the
@@ -42,20 +46,13 @@ export function ChatComposer({
   conversationId,
   onSendMedia,
   onMediaError,
-  sendClassName = 'btn-primary'
+  sendClassName = 'btn-primary',
+  peerName = ''
 }) {
   const [focused, setFocused] = useState(false);
-  // View once: the next photo sent from here opens only once for the receiver, then it is gone.
-  const [viewOnceArmed, setViewOnceArmed] = useState(false);
-  const armedRef = useRef(false);
-  armedRef.current = viewOnceArmed;
   const media = useMediaComposer({
     conversationId,
-    onSend: (sent) => {
-      const viewOnce = armedRef.current && sent.type === 'IMAGE';
-      if (viewOnce) setViewOnceArmed(false);
-      onSendMedia?.({ ...sent, viewOnce });
-    },
+    onSend: (sent) => onSendMedia?.({ ...sent, viewOnce: Boolean(sent.viewOnce) && sent.type === 'IMAGE' }),
     onError: onMediaError
   });
   const { configured, uploading, progress, recording, elapsed, micStream } = media;
@@ -70,7 +67,7 @@ export function ChatComposer({
   const coachTimer = useRef(null);
 
   const hasText = value.trim().length > 0;
-  const showSend = !recording && !holding && (focused || hasText || !configured);
+  const showSend = !recording && !holding && (hasText || !configured);
   const mediaBusy = uploading || recording;
   const mediaTitle = configured ? null : 'Media sharing is not configured yet';
   const holdMode = holding || (recording && press.current?.hold);
@@ -267,10 +264,9 @@ export function ChatComposer({
             enterKeyHint="send"
             aria-label="Message"
           />
-          {uploading && (
+          {uploading && !media.pickedFile && (
             <span className="wa-field__progress" id="media-upload-progress">{progress}%</span>
           )}
-          {/* image/* (not a list of types) so Android's picker offers the camera too */}
           <input
             ref={media.fileInputRef}
             type="file"
@@ -278,19 +274,29 @@ export function ChatComposer({
             style={{ display: 'none' }}
             onChange={media.onFileChange}
           />
-          <button
-            type="button"
-            id="view-once-btn"
-            className={`wa-icon-btn${viewOnceArmed ? ' is-armed' : ''}`}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setViewOnceArmed(v => !v)}
-            disabled={disabled || mediaBusy || !configured}
-            aria-pressed={viewOnceArmed}
-            aria-label={viewOnceArmed ? 'View once is on for the next photo' : 'Send the next photo as view once'}
-            title={viewOnceArmed ? 'View once is on: the next photo opens once' : 'View once for the next photo'}
-          >
-            <Eye size={18} aria-hidden="true" />
-          </button>
+          {/* capture opens the camera app directly (Android's photo picker has no camera option) */}
+          <input
+            ref={media.cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{ display: 'none' }}
+            onChange={media.onFileChange}
+          />
+          {hasSeparateCameraPicker && (
+            <button
+              type="button"
+              id="attach-camera-btn"
+              className="wa-icon-btn"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={media.pickCamera}
+              disabled={disabled || mediaBusy || !configured}
+              aria-label="Take a photo"
+              title={mediaTitle || 'Take a photo'}
+            >
+              <Camera size={20} aria-hidden="true" />
+            </button>
+          )}
           <button
             type="button"
             id="attach-image-btn"
@@ -298,8 +304,8 @@ export function ChatComposer({
             onMouseDown={(e) => e.preventDefault()}
             onClick={media.pickImage}
             disabled={disabled || mediaBusy || !configured}
-            aria-label="Send an image"
-            title={mediaTitle || 'Send an image'}
+            aria-label={hasSeparateCameraPicker ? 'Send a photo from the gallery' : 'Send a photo'}
+            title={mediaTitle || 'Send a photo'}
           >
             <ImageIcon size={20} aria-hidden="true" />
           </button>
@@ -351,6 +357,17 @@ export function ChatComposer({
           <Trash2 size={16} />
           <ChevronUp size={16} className="wa-cancel-zone__chev" />
         </div>
+      )}
+
+      {media.pickedFile && (
+        <PhotoEditor
+          file={media.pickedFile}
+          peerName={peerName}
+          uploading={uploading}
+          progress={progress}
+          onCancel={media.clearPicked}
+          onSend={({ image, caption, viewOnce }) => media.sendImage(image, { caption, viewOnce })}
+        />
       )}
 
       {coach && !(holding && coach === 'tap') && (

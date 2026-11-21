@@ -5,9 +5,58 @@
    ═════════════════════════════════════════════════════════════ */
 
 /* ── Theme surface: themes set --ct-* vars on .chat-screen ── */
-.chat-screen .chat-feed {
-  /* The theme's emoji motif tiles over its colours (no motif on the classic look). */
-  background: var(--ct-pattern, none) 0 0 / 168px 168px repeat, var(--ct-feed-bg, transparent);
+/* Own stacking context, so the wallpaper (z-index -1) sits above the panel but below everything else. */
+.chat-screen { isolation: isolate; }
+.chat-screen:not([data-chat-theme='default']) .chat-feed { background: transparent; }
+/* The header's menus (disappearing timer, …) open over the feed, which is z-index 10 too. */
+.chat-screen .chat-topbar { z-index: 30 !important; }
+
+.ct-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--ct-feed-bg, transparent);
+  border-radius: inherit;
+}
+/* Aurora: three soft colour fields, oversized and drifting. Transform-only, so it stays on the GPU. */
+.ct-backdrop__aurora {
+  position: absolute;
+  inset: -30%;
+  background:
+    radial-gradient(32% 28% at 22% 26%, var(--ct-blob-1, transparent), transparent 70%),
+    radial-gradient(30% 34% at 78% 34%, var(--ct-blob-2, transparent), transparent 70%),
+    radial-gradient(38% 30% at 48% 78%, var(--ct-blob-3, transparent), transparent 70%);
+  animation: ct-aurora 28s ease-in-out infinite alternate;
+  will-change: transform;
+}
+.ct-backdrop__pattern {
+  position: absolute;
+  inset: 0;
+  background-image: var(--ct-pattern, none);
+  background-size: var(--ct-pattern-size, 160px);
+  opacity: var(--ct-pattern-opacity, 0.06);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 22%, #000 78%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 22%, #000 78%, transparent 100%);
+}
+.ct-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--ct-grain, none);
+  background-size: 160px;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+}
+.ct-backdrop.is-still .ct-backdrop__aurora { animation: none; }
+@keyframes ct-aurora {
+  0% { transform: translate3d(-5%, -3%, 0) rotate(0deg) scale(1); }
+  50% { transform: translate3d(4%, 3%, 0) rotate(8deg) scale(1.08); }
+  100% { transform: translate3d(-2%, 6%, 0) rotate(-6deg) scale(1.14); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ct-backdrop__aurora { animation: none; }
 }
 
 /* ── Bubbles ── */
@@ -32,6 +81,14 @@
   border-bottom-left-radius: var(--radius-xs);
   background: var(--ct-them-bg, var(--plum-3));
   border: 1px solid var(--ct-them-border, var(--border-color));
+  color: var(--ct-them-text, var(--text-primary));
+}
+/* Themed bubbles: "me" glows in its own colour, "them" gets a soft glass highlight */
+.chat-screen:not([data-chat-theme='default']) .chat-bubble--me {
+  box-shadow: 0 8px 22px -12px var(--ct-me-glow, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+.chat-screen:not([data-chat-theme='default']) .chat-bubble--them {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 6px 18px -14px rgba(0, 0, 0, 0.8);
 }
 .chat-bubble--me-shape { border-bottom-right-radius: var(--radius-xs); }
 .chat-bubble--failed {
@@ -59,6 +116,13 @@
 .chat-screen[data-chat-theme]:not([data-chat-theme='default']) .chat-bubble--me .reply-quote__text { color: inherit; opacity: 0.85; }
 .chat-screen[data-chat-theme]:not([data-chat-theme='default']) .chat-bubble--them .reply-quote__author { color: var(--ct-accent, var(--accent)); }
 .chat-screen[data-chat-theme='mono'] .chat-bubble--me .reply-quote { background: rgba(0, 0, 0, 0.08); }
+/* Light "me" bubbles (dark text): a lighter quote shade */
+.chat-screen[data-chat-theme='lavender'] .chat-bubble--me .reply-quote,
+.chat-screen[data-chat-theme='candy'] .chat-bubble--me .reply-quote,
+.chat-screen[data-chat-theme='midnight'] .chat-bubble--me .reply-quote,
+.chat-screen[data-chat-theme='lofi'] .chat-bubble--me .reply-quote,
+.chat-screen[data-chat-theme='citrus'] .chat-bubble--me .reply-quote,
+.chat-screen[data-chat-theme='holo'] .chat-bubble--me .reply-quote { background: rgba(0, 0, 0, 0.1); }
 
 .chat-media { display: flex; flex-direction: column; gap: 2px; }
 .chat-media__img {
@@ -86,19 +150,20 @@
 }
 .ct-picker {
   width: 100%;
-  max-width: 520px;
-  max-height: 82vh;
+  max-width: 560px;
+  max-height: 86vh;
   overflow-y: auto;
-  background: var(--plum-2);
+  background: var(--plum-1);
   border: 1px solid var(--border-color);
   border-bottom: none;
-  border-radius: 22px 22px 0 0;
-  padding: 8px 18px max(18px, var(--safe-bottom, 0px));
-  animation: ct-up 0.28s var(--ease-out);
+  border-radius: 26px 26px 0 0;
+  padding: 8px 18px max(20px, var(--safe-bottom, 0px));
+  animation: ct-up 0.3s var(--ease-out);
+  overscroll-behavior: contain;
 }
 @media (min-width: 769px) {
   .ct-picker-scrim { align-items: center; }
-  .ct-picker { border-radius: 22px; border-bottom: 1px solid var(--border-color); padding-bottom: 18px; }
+  .ct-picker { border-radius: 26px; border-bottom: 1px solid var(--border-color); padding-bottom: 20px; }
   .ct-picker__grab { display: none; }
 }
 .ct-picker__grab {
@@ -110,11 +175,12 @@
 }
 .ct-picker__head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin: 4px 0 14px;
+  margin: 6px 0 6px;
 }
-.ct-picker__head h3 { font-size: var(--fs-lg); font-weight: 700; margin: 0; }
+.ct-picker__head h3 { font-size: var(--fs-xl, 22px); font-weight: 800; margin: 0; letter-spacing: -0.01em; }
+.ct-picker__sub { margin: 2px 0 0; font-size: var(--fs-sm); color: var(--text-muted); }
 .ct-picker__close {
   width: 34px;
   height: 34px;
@@ -127,61 +193,60 @@
   justify-content: center;
   cursor: pointer;
 }
+.ct-picker__group h4 {
+  margin: 18px 0 10px;
+  font-size: var(--fs-xs, 12px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
 .ct-picker__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 14px 12px;
 }
 .ct-swatch {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 6px;
+  align-items: stretch;
+  gap: 7px;
   padding: 0;
   border: none;
   background: none;
   color: var(--text-secondary);
   cursor: pointer;
   font: inherit;
+  -webkit-tap-highlight-color: transparent;
 }
 .ct-swatch__preview {
   position: relative;
+  isolation: isolate;
   width: 100%;
   aspect-ratio: 3 / 4;
-  border-radius: 16px;
+  border-radius: 18px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   gap: 5px;
-  padding: 10px 8px;
-  background: var(--ct-pattern, none) 0 0 / 96px 96px repeat, var(--ct-feed-bg, var(--plum-1));
-  border: 2px solid var(--border-color);
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  padding: 10px 9px;
+  background: var(--plum-2);
+  box-shadow: 0 0 0 1px var(--border-color);
+  transition: transform 0.2s var(--ease-out), box-shadow 0.2s ease;
 }
-.ct-swatch:hover .ct-swatch__preview { transform: translateY(-2px); }
-.ct-swatch.is-selected .ct-swatch__preview { border-color: var(--text-primary); }
+.ct-swatch:hover .ct-swatch__preview { transform: translateY(-3px); }
+.ct-swatch:active .ct-swatch__preview { transform: scale(0.96); }
+.ct-swatch.is-selected .ct-swatch__preview {
+  box-shadow: 0 0 0 2px var(--plum-1), 0 0 0 4px var(--ct-accent, var(--text-primary)), 0 10px 26px -10px var(--ct-me-glow, transparent);
+}
 .ct-swatch.is-selected .ct-swatch__name { color: var(--text-primary); font-weight: 700; }
-.ct-swatch__name { font-size: var(--fs-sm); display: inline-flex; align-items: center; gap: 4px; }
-.ct-swatch__icon {
-  position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  line-height: 1;
-  background: rgba(0, 0, 0, 0.28);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
-  transition: transform 0.2s var(--ease-out);
-}
-.ct-swatch:hover .ct-swatch__icon,
-.ct-swatch.is-selected .ct-swatch__icon { transform: translateX(-50%) scale(1.12); }
+.ct-swatch__name { font-size: var(--fs-sm); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Small previews stay still unless picked (a grid of moving auroras is a lot) */
+.ct-backdrop--mini .ct-backdrop__aurora { animation-play-state: paused; }
+.ct-swatch.is-selected .ct-backdrop--mini .ct-backdrop__aurora,
+.ct-swatch:hover .ct-backdrop--mini .ct-backdrop__aurora { animation-play-state: running; }
+.ct-backdrop--mini .ct-backdrop__pattern { background-size: calc(var(--ct-pattern-size, 160px) * 0.6); }
 .ct-picker__error {
   margin: 14px 0 0;
   font-size: var(--fs-sm);
@@ -190,40 +255,37 @@
 }
 .ct-swatch__bubble {
   display: block;
-  height: 14px;
+  height: 13px;
   border-radius: 8px;
 }
 .ct-swatch__bubble--them {
-  width: 62%;
+  width: 64%;
   align-self: flex-start;
   background: var(--ct-them-bg, var(--plum-3));
   border: 1px solid var(--ct-them-border, var(--border-color));
 }
 .ct-swatch__bubble--me {
-  width: 70%;
+  width: 72%;
   align-self: flex-end;
   background: var(--ct-me-bg, var(--accent-tint));
   border: 1px solid var(--ct-me-border, var(--accent-line));
+  box-shadow: 0 4px 12px -6px var(--ct-me-glow, transparent);
 }
-.ct-swatch__bubble--short { width: 45%; }
+.ct-swatch__bubble--short { width: 44%; }
+.ct-swatch__bubble--them.ct-swatch__bubble--short { width: 40%; margin-bottom: 4px; }
 .ct-swatch__check {
   position: absolute;
-  top: 7px;
-  right: 7px;
+  top: 8px;
+  right: 8px;
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--text-primary);
-  color: var(--plum-0);
+  background: var(--ct-accent, var(--text-primary));
+  color: #0b0b0b;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-.ct-picker__note {
-  margin: 16px 0 0;
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-  text-align: center;
+  animation: ct-pop 0.3s var(--ease-out);
 }
 @keyframes ct-fade { from { opacity: 0; } }
 @keyframes ct-up { from { transform: translateY(40px); opacity: 0; } }

@@ -21,9 +21,10 @@ import { MarqueeText } from './MarqueeText';
 import { TypingIndicator } from './chat/TypingIndicator';
 import { useChatAutoScroll } from './chat/useChatAutoScroll';
 import { useChatTheme } from './chat/chatThemes';
-import { ChatThemePicker } from './chat/ChatThemePicker';
+import { ChatThemePicker, ChatBackdrop } from './chat/ChatThemePicker';
 import { DisappearTimer } from './chat/DisappearTimer';
 import { ViewOnceBubble } from './chat/ViewOnceBubble';
+import { ExpiryFuse } from './chat/ExpiryFuse';
 
 // AI partners we "sent" a friend request to (never sent to the server), kept across tab switches.
 const botRequestsSent = new Set();
@@ -407,6 +408,7 @@ export function ChatBox() {
       overflow: 'hidden',
       zIndex: 5
     }}>
+      <ChatBackdrop theme={chatTheme} />
       {/* Floating Animated Reactions */}
       {floatingReactions.map(r => (
         <div
@@ -648,6 +650,7 @@ export function ChatBox() {
                 ) : (
                   <span className="chat-bubble__text">{msg.text || msg.message}</span>
                 )}
+                <ExpiryFuse expiresAt={msg.expiresAt} />
               </div>
               </MessageShell>
 
@@ -832,6 +835,7 @@ export function ChatBox() {
         disabled={composerDisabled}
         placeholder={composerPlaceholder}
         conversationId={currentPeer?.conversationId || currentPeer?.id}
+        peerName={peerName}
         onSendMedia={handleSendMedia}
         onMediaError={setMediaError}
         leading={(

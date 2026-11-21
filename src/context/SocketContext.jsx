@@ -6,7 +6,7 @@ import { applyReaction } from '../components/chat/messageUtils';
 import { feedback } from '../mobile/feedback';
 import { notify, pageInView, navigateTo } from '../services/notify';
 import { cleanTopicIds, formatTopics, loadSavedTopics, saveTopics } from '../content/matchTopics';
-import { useVanish, AFTER_SEEN_READ_MS } from '../components/chat/useVanish';
+import { useVanish, startAfterSeenCountdown, markViewOnceOpened } from '../components/chat/useVanish';
 import { disappearWhen } from '../services/chatSettingsService';
 
 const SocketContext = createContext();
@@ -173,8 +173,8 @@ export function SocketProvider({ children }) {
   };
 
   /**
-   * The stranger's messages up to `target` have now been seen: send the receipt once, and drop
-   * the stranger's "disappear after seen" messages up to that point.
+   * The stranger's messages up to `target` have now been seen: send the receipt once, and start
+   * the short countdown of the stranger's "disappear after seen" messages up to that point.
    */
   const markRandomSeen = useCallback((target) => {
     const convId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
@@ -184,16 +184,9 @@ export function SocketProvider({ children }) {
     lastRandomSeenRef.current = key;
     socketService.sendRandomChatSeen(convId, target.id);
 
-    const list = messagesRef.current.some(m => m.id === target.id)
-      ? messagesRef.current
-      : [...messagesRef.current, target];
-    const idx = list.findIndex(m => m.id === target.id);
     const myId = userRef.current?.id;
-    const gone = list.slice(0, idx + 1)
-      .filter(m => m.senderId !== myId && m.disappearOnSeen)
-      .map(m => m.id);
-    vanishRandom(gone);
-  }, [vanishRandom]);
+    setMessages(prev => startAfterSeenCountdown(prev, target.id, m => m.senderId !== myId));
+  }, []);
 
   // When returning to Random Match tab, clear unread notifications and send seen receipt
   useEffect(() => {
@@ -326,11 +319,8 @@ export function SocketProvider({ children }) {
         });
       } else if (pageInView()) {
         // Looking directly at Random Match: mark it seen now (if not, it is marked when they return).
-        // A disappear-after-seen message waits a moment so it can be read first.
-        if (msg.disappearOnSeen) setTimeout(() => {
-          if (activeTabRef.current === 'match' && pageInView()) markRandomSeen(msg);
-        }, AFTER_SEEN_READ_MS);
-        else markRandomSeen(msg);
+        // "After seen" messages then stay a few seconds before they dissolve.
+        markRandomSeen(msg);
       }
 
       feedback('receive');
@@ -589,26 +579,16 @@ export function SocketProvider({ children }) {
           if (!activeConvId || payload?.conversationId !== activeConvId) return;
 
           const myId = userRef.current?.id;
-          setMessages(prev => prev.map(m => {
-            if (m.senderId === myId) {
-              return { ...m, status: 'SEEN' };
-            }
-            return m;
-          }));
-
-          // Disappear after seen: my messages up to the one they just read go now
-          const list = messagesRef.current;
-          const idx = list.findIndex(m => m.id === payload?.messageId);
-          if (idx === -1) return;
-          const gone = list.slice(0, idx + 1)
-            .filter(m => m.senderId === myId && m.disappearOnSeen)
-            .map(m => m.id);
-          vanishRandom(gone);
+          setMessages(prev => {
+            const seen = prev.map(m => (m.senderId === myId && m.status !== 'SEEN' ? { ...m, status: 'SEEN' } : m));
+            // Disappear after seen: my messages up to the one they just read go a few seconds from now
+            return startAfterSeenCountdown(seen, payload?.messageId, m => m.senderId === myId);
+          });
         },
         onMessageViewed: (payload) => {
           const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
           if (!activeConvId || payload?.conversationId !== activeConvId || !payload?.messageId) return;
-          vanishRandom([payload.messageId]);
+          setMessages(prev => markViewOnceOpened(prev, payload.messageId, payload.viewedAt));
         },
         onDisappearing: (payload) => {
           const activeConvId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
@@ -979,13 +959,13 @@ export function SocketProvider({ children }) {
    * Failure becomes a visible FAILED bubble with no retry (retrying would need the file,
    * not the text) — matching the "never look sent when it is not" rule.
    */
-  const sendMedia = useCallback(({ type, objectUri, localPreviewUrl, referredMessageId = null, viewOnce = false }) => {
+  const sendMedia = useCallback(({ type, objectUri, localPreviewUrl, referredMessageId = null, viewOnce = false, caption: typedCaption = '' }) => {
     if (!currentPeer || peerLeft || !isPeerOnline) return false;
 
     const conversationId = currentPeer.conversationId || currentPeer.id;
     if (!conversationId || !objectUri) return false;
 
-    const caption = type === 'IMAGE' ? '📷 Photo' : '🎤 Voice note';
+    const caption = type === 'IMAGE' ? (typedCaption.trim() || '📷 Photo') : '🎤 Voice note';
     const delivered = socketService.sendRandomChatMessage(conversationId, caption, type, objectUri, referredMessageId, null, viewOnce && type === 'IMAGE');
 
     if (!delivered) {
@@ -1015,13 +995,13 @@ export function SocketProvider({ children }) {
     return socketService.sendRandomDisappearing(convId, seconds);
   }, []);
 
-  /** I opened a view-once photo: it goes for both people. */
+  /** I opened a view-once photo: both chats now show it as "Opened". */
   const openRandomViewOnce = useCallback((msg) => {
     const convId = currentPeerRef.current?.conversationId || currentPeerRef.current?.id;
     if (!convId || !msg?.id) return;
     socketService.sendViewed(convId, msg.id);
-    vanishRandom([msg.id]);
-  }, [vanishRandom]);
+    setMessages(prev => markViewOnceOpened(prev, msg.id));
+  }, []);
 
   const sendReaction = useCallback((emoji) => {
     if (peerLeftRef.current || !isPeerOnlineRef.current) return;

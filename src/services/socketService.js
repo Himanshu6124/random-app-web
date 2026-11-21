@@ -585,6 +585,7 @@ export class SocketService {
           clientMessageId: payload.clientMessageId || null,
           expiresAt: payload.expiresAt || null,
           viewOnce: Boolean(payload.viewOnce),
+          viewedAt: payload.viewedAt || null,
           disappearOnSeen: Boolean(payload.disappearOnSeen),
           timestamp: rawTime,
           time: new Date(rawTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -611,6 +612,8 @@ export class SocketService {
       }
 
       case 'SEEN': {
+        // The room echoes my own receipt back: it says nothing about MY messages being seen.
+        if (payload.senderId && payload.senderId === this.activeUserId) break;
         this.callbacks.onMessageSeen?.(payload);
         this._emitRoom(conversationId, 'onSeen', payload);
         break;
@@ -650,7 +653,7 @@ export class SocketService {
       }
 
       case 'VIEWED': {
-        // A view-once message was opened: it is gone for both people.
+        // A view-once message was opened: both chats now show it as "Opened".
         this.callbacks.onMessageViewed?.(payload);
         this._emitRoom(conversationId, 'onViewed', payload);
         break;
