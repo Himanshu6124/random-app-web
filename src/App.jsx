@@ -17,6 +17,8 @@ import { subscribeNavigate, navigateTo } from './services/notify';
 import { authService } from './services/authService';
 import { enablePushNotifications } from './services/pushClient';
 import { setScreen } from './services/analytics';
+import { useAppBackNavigation } from './mobile/useAppBackNavigation';
+import { DiscoverConfirmDialog } from './components/discover/DiscoverConfirmDialog';
 import { checkAnalyticsAdmin } from './views/admin/adminApi';
 
 // Admin-only, so it is split out of the main bundle.
@@ -24,7 +26,15 @@ const AdminAnalyticsView = lazy(() => import('./views/admin/AdminAnalyticsView')
 
 function AppContent() {
   const { user, isAuthenticated, authLoading, showLogoutModal, cancelLogout, performLogout } = useAuth();
-  const { activeTab, setActiveTab } = useSocket();
+  const { activeTab, setActiveTab, matchState, currentPeer, peerLeft, disconnectChat } = useSocket();
+  // Back goes to the previous tab; leaving during a random chat asks first
+  const backNav = useAppBackNavigation({
+    enabled: isAuthenticated,
+    activeTab,
+    setActiveTab,
+    inRandomChat: matchState === 'matched' && Boolean(currentPeer) && !peerLeft,
+    endRandomChat: disconnectChat
+  });
   // Friend to open in the Friends tab when another view (Discover, notifications) asks for a DM
   const [dmTargetId, setDmTargetId] = useState(null);
   const [isAnalyticsAdmin, setIsAnalyticsAdmin] = useState(false);
@@ -149,6 +159,15 @@ function AppContent() {
           <AdminAnalyticsView onClose={() => setShowAnalytics(false)} />
         </Suspense>
       )}
+      <DiscoverConfirmDialog
+        open={backNav.leaveOpen}
+        title="Leave this chat?"
+        body="Your random chat will end and this stranger will be gone."
+        confirmLabel="Leave chat"
+        danger
+        onConfirm={backNav.leave}
+        onCancel={backNav.stay}
+      />
       <NotificationToasts />
       <NotificationPermissionPrompt />
     </div>
