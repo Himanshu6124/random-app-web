@@ -415,6 +415,7 @@ export function ChatBox() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
+        gap: '8px',
         background: 'rgba(26, 16, 25, 0.4)',
         position: 'relative',
         zIndex: 10
@@ -463,15 +464,18 @@ export function ChatBox() {
           </div>
         </button>
 
+        {/* Disappearing messages: same placement as the friend chat header. Kept outside
+            .chat-header-actions, whose phone styles resize every button inside it (incl. the menu). */}
+        {!peerLeft && (
+          <DisappearTimer
+            seconds={randomDisappearSeconds}
+            onChange={setRandomDisappearing}
+            hint="Either of you can change it. New messages disappear for both of you."
+          />
+        )}
+
         {/* Action Controls: friend request + exit only; block/report live on the profile card */}
         <div className="chat-header-actions">
-          {!peerLeft && (
-            <DisappearTimer
-              seconds={randomDisappearSeconds}
-              onChange={setRandomDisappearing}
-              hint="Either of you can change it. New messages disappear for both of you."
-            />
-          )}
           <button
             id="chat-theme-btn"
             type="button"
